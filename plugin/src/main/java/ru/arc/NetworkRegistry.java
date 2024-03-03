@@ -10,8 +10,9 @@ public class NetworkRegistry {
 
     public void init(){
 
-        AuctionMessager auctionMessager = new AuctionMessager("arc.auction_items", DiscordBot.instance);
-        redisManager.registerChannel(auctionMessager.channel, auctionMessager);
+        AuctionMessager auctionMessager = new AuctionMessager("arc.auction_items", "arc.auction_items_all", DiscordBot.instance);
+        redisManager.registerChannel(auctionMessager.channelPartial, auctionMessager);
+        redisManager.registerChannel(auctionMessager.channelAll, auctionMessager);
 
         redisManager.init();
     }

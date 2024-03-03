@@ -114,11 +114,12 @@ public class DiscordBot {
 
     private String getItemDescription(AuctionItemDto item) {
         // Customize the format of the item description as per your preference
+
         return config.string("auction.description",
                         "Seller: %seller%\nPrice: %price%\nExpire: %expire%\nCategory: %category%")
                 .replace("%seller%", item.seller)
                 .replace("%price%", item.price)
-                .replace("%expire%", item.expire)
+                .replace("%expire%", Utils.formatTime(item.expire-System.currentTimeMillis()))
                 .replace("%category%", item.category);
     }
 

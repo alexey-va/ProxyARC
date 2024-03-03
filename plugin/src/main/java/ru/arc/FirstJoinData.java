@@ -20,12 +20,13 @@ public class FirstJoinData {
     private final Path dbPath;
     Map<String, Long> map;
 
-    public boolean firstTimeJoin(UUID uuid){
-        return map.containsKey(uuid.toString());
+    public boolean firstTimeJoin(String name){
+        return !map.containsKey(name);
     }
 
-    public void markAsJoined(UUID uuid){
-        map.put(uuid.toString(), System.currentTimeMillis());
+    public void markAsJoined(String name){
+        System.out.println("Marking "+name);
+        map.put(name, System.currentTimeMillis());
     }
 
     @SneakyThrows

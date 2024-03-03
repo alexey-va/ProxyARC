@@ -3,6 +3,7 @@ package ru.arc.velocity;
 import com.google.inject.Inject;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.Subscribe;
+import com.velocitypowered.api.event.proxy.ProxyReloadEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
@@ -14,6 +15,8 @@ import lombok.Getter;
 import org.slf4j.Logger;
 import org.spongepowered.configurate.yaml.YamlConfigurationLoader;
 import ru.arc.CommonCore;
+import ru.arc.Config;
+import ru.arc.ConfigManager;
 import ru.arc.velocity.listeners.JoinListener;
 
 import java.nio.file.Path;
@@ -59,6 +62,11 @@ public class Velocity {
     }
 
     @Subscribe
+    public void onProxyReload(ProxyReloadEvent event){
+        commonCore.save();
+    }
+
+    @Subscribe
     public void onProxyStop(ProxyShutdownEvent event){
         commonCore.save();
         cancelTasks();
@@ -70,7 +78,8 @@ public class Velocity {
 
 
     private void registerListeners(){
-        proxyServer.getEventManager().register(this, new JoinListener(commonCore));
+        Config joinConfig = ConfigManager.create(dataFolder, "join_config.yml", "join");
+        proxyServer.getEventManager().register(this, new JoinListener(commonCore, proxyServer, joinConfig));
     }
 
 

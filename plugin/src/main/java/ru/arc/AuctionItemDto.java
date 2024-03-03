@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Data
 @NoArgsConstructor
@@ -14,9 +15,11 @@ public class AuctionItemDto {
     String display;
     String seller;
     String price;
-    String expire;
+    long expire;
     String category;
     int amount;
     int priority;
+    String uuid;
+    boolean exist;
     List<String> lore = new ArrayList<>();
 }

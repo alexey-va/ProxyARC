@@ -1,6 +1,7 @@
 package ru.arc;
 
 import lombok.SneakyThrows;
+import net.kyori.adventure.text.Component;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
@@ -12,11 +13,16 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
 
+import static ru.arc.Utils.mm;
+
 public class Config {
 
     Map<String, Object> map;
     private final Path folder;
     private final String filePath;
+
+    Map<String, Component> cache = new HashMap<>();
+
 
     @SneakyThrows
     public Config(Path folder, String filePath) {
@@ -53,9 +59,30 @@ public class Config {
         }
         try {
             return (String) o;
-        } catch (Exception e){
+        } catch (Exception e) {
             return o.toString();
         }
+    }
+
+    public Component component(String path, boolean cache, String... replacement) {
+        if (cache && this.cache.containsKey(path)) return this.cache.get(path);
+        Object o = getValueForKeyPath(path);
+        if (o == null) {
+            injectDeepKey(path, path);
+            return mm(path);
+        }
+        String s;
+        if (o instanceof String) s = (String) o;
+        else s = o.toString();
+
+        for(int i =0;i<replacement.length;i+=2){
+            if(i+1 >= replacement.length) break;
+            s=s.replace(replacement[i], replacement[i+1]);
+        }
+
+        Component component = mm(s);
+        if (cache) this.cache.put(path, component);
+        return component;
     }
 
     public List<String> stringList(String path) {
@@ -114,7 +141,7 @@ public class Config {
         Yaml yaml = new Yaml();
         File configFile = folder.resolve(filePath).toFile();
         map = yaml.load(new FileInputStream(configFile));
-        if(map == null) map = new HashMap<>();
+        if (map == null) map = new HashMap<>();
     }
 
     public void save() {
