@@ -21,8 +21,6 @@ public class Config {
     private final Path folder;
     private final String filePath;
 
-    Map<String, Component> cache = new HashMap<>();
-
 
     @SneakyThrows
     public Config(Path folder, String filePath) {
@@ -57,6 +55,7 @@ public class Config {
             injectDeepKey(path, def);
             return def;
         }
+        System.out.println(path+": "+o.toString());
         try {
             return (String) o;
         } catch (Exception e) {
@@ -64,8 +63,7 @@ public class Config {
         }
     }
 
-    public Component component(String path, boolean cache, String... replacement) {
-        if (cache && this.cache.containsKey(path)) return this.cache.get(path);
+    public Component component(String path, String... replacement) {
         Object o = getValueForKeyPath(path);
         if (o == null) {
             injectDeepKey(path, path);
@@ -80,9 +78,7 @@ public class Config {
             s=s.replace(replacement[i], replacement[i+1]);
         }
 
-        Component component = mm(s);
-        if (cache) this.cache.put(path, component);
-        return component;
+        return mm(s);
     }
 
     public List<String> stringList(String path) {
@@ -142,6 +138,7 @@ public class Config {
         File configFile = folder.resolve(filePath).toFile();
         map = yaml.load(new FileInputStream(configFile));
         if (map == null) map = new HashMap<>();
+        System.out.println("Loaded config: " + filePath);
     }
 
     public void save() {

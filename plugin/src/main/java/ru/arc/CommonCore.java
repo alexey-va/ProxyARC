@@ -18,43 +18,58 @@ public class CommonCore {
 
     ScheduledExecutorService saveService = Executors.newScheduledThreadPool(1);
     ScheduledFuture saveTask;
+    @Getter
+    ChatHistory chatHistory;
+    @Getter
+    JippityConversation jippityConversation;
 
-    public void init(Path folder){
+    public void init(Path folder) {
         System.out.println("Initializing core");
         setupConfigs(folder);
         startDiscordBot();
         startRedis();
         setupFirstTimeData(folder);
         setupSaveTask();
+        setupChatHistory();
+        setupJippity();
     }
 
-    public void setupSaveTask(){
+    private void setupJippity() {
+        jippityConversation = new JippityConversation(config, chatHistory);
+    }
+
+    public void setupSaveTask() {
         saveTask = saveService.scheduleAtFixedRate(this::save, 60, 60, TimeUnit.SECONDS);
     }
 
-    public void cancelSaveTask(){
+    public void cancelSaveTask() {
         saveTask.cancel(false);
     }
 
-    public synchronized void save(){
+    public synchronized void save() {
         firstJoinData.save();
     }
 
-    private void setupFirstTimeData(Path folder){
+    private void setupFirstTimeData(Path folder) {
         firstJoinData = new FirstJoinData(folder.resolve("first_time_join.json"));
         firstJoinData.load();
     }
 
-    private void setupConfigs(Path folder){
+    private void setupChatHistory() {
+        chatHistory = new ChatHistory(ConfigManager.get("config"));
+    }
+
+    private void setupConfigs(Path folder) {
         config = ConfigManager.create(folder, "config.yml", "config");
         discordConfig = ConfigManager.create(folder, "discord.yml", "discord");
+        ConfigManager.create(folder, "join_config.yml", "join");
     }
 
-    private void startDiscordBot(){
-        bot = new DiscordBot(discordConfig);
+    private void startDiscordBot() {
+        bot = new DiscordBot(discordConfig, ConfigManager.get("join"));
     }
 
-    private void startRedis(){
+    private void startRedis() {
         String host = config.string("redis.host", "localhost");
         int port = config.integer("redis.port", 6379);
         String username = config.string("redis.username", "default");

@@ -1,0 +1,16 @@
+messages:
+  first-time: "<blue>● <gray>Игрок <green>%player_name% <gray>впервые на сервере!"
+  leave: "<dark_green>● <gray>Игрок <green>%player_name% <gray>присоединился!"
+  join: "<red>● <gray>Игрок <green>%player_name% <gray>вышел!"
+discord:
+  join:
+    color: '#00ff00'
+    message: Игрок %player_name% присоединился к серверу!
+  first-time:
+    color: '#0000ff'
+    message: Игрок %player_name% впервые на сервере!
+  url: https://rus-crafting.ru
+  icon: https://cravatar.eu/helmavatar/%player_name%/128.png
+  leave:
+    color: '#ff0000'
+    message: Игрок %player_name% покинул сервер!

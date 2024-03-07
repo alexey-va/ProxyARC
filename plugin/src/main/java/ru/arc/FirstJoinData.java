@@ -25,7 +25,7 @@ public class FirstJoinData {
     }
 
     public void markAsJoined(String name){
-        System.out.println("Marking "+name);
+        //System.out.println("Marking "+name);
         map.put(name, System.currentTimeMillis());
     }
 
@@ -54,6 +54,7 @@ public class FirstJoinData {
 
         Gson gson = new Gson();
         try(FileWriter writer = new FileWriter(dbPath.toFile())){
+            //System.out.println("Writing to file");
             gson.toJson(map, writer);
         }
     }

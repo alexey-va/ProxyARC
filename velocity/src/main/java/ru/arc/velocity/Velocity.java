@@ -17,6 +17,7 @@ import org.spongepowered.configurate.yaml.YamlConfigurationLoader;
 import ru.arc.CommonCore;
 import ru.arc.Config;
 import ru.arc.ConfigManager;
+import ru.arc.velocity.listeners.ChatListener;
 import ru.arc.velocity.listeners.JoinListener;
 
 import java.nio.file.Path;
@@ -59,6 +60,12 @@ public class Velocity {
                     .map(Player::getUsername)
                     .toList());
         }).repeat(10, TimeUnit.SECONDS).schedule();
+
+        registerCommands();
+    }
+
+    private void registerCommands(){
+        proxyServer.getCommandManager().register("proxyarc", new ProxyARCCommand());
     }
 
     @Subscribe
@@ -78,8 +85,8 @@ public class Velocity {
 
 
     private void registerListeners(){
-        Config joinConfig = ConfigManager.create(dataFolder, "join_config.yml", "join");
-        proxyServer.getEventManager().register(this, new JoinListener(commonCore, proxyServer, joinConfig));
+        proxyServer.getEventManager().register(this, new JoinListener(commonCore, proxyServer, ConfigManager.get("join")));
+        proxyServer.getEventManager().register(this, new ChatListener(commonCore, proxyServer,ConfigManager.get("config")));
     }
 
 

@@ -18,4 +18,7 @@ public class ConfigManager {
         return config;
     }
 
+    public static void reloadAll() {
+        configMap.forEach((s, config) -> config.load());
+    }
 }

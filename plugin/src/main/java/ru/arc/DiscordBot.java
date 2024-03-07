@@ -21,16 +21,18 @@ public class DiscordBot {
     public static DiscordBot instance;
 
     Config config;
+    Config joinConfig;
     JDA jda;
 
     TextChannel joinChannel;
     TextChannel playerListChannel;
     TextChannel auctionChannel;
-
+    TextChannel chatChannel;
     ExecutorService service = Executors.newFixedThreadPool(4);
 
-    public DiscordBot(Config config) {
+    public DiscordBot(Config config, Config joinConfig) {
         this.config = config;
+        this.joinConfig = joinConfig;
         String token = config.string("token", "token");
         if (token.equals("token")) {
             System.out.println("Could not initialize discord bot");
@@ -65,6 +67,13 @@ public class DiscordBot {
                 System.out.println("Auction: "+auctionChannel);
             } catch (Exception e) {
                 System.out.println("Auction channel not found!");
+                e.printStackTrace();
+            }
+            try {
+                chatChannel = (TextChannel) jda.getGuildChannelById(config.string("channels.chat", "none"));
+                System.out.println("Chat: "+auctionChannel);
+            } catch (Exception e) {
+                System.out.println("Chat channel not found!");
                 e.printStackTrace();
             }
         });
@@ -152,14 +161,22 @@ public class DiscordBot {
         }
     }
 
+    public void sendChatMessage(String message) {
+        if (chatChannel == null) {
+            System.out.println("Chat channel is null! SKipping");
+            return;
+        }
+        chatChannel.sendMessage(message).queue();
+    }
+
     public void sendJoinEmbed(String playerName, JoinType joinType) {
         if (joinChannel == null) {
             System.out.println("Join channel is null! SKipping");
             return;
         }
         ColoredTitle coloredTitle = getTitle(playerName, joinType);
-        String url = config.string("messages.url", "https://rus-crafting.ru");
-        String icon = config.string("messages.icon", "https://cravatar.eu/helmavatar/%player_name%/128.png")
+        String url = joinConfig.string("discord.url", "https://rus-crafting.ru");
+        String icon = joinConfig.string("discord.icon", "https://cravatar.eu/helmavatar/%player_name%/128.png")
                 .replace("%player_name%", playerName);
         MessageEmbed embed = new EmbedBuilder()
                 .setColor(coloredTitle.color)
@@ -176,16 +193,16 @@ public class DiscordBot {
         String title = "";
         Color color = Color.GRAY;
         if (joinType == JoinType.FIRST_TIME) {
-            color = Color.decode(config.string("messages.first-time.color", "#0000ff"));
-            title = config.string("messages.first-time.message", "Игрок %player_name% впервые на сервере!")
+            color = Color.decode(config.string("discord.first-time.color", "#0000ff"));
+            title = config.string("discord.first-time.message", "Игрок %player_name% впервые на сервере!")
                     .replace("%player_name%", playerName);
         } else if (joinType == JoinType.JOIN) {
-            color = Color.decode(config.string("messages.join.color", "#00ff00"));
-            title = config.string("messages.join.message", "Игрок %player_name% присоединился к серверу!")
+            color = Color.decode(config.string("discord.join.color", "#00ff00"));
+            title = config.string("discord.join.message", "Игрок %player_name% присоединился к серверу!")
                     .replace("%player_name%", playerName);
         } else if (joinType == JoinType.LEAVE) {
-            color = Color.decode(config.string("messages.leave.color", "#ff0000"));
-            title = config.string("messages.leave.message", "Игрок %player_name% покинул сервер!")
+            color = Color.decode(config.string("discord.leave.color", "#ff0000"));
+            title = config.string("discord.leave.message", "Игрок %player_name% покинул сервер!")
                     .replace("%player_name%", playerName);
         }
         return new ColoredTitle(color, title);
