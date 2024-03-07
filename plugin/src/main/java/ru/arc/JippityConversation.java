@@ -34,6 +34,11 @@ public class JippityConversation {
         apiKey = config.string("jippity-api-key", "none");
     }
 
+    public void resetHistory(){
+        messageHistories.clear();
+        chatHistory.clear();
+    }
+
     @SneakyThrows
     public CompletableFuture<Component> sendOpenaiApiRequest(String message) {
         return CompletableFuture.supplyAsync(() -> {
@@ -43,17 +48,17 @@ public class JippityConversation {
             }
             try (HttpClient client = HttpClient.newHttpClient()) {
                 Map<String, Object> map = new HashMap<>();
-                map.put("model", "gpt-3.5-turbo");
+                map.put("model", config.string("jippity-model", "gpt-3.5-turbo"));
                 ArrayList<Map<String, String>> list = new ArrayList<>();
                 list.add(Map.of(
                         "role", "system",
-                        "content", config.string("jippity-system", "Ты веселый чел в чате. Развлекай нас.") +
-                                " .История последних собщений чата:" + chatHistory.asString()));
+                        "content", config.string("jippity-system", "Ты веселый чел в чате. Развлекай нас.")));
                 messageHistories.forEach(mh -> list.add(Map.of("role", mh.role, "content", mh.content)));
+                list.add(Map.of("role", "user", "content", "История последних собщений чата: " + chatHistory.asString(true)));
                 list.add(Map.of("role", "user", "content", message));
                 map.put("messages", list);
-                map.put("max_tokens", 100);
-                map.put("temperature", 0.7);
+                map.put("max_tokens", config.integer("jippity-max-tokens", 150));
+                map.put("temperature", config.realNumber("jippity-temperature", 0.7));
                 String json = gson.toJson(map);
 
                 HttpRequest request = HttpRequest.newBuilder()
@@ -64,13 +69,14 @@ public class JippityConversation {
                         .build();
                 var resp = client.send(request, HttpResponse.BodyHandlers.ofString());
                 JsonResponse jsonResponse = gson.fromJson(resp.body(), JsonResponse.class);
-                if (messageHistories.size() > 30) {
+                if (messageHistories.size() > config.integer("jippity-history-size", 30)) {
                     messageHistories.poll();
                 }
                 String mes = jsonResponse.choices.get(0).message.content;
                 messageHistories.add(new MessageHistory("user", message));
                 messageHistories.add(new MessageHistory("assistant", mes));
-                return Utils.mm("<gold>"+config.string("jippity-name", "ИИ")+" <gray>»<white> " + mes);
+                return Utils.legacy(config.string("jippity-prefix", "&6%name% &7» ")
+                        .replace("%name%",config.string("jippity-name", "&6ИИ")) + mes);
             } catch (Exception e) {
                 return null;
             }

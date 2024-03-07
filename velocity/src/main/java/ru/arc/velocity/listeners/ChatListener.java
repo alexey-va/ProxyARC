@@ -21,8 +21,11 @@ public class ChatListener {
     public void onChatMessage(PlayerChatEvent event) {
         if (!event.getResult().isAllowed()) return;
         if (!event.getMessage().startsWith("!")) return;
-        commonCore.getChatHistory().add(event.getPlayer().getUsername(), event.getMessage());
-        if (event.getMessage().contains(jippityConfig.string("jippity-detect-string", "ии"))) {
+        boolean isJippity = event.getMessage().contains(jippityConfig.string("jippity-detect-string", "ии"));
+        commonCore.getChatHistory().add(
+                event.getPlayer().getUsername(),
+                event.getMessage(), isJippity ? "jippity" : "");
+        if (isJippity) {
             commonCore.getJippityConversation().sendOpenaiApiRequest(event.getPlayer().getUsername() + ": " + event.getMessage())
                     .thenAccept(resp -> {
                         proxyServer.sendMessage(resp);

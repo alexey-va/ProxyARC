@@ -2,30 +2,50 @@ package ru.arc;
 
 import lombok.RequiredArgsConstructor;
 
+import java.util.Arrays;
 import java.util.Deque;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.stream.Collectors;
 
 public class ChatHistory {
 
     private final Config config;
-    private ConcurrentLinkedDeque<String> history = new ConcurrentLinkedDeque<>();
+    private ConcurrentLinkedDeque<ChatMessage> history = new ConcurrentLinkedDeque<>();
     int maxHistorySize = 100;
+
+    public void clear() {
+        history.clear();
+    }
+
+
+
+    record ChatMessage(String player, String message, Set<String> tags) {
+    }
 
     public ChatHistory(Config config) {
         this.config = config;
-        maxHistorySize = config.integer("max-history-size", 100);
+        maxHistorySize = config.integer("max-history-size", 50);
     }
 
-    public void add(String player, String message) {
+    public void add(String player, String message, String... tags) {
         if (history.size() >= maxHistorySize) {
             history.poll();
         }
-        history.add(player+": "+message);
+        history.add(new ChatMessage(player, message,
+                Arrays.stream(tags)
+                        .filter(Objects::nonNull)
+                        .filter(s -> !s.isEmpty())
+                        .collect(Collectors.toSet()))
+        );
     }
 
-    public String asString() {
+
+    public String asString(boolean skipJippity) {
         return history.stream()
-                .collect(Collectors.joining("\n"));
+                .filter(chatMessage -> !skipJippity || !chatMessage.tags.contains("jippity"))
+                .map(chatMessage -> chatMessage.player + " написал " + chatMessage.message)
+                .collect(Collectors.joining("\n", "\n", "\n"));
     }
 }

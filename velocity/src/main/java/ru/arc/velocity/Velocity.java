@@ -65,7 +65,7 @@ public class Velocity {
     }
 
     private void registerCommands(){
-        proxyServer.getCommandManager().register("proxyarc", new ProxyARCCommand());
+        proxyServer.getCommandManager().register("proxyarc", new ProxyARCCommand(commonCore));
     }
 
     @Subscribe
