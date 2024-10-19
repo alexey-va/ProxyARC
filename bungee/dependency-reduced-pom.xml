@@ -21,7 +21,7 @@
     <plugins>
       <plugin>
         <artifactId>maven-compiler-plugin</artifactId>
-        <version>3.8.1</version>
+        <version>3.13.0</version>
         <configuration>
           <source>${java.version}</source>
           <target>${java.version}</target>
@@ -29,7 +29,7 @@
       </plugin>
       <plugin>
         <artifactId>maven-shade-plugin</artifactId>
-        <version>3.2.4</version>
+        <version>3.6.0</version>
         <executions>
           <execution>
             <phase>package</phase>
@@ -53,12 +53,6 @@
   </repositories>
   <dependencies>
     <dependency>
-      <groupId>io.github.waterfallmc</groupId>
-      <artifactId>waterfall-api</artifactId>
-      <version>1.20-R0.1-SNAPSHOT</version>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
       <version>RELEASE</version>
@@ -78,9 +72,33 @@
         </exclusion>
       </exclusions>
     </dependency>
+    <dependency>
+      <groupId>de.themoep.resourcepacksplugin</groupId>
+      <artifactId>bukkit</artifactId>
+      <version>1.8.1-SNAPSHOT</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>de.themoep.resourcepacksplugin</groupId>
+      <artifactId>bungee</artifactId>
+      <version>1.8.1-SNAPSHOT</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>de.themoep.resourcepacksplugin</groupId>
+      <artifactId>velocity</artifactId>
+      <version>1.8.1-SNAPSHOT</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>de.themoep.resourcepacksplugin</groupId>
+      <artifactId>core</artifactId>
+      <version>1.8.1-SNAPSHOT</version>
+      <scope>provided</scope>
+    </dependency>
   </dependencies>
   <properties>
-    <java.version>1.8</java.version>
+    <java.version>21</java.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 </project>

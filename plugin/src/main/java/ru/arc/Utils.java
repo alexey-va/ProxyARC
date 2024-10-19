@@ -1,10 +1,10 @@
 package ru.arc;
 
-import net.kyori.adventure.Adventure;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import ru.arc.config.ConfigManager;
 
 public class Utils {
 
@@ -29,5 +29,9 @@ public class Utils {
 
     public static String plain(Component component) {
         return PlainTextComponentSerializer.plainText().serialize(component);
+    }
+
+    public static String plain(String minimessage) {
+        return PlainTextComponentSerializer.plainText().serialize(mm(minimessage));
     }
 }

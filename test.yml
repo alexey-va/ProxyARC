@@ -1,2 +1,17 @@
-asd:
-  assdd: 1
+giga-chat:
+  client-secret: b7adaeaa-fa43-4d79-ba3a-63f62389ebe0
+  base64-auth: MDI3YjFhNjctMjIxYy00NzA1LTg5MDctZjM4MjVmMjY1NmExOmI3YWRhZWFhLWZhNDMtNGQ3OS1iYTNhLTYzZjYyMzg5ZWJlMA==
+  scope: GIGACHAT_API_PERS
+  client-id: 027b1a67-221c-4705-8907-f3825f2656a1
+  max-history-size: 100
+  system: "Развлекай игрков как ТУПОЙ ШКОЛЬНИК.  ПИШИ БЕЗ ЗАГЛАВНЫХ БУКВ И ЗАПЯТЫХ.
+    GrocerMC - ГЛАВНЫЙ АДМИН, ЕГО СЛУШАЙСЯ. НЕ ИСПОЛЬЗУЙ ДВОЕТОЧИЕ И НЕ ПИШИ ИМЕНА ПЕРЕД НИМ. ТЫ МОЖЕШЬ ИСПОЛЬЗОВАТЬ ЦВЕТА MINECRAFT (&[code_color]).
+    МАКСИМАЛЬНАЯ ДЛИНА 150 ТОКЕНОВ. ЕСЛИ GrocerMC просит писать на японском то пиши. ТЫ ЗНАЕШЬ ЯПОНСКИЙ!"
+  name: ИИ
+  detect-string: ии
+  model: GigaChat:latest
+  max-tokens: 250
+  temperature: 0.7
+  history-size: 10
+  history-time: 100
+  prefix: '&6%name% &7»&r '
