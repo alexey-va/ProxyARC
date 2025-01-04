@@ -1,52 +1,42 @@
 package ru.arc.ai;
 
-import ru.arc.CommonCore;
-import ru.arc.config.Config;
-import ru.arc.config.ConfigManager;
-
-import java.util.Arrays;
-import java.util.Objects;
-import java.util.Set;
+import java.util.Collection;
+import java.util.Deque;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.stream.Collectors;
 
+import lombok.RequiredArgsConstructor;
+
+@RequiredArgsConstructor
 public class ChatHistory {
 
-    private final Config config = ConfigManager.of(CommonCore.folder, "config.yml");
-    private final ConcurrentLinkedDeque<ChatMessage> history = new ConcurrentLinkedDeque<>();
-    int maxHistorySize = 100;
+    final UUID playerUuid;
+    final int maxLength;
+    Deque<Entry> deque = new ConcurrentLinkedDeque<>();
 
-    record ChatMessage(String player, String message, Set<String> tags, long timestamp) {
+    public void addPlayerMessage(String message) {
+        deque.add(new Entry(message, true, System.currentTimeMillis()));
+    }
+
+    public void addBotMessage(String message) {
+        deque.add(new Entry(message, true, System.currentTimeMillis()));
+    }
+
+    public Collection<Entry> entries() {
+        return deque;
     }
 
     public void clear() {
-        history.clear();
+        deque.clear();
     }
 
-    public String forJippity(long millis) {
-        return history.stream()
-                .filter(chatMessage -> !chatMessage.tags.contains("jippity"))
-                .filter(cm -> System.currentTimeMillis() - cm.timestamp < millis)
-                .map(chatMessage -> chatMessage.player + " написал " + chatMessage.message)
-                .collect(Collectors.joining("\n", "\n", "\n"));
+    public record Entry(String text, boolean isPlayer, long timestamp) {
     }
 
-
-    public ChatHistory() {
-        maxHistorySize = config.integer("max-history-size", 50);
-    }
-
-    public void add(String player, String message, String... tags) {
-        if (history.size() >= maxHistorySize) {
-            history.poll();
+    public void clean(long olderThan) {
+        while (!deque.isEmpty() && (deque.peek().timestamp < olderThan || deque.size() > maxLength)) {
+            deque.poll();
         }
-        history.add(new ChatMessage(player, message, Arrays.stream(tags)
-                        .filter(Objects::nonNull)
-                        .filter(s -> !s.isEmpty())
-                        .collect(Collectors.toSet()),
-                        System.currentTimeMillis()
-                )
-        );
     }
 
 }

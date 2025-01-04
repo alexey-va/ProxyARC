@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 import ru.arc.ai.ChatHistory;
-import ru.arc.ai.JippityConversation;
+import ru.arc.ai.GPTEntity;
 import ru.arc.config.Config;
 import ru.arc.config.ConfigManager;
 import ru.arc.discord.DiscordBot;
@@ -34,8 +34,8 @@ public class CommonCore {
 
     ScheduledExecutorService saveService = Executors.newScheduledThreadPool(1);
     ScheduledFuture saveTask;
-    ChatHistory chatHistory;
-    JippityConversation jippityConversation;
+    GPTEntity globalGpt;
+    GPTEntity moderatorGpt;
 
     public LuckpermsHook luckpermsHook;
     public LiteBansHook liteBansHook;
@@ -56,13 +56,11 @@ public class CommonCore {
         serverName = config.string("server-name", "proxy");
 
         System.out.println("Initializing core");
-        setupConfigs(folder);
         startDiscordBot();
         startRedis();
-        setupFirstTimeData(folder);
+        setupFirstTimeData();
         setupSaveTask();
-        setupChatHistory();
-        setupJippity(folder);
+        setupGPTs();
         setupPlayerListAnnouncer();
         try {
             luckpermsHook = new LuckpermsHook();
@@ -101,8 +99,13 @@ public class CommonCore {
         playerListAnnouncer = new PlayerListAnnouncer(ConfigManager.of(folder, "config.yml"), redisManager, "arc.proxy_player_list");
     }
 
-    private void setupJippity(Path folder) {
-        jippityConversation = new JippityConversation(ConfigManager.of(folder, "config.yml"), chatHistory, folder);
+    private void setupGPTs() {
+        ChatHistory globalChatHistory = new ChatHistory(null, config.integer("ai.global.chat-history-length", 100));
+        globalGpt = new GPTEntity(ConfigManager.of(folder, "config.yml"), "global", globalChatHistory);
+
+        ChatHistory moderatorChatHistory = new ChatHistory(null, config.integer("ai.global.chat-history-length", 100));
+        moderatorGpt = new GPTEntity(ConfigManager.of(folder, "config.yml"), "moderator", moderatorChatHistory);
+
     }
 
     public void setupSaveTask() {
@@ -117,16 +120,9 @@ public class CommonCore {
         if (firstJoinData != null) firstJoinData.save();
     }
 
-    private void setupFirstTimeData(Path folder) {
+    private void setupFirstTimeData() {
         firstJoinData = new FirstJoinData();
         firstJoinData.load();
-    }
-
-    private void setupChatHistory() {
-        chatHistory = new ChatHistory();
-    }
-
-    private void setupConfigs(Path folder) {
     }
 
     private void startDiscordBot() {

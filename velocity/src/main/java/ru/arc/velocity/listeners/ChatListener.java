@@ -8,14 +8,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
 import ru.arc.CommonCore;
+import ru.arc.ai.GPTEntity;
 import ru.arc.config.Config;
 import ru.arc.config.ConfigManager;
 import ru.arc.velocity.Velocity;
 
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+import static ru.arc.ai.GPTEntity.ModerationResponse.BAD;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -25,11 +26,86 @@ public class ChatListener {
     final ProxyServer proxyServer;
     final Config jippityConfig;
     final Config mainConfig = ConfigManager.of(Velocity.dataFolder, "config.yml");
+    final Config moderConfig = ConfigManager.of(Velocity.dataFolder, "moderation.yml");
+
+    Map<UUID, ModerationStatus> warnings = new ConcurrentHashMap<>();
+
+    record ModerationStatus(int warns, long lastWarn) {
+    }
 
     @Subscribe(async = true)
     public void onChatMessage(PlayerChatEvent event) {
+        trimWarnings();
+        processModerateMessage(event);
+
         aiProcess(event);
         chatProcess(event);
+    }
+
+    private void trimWarnings() {
+        long warnExpireTime = moderConfig.integer("moderation.warn-expire-time-sec", 3600) * 1000L;
+        long currentTime = System.currentTimeMillis();
+        warnings.entrySet().removeIf(entry -> currentTime - entry.getValue().lastWarn > warnExpireTime);
+    }
+
+    private void processModerateMessage(PlayerChatEvent event) {
+        log.info("Processing message: {}", event.getMessage());
+        if (!event.getResult().isAllowed()) {
+            log.info("Message is not allowed");
+            return;
+        }
+
+        if (!event.getMessage().startsWith("!")) {
+            log.info("Message does not start with !");
+            return;
+        }
+        if (event.getPlayer().hasPermission("arc.moderation.bypass")) {
+            log.info("Player has bypass permission");
+            return;
+        }
+        String message = event.getMessage().substring(1);
+
+        boolean isModerationEnabled = moderConfig.bool("moderation.enabled", false);
+        long minPlayerTimeMs = moderConfig.integer("moderation.min-play-time-sec", 600) * 1000L;
+        Long firstJoinTime = commonCore.getFirstJoinData().getFirstJoinTime(event.getPlayer().getUsername());
+
+        if (!isModerationEnabled) return;
+
+        long playerTime = System.currentTimeMillis() - firstJoinTime;
+        log.info("Player {} has first join time: {}. Playtime {}ms", event.getPlayer().getUsername(), firstJoinTime, playerTime);
+        if (playerTime > minPlayerTimeMs) {
+            log.info("Player {} has played for long enough, skipping moderation", event.getPlayer().getUsername());
+            return;
+        }
+
+        var resp = commonCore.getModeratorGpt().getModerResponse(event.getPlayer().getUsername(), message).join();
+        log.info("Moderation response: {}", resp);
+        if (resp.isEmpty()) {
+            log.error("Empty response from GPT {}", message);
+            return;
+        }
+        if (resp.get().message() == BAD) {
+            event.setResult(PlayerChatEvent.ChatResult.denied());
+            int warnCount = warnings.compute(event.getPlayer().getUniqueId(), (uuid, status) -> {
+                int warns = status == null ? 0 : status.warns();
+                return new ModerationStatus(warns + 1, System.currentTimeMillis());
+            }).warns();
+            int maxWarns = moderConfig.integer("moderation.max-warns", 3);
+            event.getPlayer().sendMessage(moderConfig.componentDef("messages.moderation-denied",
+                    "<red>Ваше сообщение было заблокировано модератором <gray>(<warns>/<max_warns>)<red> по причине: <gray><reason>",
+                    "<reason>", resp.get().comment(),
+                    "<warns>", String.valueOf(warnCount),
+                    "<max_warns>", String.valueOf(maxWarns)
+            ));
+
+            if (warnCount >= maxWarns) {
+                event.getPlayer().disconnect(moderConfig.componentDef("messages.kick-message",
+                        "<red>Вы были отключены от сервера по причине превышения количества предупреждений <gray>(<warns>/<max_warns>)",
+                        "<warns>", String.valueOf(warnCount),
+                        "<max_warns>", String.valueOf(maxWarns)));
+                warnings.remove(event.getPlayer().getUniqueId());
+            }
+        }
     }
 
     private void chatProcess(PlayerChatEvent event) {
@@ -67,18 +143,21 @@ public class ChatListener {
         Set<String> split = new HashSet<>();
         Collections.addAll(split, message.split(" "));
         boolean isJippity = split.contains(jippityConfig.string("giga-chat.detect-string", "ии"));
-        commonCore.getChatHistory().add(event.getPlayer().getUsername(), message, isJippity ? "jippity" : "");
+
         if (isJippity) {
-            commonCore.getJippityConversation()
-                    .sendOpenaiApiRequest(
-                            jippityConfig.string("giga-chat.send-string", "[%name%] %message%")
-                                    .replace("%name%", event.getPlayer().getUsername())
-                                    .replace("%message%", message))
+            commonCore.getGlobalGpt()
+                    .getResponse(event.getPlayer().getUsername(), message)
                     .thenAcceptAsync(resp -> {
-                        Component component = commonCore.getJippityConversation().toAiMessageComponent(resp);
+                        if (resp.isEmpty()) {
+                            log.error("Empty response from GPT {}", message);
+                            return;
+                        }
+                        Component component = commonCore.getGlobalGpt().toAiMessageComponent(resp.get());
                         proxyServer.sendMessage(component);
-                        commonCore.getDiscordBot().sendChatMessage("**" + jippityConfig.string("giga-chat.name", "ГигаЧат") + "** » " + resp);
+                        commonCore.getDiscordBot().sendChatMessage("**" + jippityConfig.string("ai.global.name", "Чат") + "** » " + resp);
                     });
+        } else {
+            commonCore.getGlobalGpt().addPlayerMessage(event.getPlayer().getUsername(), message);
         }
     }
 

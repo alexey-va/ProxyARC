@@ -8,7 +8,7 @@ import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class JippityConversationTest {
+class GPTEntityTest {
 
     @Test
     @SneakyThrows

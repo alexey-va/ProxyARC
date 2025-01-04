@@ -30,7 +30,7 @@ public class ProxyARCCommand implements SimpleCommand {
                 ConfigManager.reloadAll();
                 commandSource.sendMessage(Utils.mm("Перезагрузка успешна!"));
             } else if (args[0].equalsIgnoreCase("resetai")) {
-                commonCore.getJippityConversation().resetHistory();
+                commonCore.getGlobalGpt().resetHistory();
             } else if (args[0].equalsIgnoreCase("cleardiscord")) {
                 if (args.length != 3) {
                     commandSource.sendMessage(Utils.mm("Usage: /arc cleardiscord <channelId> start/stop"));
