@@ -1,7 +1,9 @@
 package ru.arc.velocity.listeners;
 
+import com.velocitypowered.api.event.ResultedEvent;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
+import com.velocitypowered.api.event.connection.LoginEvent;
 import com.velocitypowered.api.event.connection.PostLoginEvent;
 import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.proxy.Player;
@@ -25,7 +27,7 @@ import static ru.arc.Utils.mm;
 public record JoinListener(CommonCore commonCore, ProxyServer proxyServer, Config config) {
 
     @Subscribe(async = true)
-    public void onPlayerJoin(PostLoginEvent event) {
+    public void onPlayerJoin(LoginEvent event) {
         if (Velocity.isShuttingDown.get()) return;
         proxyServer.getScheduler()
                 .buildTask(Velocity.plugin, () -> joinMessage(event.getPlayer()))
@@ -33,6 +35,13 @@ public record JoinListener(CommonCore commonCore, ProxyServer proxyServer, Confi
                 .schedule();
         Optional<String> server = event.getPlayer().getCurrentServer().map(o -> o.getServerInfo().getName());
         commonCore.getPlayerListAnnouncer().addPlayer(event.getPlayer().getUniqueId(), event.getPlayer().getUsername(), server.orElse(null));
+        boolean allow = commonCore.getAntibot().processPlayerJoin(event.getPlayer().getUsername(), event.getPlayer().getUniqueId(), proxyServer.getPlayerCount());
+        if (!allow) {
+            log.info("Antibot kicked player {}", event.getPlayer().getUsername());
+            event.setResult(ResultedEvent.ComponentResult.denied(
+                    mm(config.string("messages.antibot", "<red>Вы были отключены от сервера! Зайдите позже!"))
+            ));
+        }
     }
 
     @Subscribe(async = true)
@@ -44,6 +53,7 @@ public record JoinListener(CommonCore commonCore, ProxyServer proxyServer, Confi
                 .delay(1, TimeUnit.SECONDS)
                 .schedule();
         commonCore.getPlayerListAnnouncer().removePlayer(event.getPlayer().getUniqueId());
+        commonCore.getAntibot().processPlayerLeave(event.getPlayer().getUniqueId());
     }
 
     @Subscribe(async = true)

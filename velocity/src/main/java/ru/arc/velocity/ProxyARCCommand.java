@@ -4,6 +4,7 @@ import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.command.SimpleCommand;
 import lombok.RequiredArgsConstructor;
 import ru.arc.CommonCore;
+import ru.arc.ai.Assistant;
 import ru.arc.config.ConfigManager;
 import ru.arc.Utils;
 
@@ -28,9 +29,8 @@ public class ProxyARCCommand implements SimpleCommand {
         } else {
             if (args[0].equalsIgnoreCase("reload")) {
                 ConfigManager.reloadAll();
+                Assistant.assistants.forEach(Assistant::reload);
                 commandSource.sendMessage(Utils.mm("Перезагрузка успешна!"));
-            } else if (args[0].equalsIgnoreCase("resetai")) {
-                commonCore.getGlobalGpt().resetHistory();
             } else if (args[0].equalsIgnoreCase("cleardiscord")) {
                 if (args.length != 3) {
                     commandSource.sendMessage(Utils.mm("Usage: /arc cleardiscord <channelId> start/stop"));

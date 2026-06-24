@@ -4,8 +4,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
-import ru.arc.ai.ChatHistory;
-import ru.arc.ai.GPTEntity;
+import ru.arc.ai.Assistant;
 import ru.arc.config.Config;
 import ru.arc.config.ConfigManager;
 import ru.arc.discord.DiscordBot;
@@ -19,7 +18,10 @@ import ru.arc.xserver.RedisManager;
 import ru.arc.xserver.repos.RedisRepo;
 
 import java.nio.file.Path;
-import java.util.concurrent.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Getter
@@ -31,11 +33,11 @@ public class CommonCore {
     TelegramBot telegramBot;
     FirstJoinData firstJoinData;
     PlayerListAnnouncer playerListAnnouncer;
+    Antibot antibot;
 
     ScheduledExecutorService saveService = Executors.newScheduledThreadPool(1);
     ScheduledFuture saveTask;
-    GPTEntity globalGpt;
-    GPTEntity moderatorGpt;
+    Assistant chatAssistant;
 
     public LuckpermsHook luckpermsHook;
     public LiteBansHook liteBansHook;
@@ -50,17 +52,27 @@ public class CommonCore {
 
     public void init(Path folder, Arc arc) {
         this.arc = arc;
+
+        try {
+            Logging.addLokiAppender(folder);
+        } catch (Exception e) {
+            log.error("Error adding loki appender", e);
+        }
+
         inst = this;
         CommonCore.folder = folder;
         config = ConfigManager.of(folder, "config.yml");
         serverName = config.string("server-name", "proxy");
 
         System.out.println("Initializing core");
-        startDiscordBot();
+        try {
+            startDiscordBot();
+        } catch (Exception e) {
+            log.error("Error initializing discord bot", e);
+        }
         startRedis();
         setupFirstTimeData();
         setupSaveTask();
-        setupGPTs();
         setupPlayerListAnnouncer();
         try {
             luckpermsHook = new LuckpermsHook();
@@ -75,10 +87,16 @@ public class CommonCore {
         }
 
         try {
-            TelegramBotsApi telegramBotsApi = new TelegramBotsApi(DefaultBotSession.class);
-            telegramBot = new TelegramBot();
-            telegramBotsApi.registerBot(telegramBot);
-            log.info("TelegramBot initialized");
+            Config config = ConfigManager.of(CommonCore.folder, "telegram.yml");
+            boolean enabled = config.bool("enabled", false);
+            if (enabled) {
+                TelegramBotsApi telegramBotsApi = new TelegramBotsApi(DefaultBotSession.class);
+                telegramBot = new TelegramBot();
+                telegramBotsApi.registerBot(telegramBot);
+                log.info("TelegramBot initialized");
+            } else {
+                log.info("TelegramBot is disabled in config");
+            }
         } catch (Exception e) {
             log.error("Error while initializing TelegramBot", e);
         }
@@ -93,19 +111,13 @@ public class CommonCore {
                     .saveInterval(200L)
                     .build();
         }
+
+        antibot = new Antibot(folder, firstJoinData);
+        chatAssistant = new Assistant(ConfigManager.of(folder, "assistant.yml"), "chat");
     }
 
     private void setupPlayerListAnnouncer() {
         playerListAnnouncer = new PlayerListAnnouncer(ConfigManager.of(folder, "config.yml"), redisManager, "arc.proxy_player_list");
-    }
-
-    private void setupGPTs() {
-        ChatHistory globalChatHistory = new ChatHistory(null, config.integer("ai.global.chat-history-length", 100));
-        globalGpt = new GPTEntity(ConfigManager.of(folder, "config.yml"), "global", globalChatHistory);
-
-        ChatHistory moderatorChatHistory = new ChatHistory(null, config.integer("ai.global.chat-history-length", 100));
-        moderatorGpt = new GPTEntity(ConfigManager.of(folder, "config.yml"), "moderator", moderatorChatHistory);
-
     }
 
     public void setupSaveTask() {

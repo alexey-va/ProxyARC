@@ -48,70 +48,81 @@ public class DiscordBot {
 
     DiscordListener discordListener;
 
+    boolean isEnabled = false;
+
     public DiscordBot() {
-        String token = config.string("token", "token");
-        if (token.equals("token")) {
-            System.out.println("Could not initialize discord bot");
-            return;
+        try {
+            if(config.bool("enabled", false) == false) {
+                System.out.println("Discord bot is disabled in config");
+                return;
+            }
+            String token = config.string("token", "token");
+            if (token.equals("token")) {
+                System.out.println("Could not initialize discord bot");
+                return;
+            }
+            JDABuilder builder = JDABuilder.createDefault(token);
+            builder.disableCache(CacheFlag.VOICE_STATE, CacheFlag.MEMBER_OVERRIDES);
+            this.jda = builder
+                    .enableIntents(Arrays.asList(values()))
+                    .build();
+            service.submit(() -> {
+                try {
+                    this.jda.awaitReady();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                System.out.println("Discord bot is ready!");
+                jda.getTextChannels().forEach(
+                        channel -> System.out.println(channel.getName() + " " + channel.getId())
+                );
+                jda.getGuilds().forEach(
+                        guild -> System.out.println(guild.getName() + " " + guild.getId())
+                );
+                try {
+                    joinChannel = (TextChannel) jda.getGuildChannelById(config.string("channels.join-messages", "none"));
+                    System.out.println("Join: " + joinChannel);
+                } catch (Exception e) {
+                    log.error("Join channel not found", e);
+                }
+                try {
+                    playerListChannel = (TextChannel) jda.getGuildChannelById(config.string("channels.player-list", "none"));
+                    System.out.println("Player list: " + playerListChannel);
+                } catch (Exception e) {
+                    log.error("Player list channel not found", e);
+                }
+                try {
+                    auctionChannel = (TextChannel) jda.getGuildChannelById(config.string("channels.auction", "none"));
+                    System.out.println("Auction: " + auctionChannel);
+                } catch (Exception e) {
+                    log.error("Auction channel not found", e);
+                }
+                try {
+                    chatChannel = (TextChannel) jda.getGuildChannelById(config.string("channels.chat", "none"));
+                    System.out.println("Chat: " + chatChannel);
+                } catch (Exception e) {
+                    log.error("Chat channel not found", e);
+                }
+                try {
+                    generalChannel = (TextChannel) jda.getGuildChannelById(config.string("channels.general", "none"));
+                    System.out.println("General: " + generalChannel);
+                } catch (Exception e) {
+                    log.error("General channel not found", e);
+                }
+
+                discordListener = new DiscordListener(chatChannel, generalChannel);
+                jda.addEventListener(discordListener);
+            });
+            isEnabled = true;
+        } catch (Exception e) {
+            log.error("Discord bot initialization failed", e);
         }
-        JDABuilder builder = JDABuilder.createDefault(token);
-        builder.disableCache(CacheFlag.VOICE_STATE, CacheFlag.MEMBER_OVERRIDES);
-        this.jda = builder
-                .enableIntents(Arrays.asList(values()))
-                .build();
-        service.submit(() -> {
-            try {
-                this.jda.awaitReady();
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-            System.out.println("Discord bot is ready!");
-            jda.getTextChannels().forEach(
-                    channel -> System.out.println(channel.getName() + " " + channel.getId())
-            );
-            jda.getGuilds().forEach(
-                    guild -> System.out.println(guild.getName() + " " + guild.getId())
-            );
-            try {
-                joinChannel = (TextChannel) jda.getGuildChannelById(config.string("channels.join-messages", "none"));
-                System.out.println("Join: " + joinChannel);
-            } catch (Exception e) {
-                log.error("Join channel not found", e);
-            }
-            try {
-                playerListChannel = (TextChannel) jda.getGuildChannelById(config.string("channels.player-list", "none"));
-                System.out.println("Player list: " + playerListChannel);
-            } catch (Exception e) {
-                log.error("Player list channel not found", e);
-            }
-            try {
-                auctionChannel = (TextChannel) jda.getGuildChannelById(config.string("channels.auction", "none"));
-                System.out.println("Auction: " + auctionChannel);
-            } catch (Exception e) {
-                log.error("Auction channel not found", e);
-            }
-            try {
-                chatChannel = (TextChannel) jda.getGuildChannelById(config.string("channels.chat", "none"));
-                System.out.println("Chat: " + chatChannel);
-            } catch (Exception e) {
-                log.error("Chat channel not found", e);
-            }
-            try {
-                generalChannel = (TextChannel) jda.getGuildChannelById(config.string("channels.general", "none"));
-                System.out.println("General: " + generalChannel);
-            } catch (Exception e) {
-                log.error("General channel not found", e);
-            }
-
-            discordListener = new DiscordListener(chatChannel, generalChannel);
-            jda.addEventListener(discordListener);
-        });
-
-
         instance = this;
     }
 
     public void updateAuctionItems(List<AuctionItemDto> auctionItemDtos) {
+        if (!isEnabled)  return;
+
         if (auctionChannel == null) {
             System.out.println("Auction channel is null! SKipping");
             return;
@@ -161,6 +172,7 @@ public class DiscordBot {
     }
 
     public void clearChat(String id) {
+        if (!isEnabled)  return;
         if (deleteTasks.containsKey(id)) {
             deleteTasks.get(id).set(false);
         }
@@ -197,6 +209,7 @@ public class DiscordBot {
     }
 
     public void updatePlayerList(Collection<String> players) {
+        if (!isEnabled)  return;
         if (playerListChannel == null) {
             System.out.println("Player list channel is null! SKipping");
             return;
@@ -226,6 +239,7 @@ public class DiscordBot {
     }
 
     public void sendChatMessage(String message) {
+        if (!isEnabled)  return;
         if (chatChannel == null) {
             System.out.println("Chat channel is null! Skipping");
             return;
@@ -234,6 +248,7 @@ public class DiscordBot {
     }
 
     public void sendJoinEmbed(String playerName, JoinType joinType, String override) {
+        if (!isEnabled)  return;
         if (joinChannel == null) {
             System.out.println("Join channel is null! Skipping");
             return;
@@ -252,6 +267,7 @@ public class DiscordBot {
     }
 
     public void sendGeneralMessage(String message) {
+        if (!isEnabled)  return;
         if (generalChannel == null) {
             System.out.println("General channel is null! Skipping");
             return;

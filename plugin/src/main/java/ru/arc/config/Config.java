@@ -1,5 +1,6 @@
 package ru.arc.config;
 
+import lombok.Data;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import net.kyori.adventure.text.Component;
@@ -20,6 +21,7 @@ import static ru.arc.Utils.mm;
 
 @Slf4j
 @SuppressWarnings("unchecked")
+@Data
 public class Config {
 
     Map<String, Object> map;

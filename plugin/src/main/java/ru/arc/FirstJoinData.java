@@ -25,11 +25,16 @@ public class FirstJoinData {
 
     public void markAsJoined(String name) {
         //System.out.println("Marking "+name);
-        map.put(name, System.currentTimeMillis());
+        map.putIfAbsent(name, System.currentTimeMillis());
     }
 
     public Long getFirstJoinTime(String name) {
-        return map.get(name);
+        return map.compute(name, (k, v) -> {
+            if (v == null) {
+                return System.currentTimeMillis();
+            }
+            return v;
+        });
     }
 
     @SneakyThrows

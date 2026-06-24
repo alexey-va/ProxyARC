@@ -122,13 +122,12 @@ public class RedisManager extends JedisPubSub {
                     if (delete.length > 0) pub.hdel(key, delete);
                     if (!update.isEmpty()) pub.hmset(key, update);
                 } catch (Exception e) {
-                    e.printStackTrace();
-                    log.error("Error saving map key: {} \n {}", key, update);
+                    log.error("Error saving map");
                 }
                 return null;
             }, executorService);
         } catch (Exception e) {
-            e.printStackTrace();
+            log.warn("Error saving map key: {}", key);
             return CompletableFuture.completedFuture(null);
         }
     }

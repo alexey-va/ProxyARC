@@ -23,6 +23,7 @@ public class TelegramBot extends TelegramLongPollingBot {
 
     @Override
     public void onUpdateReceived(Update update) {
+        log.info("onUpdateReceived {}", update);
         if (update.getMessage().getFrom().getIsBot()) return;
         if (update.getMessage() == null) return;
         if (update.getMessage().getChatId() == null) return;

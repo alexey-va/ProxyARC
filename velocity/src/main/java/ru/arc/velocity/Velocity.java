@@ -1,8 +1,10 @@
 package ru.arc.velocity;
 
+import com.fasterxml.jackson.annotation.JsonClassDescription;
+import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 import com.google.inject.Inject;
-import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.Subscribe;
+import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyReloadEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
@@ -11,11 +13,15 @@ import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.scheduler.ScheduledTask;
 import com.velocitypowered.api.scheduler.TaskStatus;
+import lombok.Data;
 import lombok.Getter;
 import net.kyori.adventure.text.Component;
 import org.slf4j.Logger;
 import ru.arc.Arc;
 import ru.arc.CommonCore;
+import ru.arc.ai.Assistant;
+import ru.arc.ai.tools.Tool;
+import ru.arc.ai.tools.Tools;
 import ru.arc.config.ConfigManager;
 import ru.arc.velocity.listeners.ChatListener;
 import ru.arc.velocity.listeners.JoinListener;
@@ -82,6 +88,19 @@ public class Velocity implements Arc {
 
         registerCommands();
 
+        Tools.addTool(GetOnlinePlayers.class);
+    }
+
+    @JsonClassDescription("Get list of online players")
+    @Data
+    public static class GetOnlinePlayers implements Tool {
+        @JsonPropertyDescription("Stub field to differentiate tools")
+        public Boolean stub;
+
+        @Override
+        public Object execute(Assistant assistant) {
+            return proxyServer.getAllPlayers().stream().map(Player::getUsername).toList();
+        }
     }
 
     private void registerCommands() {

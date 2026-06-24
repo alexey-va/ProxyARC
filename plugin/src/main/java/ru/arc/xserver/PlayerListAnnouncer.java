@@ -13,9 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 
 @RequiredArgsConstructor
-public class PlayerListAnnouncer{
-
-
+public class PlayerListAnnouncer {
 
     final Config config;
     final RedisManager redisManager;
@@ -24,37 +22,36 @@ public class PlayerListAnnouncer{
     Gson gson = new Gson();
     Map<UUID, PlayerData> map = new ConcurrentHashMap<>();
 
-
-    public void addPlayer(UUID uuid, String username, String server){
+    public void addPlayer(UUID uuid, String username, String server) {
         map.put(uuid, new PlayerData(username, server, uuid, System.currentTimeMillis()));
     }
 
-    public void updatePlayer(UUID uuid, String username, String server){
+    public void updatePlayer(UUID uuid, String username, String server) {
         PlayerData data = map.get(uuid);
-        if(data != null){
+        if (data != null) {
             data.setServer(server);
-        } else{
+        } else {
             addPlayer(uuid, username, server);
         }
     }
 
-    public void removePlayer(UUID uuid){
+    public void removePlayer(UUID uuid) {
         map.remove(uuid);
     }
 
-    public void removeAllPlayers(){
+    public void removeAllPlayers() {
         map.clear();
     }
 
-    public void announce(){
+    public void announce() {
         CompletableFuture.supplyAsync(() -> gson.toJson(map.values()))
-                        .thenAccept(json -> redisManager.publish(channel, json));
+                .thenAccept(json -> redisManager.publish(channel, json));
     }
 
 
     @Data
     @AllArgsConstructor
-    static class PlayerData{
+    static class PlayerData {
         String username, server;
         UUID uuid;
         long joinTime;
