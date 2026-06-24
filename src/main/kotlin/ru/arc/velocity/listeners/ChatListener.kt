@@ -4,7 +4,6 @@ import com.velocitypowered.api.event.Subscribe
 import com.velocitypowered.api.event.player.PlayerChatEvent
 import com.velocitypowered.api.proxy.ProxyServer
 import org.slf4j.LoggerFactory
-import ru.arc.CommonCore
 import ru.arc.Utils
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
@@ -15,7 +14,6 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 
 class ChatListener(
-    private val commonCore: CommonCore,
     private val proxyServer: ProxyServer,
     private val jippityConfig: Config,
 ) {
@@ -42,21 +40,22 @@ class ChatListener(
         val ip = event.player.remoteAddress.address.hostAddress
         val uuid = event.player.uniqueId
 
-        if (commonCore.liteBansHook != null && commonCore.liteBansHook!!.isMuted(uuid, ip)) return
+        if (Velocity.liteBansHook != null && Velocity.liteBansHook!!.isMuted(uuid, ip)) return
 
         val message = event.message.substring(1)
         val player = event.player
-        val firstJoinTime = commonCore.firstJoinData!!.getFirstJoinTime(player.username)
+        val firstJoinTime = Velocity.firstJoinData?.getFirstJoinTime(player.username)
         val minPlayerTime = mainConfig.integer("discord.min-play-time-sec", 600) * 1000L
         if (firstJoinTime == null || firstJoinTime + minPlayerTime > System.currentTimeMillis()) return
         CompletableFuture.runAsync {
             val pattern = mainConfig.string("discord.chat-pattern", "**%player_name%** » %message%")
             var chatMessage = pattern.replace("%player_name%", username).replace("%message%", message)
-            commonCore.discordBot!!.sendChatMessage(chatMessage)
+            Velocity.discordBot?.sendChatMessage(chatMessage)
 
-            val telegramPattern = mainConfig.string("telegram.chat-pattern", "\\*\\*%player_name%\\*\\* » %message%")
+            val telegramPattern =
+                mainConfig.string("telegram.chat-pattern", "\\*\\*%player_name%\\*\\* » %message%")
             chatMessage = telegramPattern.replace("%player_name%", username).replace("%message%", message)
-            commonCore.telegramBot!!.sendChatMessage(chatMessage)
+            Velocity.telegramBot?.sendChatMessage(chatMessage)
         }
     }
 
@@ -65,9 +64,10 @@ class ChatListener(
         if (!event.message.startsWith("!")) return
         val message = event.message.substring(1)
         val playerName = event.player.username
+        val assistant = Velocity.chatAssistant ?: return
 
-        commonCore.chatAssistant!!.addChatMessage(message, playerName)
-        commonCore.chatAssistant!!.tryEnqueue().thenAccept { response ->
+        assistant.addChatMessage(message, playerName)
+        assistant.tryEnqueue().thenAccept { response ->
             try {
                 val prefix = assistantConfig.string("chat-prefix", "<gold>Бот <gray>» </gray><white>")
                 log.info("Chat assistant response: {}", response)

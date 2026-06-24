@@ -1,15 +1,13 @@
 package ru.arc.velocity
 
 import com.velocitypowered.api.command.SimpleCommand
-import ru.arc.CommonCore
 import ru.arc.Utils
 import ru.arc.ai.Assistant
 import ru.arc.config.ConfigManager
+import ru.arc.core.ModuleRegistry
 import java.util.concurrent.CompletableFuture
 
-class ProxyARCCommand(
-    private val commonCore: CommonCore,
-) : SimpleCommand {
+class ProxyARCCommand : SimpleCommand {
 
     override fun execute(invocation: SimpleCommand.Invocation) {
         val commandSource = invocation.source()
@@ -23,8 +21,9 @@ class ProxyARCCommand(
         } else {
             when {
                 args[0].equals("reload", ignoreCase = true) -> {
-                    ConfigManager.reloadAll()
-                    Assistant.assistants.forEach(Assistant::reload)
+                    Velocity.firstJoinData?.save()
+                    ModuleRegistry.reloadAll()
+                    Assistant.assistants.forEach { it.reload() }
                     commandSource.sendMessage(Utils.mm("Перезагрузка успешна!"))
                 }
                 args[0].equals("cleardiscord", ignoreCase = true) -> {
@@ -34,11 +33,12 @@ class ProxyARCCommand(
                     }
                     val channelId = args[1]
                     val action = args[2]
+                    val discordBot = Velocity.discordBot
                     when {
                         action.equals("start", ignoreCase = true) ->
-                            commonCore.discordBot!!.clearChat(channelId)
+                            discordBot?.clearChat(channelId)
                         action.equals("stop", ignoreCase = true) ->
-                            commonCore.discordBot!!.stopClearTask(channelId)
+                            discordBot?.stopClearTask(channelId)
                         else ->
                             commandSource.sendMessage(Utils.mm("Usage: /arc cleardiscord <channelId> start/stop"))
                     }

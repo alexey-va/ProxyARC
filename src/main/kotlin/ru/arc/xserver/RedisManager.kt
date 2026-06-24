@@ -3,7 +3,7 @@ package ru.arc.xserver
 import org.apache.logging.log4j.LogManager
 import redis.clients.jedis.JedisPooled
 import redis.clients.jedis.JedisPubSub
-import ru.arc.CommonCore
+import ru.arc.velocity.Velocity
 import ru.arc.xserver.repos.ProxyScheduler
 import ru.arc.xserver.repos.RedisRepoMessager
 import java.util.Arrays
@@ -93,7 +93,7 @@ class RedisManager(
 
     fun publish(channel: String, message: String) {
         executorService?.execute {
-            pub?.publish(channel, CommonCore.serverName + SERVER_DELIMITER + message)
+            pub?.publish(channel, Velocity.serverName + SERVER_DELIMITER + message)
         }
     }
 

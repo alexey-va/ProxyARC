@@ -10,7 +10,7 @@ import net.dv8tion.jda.api.entities.channel.concrete.TextChannel
 import net.dv8tion.jda.api.requests.GatewayIntent
 import net.dv8tion.jda.api.utils.cache.CacheFlag
 import org.slf4j.LoggerFactory
-import ru.arc.CommonCore
+import ru.arc.velocity.Velocity
 import ru.arc.Utils
 import ru.arc.Utils.mm
 import ru.arc.Utils.plain
@@ -32,8 +32,8 @@ class DiscordBot {
 
     private val log = LoggerFactory.getLogger(DiscordBot::class.java)
 
-    private val config: Config = ConfigManager.of(CommonCore.folder!!, "discord.yml")
-    private val joinConfig: Config = ConfigManager.of(CommonCore.folder!!, "join_config.yml")
+    private val config: Config = ConfigManager.of(Velocity.dataFolder!!, "discord.yml")
+    private val joinConfig: Config = ConfigManager.of(Velocity.dataFolder!!, "join_config.yml")
     private var jda: JDA? = null
     private var joinChannel: TextChannel? = null
     private var playerListChannel: TextChannel? = null

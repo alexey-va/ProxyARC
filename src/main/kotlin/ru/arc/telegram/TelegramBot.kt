@@ -4,7 +4,7 @@ import org.slf4j.LoggerFactory
 import org.telegram.telegrambots.bots.TelegramLongPollingBot
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage
 import org.telegram.telegrambots.meta.api.objects.Update
-import ru.arc.CommonCore
+import ru.arc.velocity.Velocity
 import ru.arc.Utils.mm
 import ru.arc.Utils.plain
 import ru.arc.config.Config
@@ -40,7 +40,7 @@ class TelegramBot : TelegramLongPollingBot(config.string("token", "none")) {
             message = format
                 .replace("%sender%", sender)
                 .replace("%message%", message)
-            CommonCore.inst!!.discordBot!!.sendGeneralMessage(message)
+            Velocity.discordBot?.sendGeneralMessage(message)
         }
     }
 
@@ -49,13 +49,13 @@ class TelegramBot : TelegramLongPollingBot(config.string("token", "none")) {
         val discordMessage = discordFormat
             .replace("%sender%", sender)
             .replace("%message%", message)
-        CommonCore.inst!!.discordBot!!.sendChatMessage(discordMessage)
+        Velocity.discordBot?.sendChatMessage(discordMessage)
 
         val chatFormat = config.string("chat-format", "<blue>T <gray>%sender% <dark_gray>» <white>%message%")
         val chatMessage = chatFormat
             .replace("%sender%", sender)
             .replace("%message%", message)
-        CommonCore.inst!!.arc!!.sendMessageToAll(mm(chatMessage))
+        Velocity.plugin?.sendMessageToAll(mm(chatMessage))
     }
 
     fun sendChatMessage(message: String) {
@@ -106,6 +106,6 @@ class TelegramBot : TelegramLongPollingBot(config.string("token", "none")) {
 
     companion object {
         private val log = LoggerFactory.getLogger(TelegramBot::class.java)
-        private val config: Config = ConfigManager.of(CommonCore.folder!!, "telegram.yml")
+        private val config: Config = ConfigManager.of(Velocity.dataFolder!!, "telegram.yml")
     }
 }

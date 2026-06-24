@@ -2,6 +2,7 @@ package ru.arc
 
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import ru.arc.velocity.Velocity
 import java.io.FileReader
 import java.io.FileWriter
 import java.nio.file.Files
@@ -9,7 +10,7 @@ import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 
 class FirstJoinData {
-    private val dbPath: Path = CommonCore.folder!!.resolve("first_time_join.json")
+    private val dbPath: Path = Velocity.dataFolder!!.resolve("first_time_join.json")
     lateinit var map: MutableMap<String, Long>
 
     fun firstTimeJoin(name: String): Boolean = !map.containsKey(name)

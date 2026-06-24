@@ -4,7 +4,7 @@ import org.slf4j.LoggerFactory
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent
 import net.dv8tion.jda.api.hooks.ListenerAdapter
-import ru.arc.CommonCore
+import ru.arc.velocity.Velocity
 import ru.arc.Utils.mm
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
@@ -25,13 +25,13 @@ class DiscordListener(
             val message = format
                 .replace("%player_name%", event.author.effectiveName)
                 .replace("%message%", event.message.contentRaw)
-            CommonCore.inst!!.arc!!.sendMessageToAll(mm(message))
+            Velocity.plugin!!.sendMessageToAll(mm(message))
 
             val telegramFormat = config.string("telegram-format", "**%player_name%** » %message%")
             val telegramMessage = telegramFormat
                 .replace("%player_name%", event.author.effectiveName)
                 .replace("%message%", event.message.contentRaw)
-            CommonCore.inst!!.telegramBot!!.sendChatMessage(telegramMessage)
+            Velocity.telegramBot?.sendChatMessage(telegramMessage)
         }
         if (event.message.hasChannel() && event.message.channelId == generalChannel.id) {
             log.info("Message in general channel: {}", event.message.contentRaw)
@@ -39,12 +39,12 @@ class DiscordListener(
             val message = format
                 .replace("%player_name%", event.author.effectiveName)
                 .replace("%message%", event.message.contentRaw)
-            CommonCore.inst!!.telegramBot!!.sendGeneralMessage(message)
+            Velocity.telegramBot?.sendGeneralMessage(message)
         }
     }
 
     companion object {
         private val log = LoggerFactory.getLogger(DiscordListener::class.java)
-        private val config: Config = ConfigManager.of(CommonCore.folder!!, "discord.yml")
+        private val config: Config = ConfigManager.of(Velocity.dataFolder!!, "discord.yml")
     }
 }

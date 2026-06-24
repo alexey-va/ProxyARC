@@ -9,17 +9,14 @@ import com.velocitypowered.api.proxy.Player
 import com.velocitypowered.api.proxy.ProxyServer
 import net.kyori.adventure.text.Component
 import org.slf4j.LoggerFactory
-import ru.arc.CommonCore
 import ru.arc.Utils.mm
 import ru.arc.config.Config
-import ru.arc.discord.DiscordBot
 import ru.arc.core.delayed
+import ru.arc.discord.DiscordBot
 import ru.arc.velocity.Velocity
-import ru.arc.xserver.JoinMessages
 import java.util.concurrent.ThreadLocalRandom
 
 class JoinListener(
-    private val commonCore: CommonCore,
     private val proxyServer: ProxyServer,
     private val config: Config,
 ) {
@@ -28,19 +25,21 @@ class JoinListener(
     fun onPlayerJoin(event: LoginEvent) {
         if (Velocity.isShuttingDown.get()) return
         delayed(20) { joinMessage(event.player) }
-        val serverName = event.player.currentServer
-            .map { it.serverInfo.name }
-            .orElse("")
-        commonCore.playerListAnnouncer!!.addPlayer(
+        val serverName =
+            event.player.currentServer
+                .map { it.serverInfo.name }
+                .orElse("")
+        Velocity.playerListAnnouncer?.addPlayer(
             event.player.uniqueId,
             event.player.username,
             serverName,
         )
-        val allow = commonCore.antibot!!.processPlayerJoin(
-            event.player.username,
-            event.player.uniqueId,
-            proxyServer.playerCount,
-        )
+        val allow =
+            Velocity.antibot?.processPlayerJoin(
+                event.player.username,
+                event.player.uniqueId,
+                proxyServer.playerCount,
+            ) ?: true
         if (!allow) {
             log.info("Antibot kicked player {}", event.player.username)
             event.setResult(
@@ -56,15 +55,15 @@ class JoinListener(
         if (!event.player.hasPermission("arc.join-message.leave")) return
         if (Velocity.isShuttingDown.get()) return
         delayed(20) { leaveMessage(event.player) }
-        commonCore.playerListAnnouncer!!.removePlayer(event.player.uniqueId)
-        commonCore.antibot!!.processPlayerLeave(event.player.uniqueId)
+        Velocity.playerListAnnouncer?.removePlayer(event.player.uniqueId)
+        Velocity.antibot?.processPlayerLeave(event.player.uniqueId)
     }
 
     @Subscribe(async = true)
     fun onChangeServer(event: ServerConnectedEvent) {
         val server = event.server.serverInfo.name
         val username = event.player.username
-        commonCore.playerListAnnouncer!!.updatePlayer(event.player.uniqueId, username, server)
+        Velocity.playerListAnnouncer?.updatePlayer(event.player.uniqueId, username, server)
     }
 
     private fun sendMessageToAll(component: Component) {
@@ -75,21 +74,24 @@ class JoinListener(
         if (Velocity.isShuttingDown.get()) return
         try {
             if (!player.isActive) return
-            val firstTime = commonCore.firstJoinData!!.firstTimeJoin(player.username)
+            val firstJoin = Velocity.firstJoinData ?: return
+            val firstTime = firstJoin.firstTimeJoin(player.username)
             if (firstTime) {
-                commonCore.firstJoinData!!.markAsJoined(player.username)
+                firstJoin.markAsJoined(player.username)
                 if (!player.hasPermission("arc.join-message.first")) return
-                commonCore.discordBot!!.sendJoinEmbed(player.username, DiscordBot.JoinType.FIRST_TIME, null)
-                commonCore.telegramBot!!.sendJoinMessage(player.username, DiscordBot.JoinType.FIRST_TIME, null)
-                var message = config.string("messages.first-join", "<gray>Игрок <green>%player_name% <gray>присоединился впервые!")
+                Velocity.discordBot?.sendJoinEmbed(player.username, DiscordBot.JoinType.FIRST_TIME, null)
+                Velocity.telegramBot?.sendJoinMessage(player.username, DiscordBot.JoinType.FIRST_TIME, null)
+                var message =
+                    config.string("messages.first-join", "<gray>Игрок <green>%player_name% <gray>присоединился впервые!")
                 message = message.replace("%player_name%", player.username)
                 message = config.string("messages.join-prefix", "<dark_green>❖ ") + message
                 sendMessageToAll(mm(message))
             } else {
                 if (!player.hasPermission("arc.join-message.join")) return
                 var messageOverride: String? = null
-                if (commonCore.joinMessagesRedisRepo != null) {
-                    val join = commonCore.joinMessagesRedisRepo!!.getOrNull(player.username).join()
+                val joinRepo = Velocity.joinMessagesRedisRepo
+                if (joinRepo != null) {
+                    val join = joinRepo.getOrNull(player.username).join()
                     if (join != null && join.joinMessages.isNotEmpty()) {
                         val idx = ThreadLocalRandom.current().nextInt(join.joinMessages.size)
                         var current = 0
@@ -102,8 +104,8 @@ class JoinListener(
                         }
                     }
                 }
-                commonCore.discordBot!!.sendJoinEmbed(player.username, DiscordBot.JoinType.JOIN, messageOverride)
-                commonCore.telegramBot!!.sendJoinMessage(player.username, DiscordBot.JoinType.JOIN, messageOverride)
+                Velocity.discordBot?.sendJoinEmbed(player.username, DiscordBot.JoinType.JOIN, messageOverride)
+                Velocity.telegramBot?.sendJoinMessage(player.username, DiscordBot.JoinType.JOIN, messageOverride)
                 if (messageOverride != null) {
                     messageOverride = config.string("messages.join-prefix", "<dark_green>❖ ") + messageOverride
                 }
@@ -120,8 +122,9 @@ class JoinListener(
     private fun leaveMessage(player: Player) {
         if (Velocity.isShuttingDown.get()) return
         var messageOverride: String? = null
-        if (commonCore.joinMessagesRedisRepo != null) {
-            val join = commonCore.joinMessagesRedisRepo!!.getOrNull(player.username).join()
+        val joinRepo = Velocity.joinMessagesRedisRepo
+        if (joinRepo != null) {
+            val join = joinRepo.getOrNull(player.username).join()
             if (join != null && join.leaveMessages.isNotEmpty()) {
                 val idx = ThreadLocalRandom.current().nextInt(join.leaveMessages.size)
                 var current = 0
@@ -134,8 +137,8 @@ class JoinListener(
                 }
             }
         }
-        commonCore.discordBot!!.sendJoinEmbed(player.username, DiscordBot.JoinType.LEAVE, messageOverride)
-        commonCore.telegramBot!!.sendJoinMessage(player.username, DiscordBot.JoinType.LEAVE, messageOverride)
+        Velocity.discordBot?.sendJoinEmbed(player.username, DiscordBot.JoinType.LEAVE, messageOverride)
+        Velocity.telegramBot?.sendJoinMessage(player.username, DiscordBot.JoinType.LEAVE, messageOverride)
         if (messageOverride != null) {
             messageOverride = config.string("messages.leave-prefix", "<dark_red>❖ ") + messageOverride
         }
