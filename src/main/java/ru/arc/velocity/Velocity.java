@@ -127,7 +127,7 @@ public class Velocity implements Arc {
 
 
     private void registerListeners() {
-        proxyServer.getEventManager().register(this, new JoinListener(commonCore, proxyServer, ConfigManager.of(dataFolder, "join.yml")));
+        proxyServer.getEventManager().register(this, new JoinListener(commonCore, proxyServer, ConfigManager.of(dataFolder, "join_config.yml")));
         proxyServer.getEventManager().register(this, new ChatListener(commonCore, proxyServer, ConfigManager.of(dataFolder, "config.yml")));
     }
 

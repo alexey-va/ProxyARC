@@ -1,3 +1,0 @@
-name: bungee
-version: '${project.version}'
-main: ru.arc.bungee.Bungee
