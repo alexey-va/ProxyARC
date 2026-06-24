@@ -44,6 +44,10 @@ class DiscordBot {
     private val deleteTasks: MutableMap<String, AtomicBoolean> = ConcurrentHashMap()
     private var discordListener: DiscordListener? = null
     private var isEnabled: Boolean = false
+    @Volatile
+    private var channelsReady: Boolean = false
+
+    fun isReady(): Boolean = isEnabled && channelsReady
 
     init {
         try {
@@ -101,6 +105,7 @@ class DiscordBot {
 
                         discordListener = DiscordListener(chatChannel!!, generalChannel!!)
                         jda!!.addEventListener(discordListener)
+                        channelsReady = true
                     }
                     isEnabled = true
                 } else {
@@ -204,11 +209,7 @@ class DiscordBot {
     }
 
     fun updatePlayerList(players: Collection<String>) {
-        if (!isEnabled) return
-        if (playerListChannel == null) {
-            println("Player list channel is null! SKipping")
-            return
-        }
+        if (!isEnabled || !channelsReady || playerListChannel == null) return
         val maxPlayers = config.integer("player-list.max-players", 100)
         val current = players.size
         val author = config.string("player-list.title", "Игроки на сервере (%amount%/%max%)")

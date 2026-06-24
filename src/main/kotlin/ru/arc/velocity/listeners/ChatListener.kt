@@ -8,11 +8,11 @@ import ru.arc.CommonCore
 import ru.arc.Utils
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
+import ru.arc.core.delayed
 import ru.arc.velocity.Velocity
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.TimeUnit
 
 class ChatListener(
     private val commonCore: CommonCore,
@@ -81,17 +81,11 @@ class ChatListener(
                 for (chatMessage in chatMessages) {
                     if (chatMessage.equals("пропускаю", ignoreCase = true)) continue
                     val component = Utils.mm(prefix + chatMessage.trim())
-                    proxyServer.scheduler
-                        .buildTask(
-                            Velocity.plugin!!,
-                            Runnable {
-                                proxyServer.allPlayers
-                                    .onEach { log.info("Sending AI message to player {}", it.username) }
-                                    .forEach { it.sendMessage(component) }
-                            },
-                        )
-                        .delay(delay.toLong(), TimeUnit.SECONDS)
-                        .schedule()
+                    delayed(delay * 20L) {
+                        proxyServer.allPlayers
+                            .onEach { log.info("Sending AI message to player {}", it.username) }
+                            .forEach { it.sendMessage(component) }
+                    }
                     delay += 4
                 }
             } catch (e: Exception) {

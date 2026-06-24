@@ -13,10 +13,10 @@ import ru.arc.CommonCore
 import ru.arc.Utils.mm
 import ru.arc.config.Config
 import ru.arc.discord.DiscordBot
+import ru.arc.core.delayed
 import ru.arc.velocity.Velocity
 import ru.arc.xserver.JoinMessages
 import java.util.concurrent.ThreadLocalRandom
-import java.util.concurrent.TimeUnit
 
 class JoinListener(
     private val commonCore: CommonCore,
@@ -27,18 +27,14 @@ class JoinListener(
     @Subscribe(async = true)
     fun onPlayerJoin(event: LoginEvent) {
         if (Velocity.isShuttingDown.get()) return
-        proxyServer.scheduler
-            .buildTask(
-                Velocity.plugin!!,
-                Runnable { joinMessage(event.player) },
-            )
-            .delay(1, TimeUnit.SECONDS)
-            .schedule()
-        val server = event.player.currentServer.map { it.serverInfo.name }
+        delayed(20) { joinMessage(event.player) }
+        val serverName = event.player.currentServer
+            .map { it.serverInfo.name }
+            .orElse("")
         commonCore.playerListAnnouncer!!.addPlayer(
             event.player.uniqueId,
             event.player.username,
-            server.orElse(null),
+            serverName,
         )
         val allow = commonCore.antibot!!.processPlayerJoin(
             event.player.username,
@@ -59,13 +55,7 @@ class JoinListener(
     fun onPlayerLeave(event: DisconnectEvent) {
         if (!event.player.hasPermission("arc.join-message.leave")) return
         if (Velocity.isShuttingDown.get()) return
-        proxyServer.scheduler
-            .buildTask(
-                Velocity.plugin!!,
-                Runnable { leaveMessage(event.player) },
-            )
-            .delay(1, TimeUnit.SECONDS)
-            .schedule()
+        delayed(20) { leaveMessage(event.player) }
         commonCore.playerListAnnouncer!!.removePlayer(event.player.uniqueId)
         commonCore.antibot!!.processPlayerLeave(event.player.uniqueId)
     }

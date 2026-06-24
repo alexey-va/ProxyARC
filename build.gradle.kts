@@ -1,5 +1,6 @@
 plugins {
     kotlin("jvm") version "2.3.0"
+    kotlin("kapt") version "2.3.0"
     id("com.gradleup.shadow") version "9.3.0"
 }
 
@@ -7,8 +8,8 @@ group = "ru.arc"
 version = "1.0-SNAPSHOT"
 description = "ProxyARC Velocity plugin"
 
-java { toolchain { languageVersion.set(JavaLanguageVersion.of(21)) } }
-kotlin { jvmToolchain(21) }
+java { toolchain { languageVersion.set(JavaLanguageVersion.of(25)) } }
+kotlin { jvmToolchain(25) }
 
 repositories {
     maven("https://repo.papermc.io/repository/maven-public/")
@@ -19,12 +20,15 @@ repositories {
 }
 
 dependencies {
+    implementation("ru.arc:arc-core:1.0-SNAPSHOT")
+    implementation("ru.arc:arc-core-velocity:1.0-SNAPSHOT")
+
     compileOnly("com.velocitypowered:velocity-api:3.3.0-SNAPSHOT")
+    kapt("com.velocitypowered:velocity-api:3.3.0-SNAPSHOT")
     compileOnly("net.luckperms:api:5.4")
     compileOnly("com.gitlab.ruany:LiteBansAPI:0.5.0")
 
     implementation(kotlin("stdlib"))
-    implementation("org.yaml:snakeyaml:2.2")
     implementation("net.dv8tion:JDA:6.0.0-rc.4") {
         exclude(group = "club.minnced", module = "opus-java")
     }
@@ -62,8 +66,6 @@ tasks {
             com.github.jengelman.gradle.plugins.shadow.transformers
                 .Log4j2PluginsCacheFileTransformer(),
         )
-
-        relocate("org.yaml.snakeyaml", "ru.arc.snakeyaml")
 
         exclude("META-INF/DEPENDENCIES", "META-INF/LICENSE", "META-INF/NOTICE")
     }

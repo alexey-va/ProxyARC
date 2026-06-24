@@ -11,8 +11,10 @@ import com.velocitypowered.api.plugin.Plugin
 import com.velocitypowered.api.plugin.annotation.DataDirectory
 import com.velocitypowered.api.proxy.Player
 import com.velocitypowered.api.proxy.ProxyServer
-import com.velocitypowered.api.scheduler.ScheduledTask
-import com.velocitypowered.api.scheduler.TaskStatus
+import ru.arc.core.ScheduledTask as CoreScheduledTask
+import ru.arc.core.Tasks
+import ru.arc.core.repeating
+import ru.arc.velocity.core.VelocityTaskScheduler
 import net.kyori.adventure.text.Component
 import org.slf4j.Logger
 import ru.arc.Arc
@@ -24,7 +26,6 @@ import ru.arc.config.ConfigManager
 import ru.arc.velocity.listeners.ChatListener
 import ru.arc.velocity.listeners.JoinListener
 import java.nio.file.Path
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -38,8 +39,8 @@ class Velocity @Inject constructor(
     logger: Logger,
     @DataDirectory dataFolder: Path,
 ) : Arc {
-    private var playerListTask: ScheduledTask? = null
-    private var redisPlayerListTask: ScheduledTask? = null
+    private var playerListTask: CoreScheduledTask? = null
+    private var redisPlayerListTask: CoreScheduledTask? = null
 
     lateinit var commonCore: CommonCore
         private set
@@ -54,43 +55,30 @@ class Velocity @Inject constructor(
     @Subscribe
     fun onProxyInit(event: ProxyInitializeEvent) {
         println("Initializing ProxyARC")
+        Tasks.scheduler = VelocityTaskScheduler(proxyServer!!, this)
         commonCore = CommonCore()
         commonCore.init(dataFolder!!, this)
         registerListeners()
 
-        playerListTask = proxyServer!!.scheduler
-            .buildTask(
-                this,
-                Runnable {
-                    commonCore.discordBot!!.updatePlayerList(
-                        proxyServer!!.allPlayers.map { it.username },
-                    )
-                },
-            )
-            .repeat(10, TimeUnit.SECONDS)
-            .schedule()
+        playerListTask = repeating(0, 200) {
+            commonCore.discordBot!!.updatePlayerList(onlinePlayerNames())
+        }
 
         val counter = AtomicInteger(0)
-        redisPlayerListTask = proxyServer!!.scheduler
-            .buildTask(
-                this,
-                Runnable {
-                    commonCore.playerListAnnouncer!!.announce()
-                    if (counter.incrementAndGet() % 120 == 0) {
-                        val players = proxyServer!!.allPlayers
-                        commonCore.playerListAnnouncer!!.removeAllPlayers()
-                        players.forEach { player ->
-                            commonCore.playerListAnnouncer!!.addPlayer(
-                                player.uniqueId,
-                                player.username,
-                                player.currentServer.map { it.serverInfo.name }.orElse(null),
-                            )
-                        }
-                    }
-                },
-            )
-            .repeat(1, TimeUnit.SECONDS)
-            .schedule()
+        redisPlayerListTask = repeating(0, 20) {
+            commonCore.playerListAnnouncer!!.announce()
+            if (counter.incrementAndGet() % 120 == 0) {
+                val players = proxyServer!!.allPlayers
+                commonCore.playerListAnnouncer!!.removeAllPlayers()
+                players.forEach { player ->
+                    commonCore.playerListAnnouncer!!.addPlayer(
+                        player.uniqueId,
+                        player.username,
+                        player.currentServer.map { it.serverInfo.name }.orElse(""),
+                    )
+                }
+            }
+        }
 
         registerCommands()
 
@@ -123,12 +111,9 @@ class Velocity @Inject constructor(
     }
 
     fun cancelTasks() {
-        if (playerListTask != null && playerListTask!!.status() == TaskStatus.SCHEDULED) {
-            playerListTask!!.cancel()
-        }
-        if (redisPlayerListTask != null && redisPlayerListTask!!.status() == TaskStatus.SCHEDULED) {
-            redisPlayerListTask!!.cancel()
-        }
+        playerListTask?.cancel()
+        redisPlayerListTask?.cancel()
+        Tasks.scheduler.cancelAll()
     }
 
     private fun registerListeners() {
@@ -145,6 +130,9 @@ class Velocity @Inject constructor(
     override fun sendMessageToAll(component: Component) {
         proxyServer!!.allPlayers.forEach { it.sendMessage(component) }
     }
+
+    override fun onlinePlayerNames(): Collection<String> =
+        proxyServer!!.allPlayers.map { it.username }
 
     companion object {
         @JvmField

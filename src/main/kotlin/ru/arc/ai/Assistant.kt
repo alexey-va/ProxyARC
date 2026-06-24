@@ -52,7 +52,7 @@ class Assistant(
 
     private fun loadPrompt() {
         try {
-            val promptFolder = config.folder.resolve("prompts")
+            val promptFolder = config.dataFolder.toPath().resolve("prompts")
             if (!Files.exists(promptFolder)) {
                 Files.createDirectories(promptFolder)
             }
