@@ -8,20 +8,38 @@ import kotlin.io.path.createTempDirectory
 
 class AssistantChatFormatTest : FreeSpec({
     "AssistantChatFormat" - {
-        "should format in-game message like players with bot icon" {
+        "should match CMI GeneralFormat with bot suffix" {
             val dir = createTempDirectory()
             Files.writeString(
                 dir.resolve("assistant.yml"),
                 """
                 chat:
                   display-name: "скорен"
-                  message-format: "<yellow>◇ <gray>%name% <dark_gray>» <white>%message%"
+                  suffix: "&e◇"
+                  message-format: "%suffix% &7%name% &8» &f%message%"
                 """.trimIndent(),
             )
             val config = Config(dir, "assistant.yml")
 
             AssistantChatFormat.inGameMessage(config, "привет") shouldBe
-                "<yellow>◇ <gray>скорен <dark_gray>» <white>привет"
+                "&e◇ &7скорен &8» &fпривет"
+        }
+
+        "should accept CMI placeholder names" {
+            val format = "%luckperms_suffix% &7{displayName} &8» &f{message}"
+            val dir = createTempDirectory()
+            Files.writeString(
+                dir.resolve("assistant.yml"),
+                """
+                chat:
+                  display-name: "скорен"
+                  suffix: "&e◇"
+                """.trimIndent(),
+            )
+            val config = Config(dir, "assistant.yml")
+
+            AssistantChatFormat.applyPlaceholders(format, config, "test") shouldBe
+                "&e◇ &7скорен &8» &ftest"
         }
 
         "should format discord like regular player chat" {

@@ -4,19 +4,41 @@ import ru.arc.config.Config
 
 object AssistantChatFormat {
     const val DEFAULT_DISPLAY_NAME = "скорен"
-    const val DEFAULT_MESSAGE_FORMAT = "<yellow>◇ <gray>%name% <dark_gray>» <white>%message%"
+
+    /** CMI `Chat.yml` → `GeneralFormat` (global / `!` shout). */
+    const val CMI_GENERAL_FORMAT = "%suffix% &7%name% &8» &f%message%"
+
+    /** Bot marker in suffix slot (instead of `%luckperms_suffix%`). Empty string = no marker. */
+    const val DEFAULT_SUFFIX = "&e◇"
 
     fun displayName(config: Config): String =
         config.string("chat.display-name", DEFAULT_DISPLAY_NAME)
+
+    fun suffix(config: Config): String =
+        config.string("chat.suffix", DEFAULT_SUFFIX)
 
     fun inGameMessage(
         config: Config,
         message: String,
     ): String {
-        val format = config.string("chat.message-format", DEFAULT_MESSAGE_FORMAT)
+        val format = config.string("chat.message-format", CMI_GENERAL_FORMAT)
+        return applyPlaceholders(format, config, message)
+    }
+
+    internal fun applyPlaceholders(
+        format: String,
+        config: Config,
+        message: String,
+    ): String {
+        val name = displayName(config)
+        val suffix = suffix(config)
         return format
-            .replace("%name%", displayName(config))
+            .replace("%suffix%", suffix)
+            .replace("%luckperms_suffix%", suffix)
+            .replace("%name%", name)
+            .replace("{displayName}", name)
             .replace("%message%", message)
+            .replace("{message}", message)
     }
 
     fun discordMessage(

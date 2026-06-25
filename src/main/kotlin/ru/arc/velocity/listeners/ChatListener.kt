@@ -95,7 +95,7 @@ class ChatListener(
 
             val inGameText = AssistantChatFormat.inGameMessage(assistantConfig, trimmed)
             delayed(delay * 20L) {
-                val component = Utils.mm(inGameText)
+                val component = Utils.legacy(inGameText)
                 proxyServer.allPlayers.forEach { it.sendMessage(component) }
             }
 

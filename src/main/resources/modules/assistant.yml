@@ -1,10 +1,14 @@
 # Chat assistant. Prompt: prompts/chat.txt | LLM: modules/llm.yml
+#
+# In-game format mirrors CMI Chat.yml GeneralFormat (global / ! shout):
+#   %luckperms_suffix% &7{displayName} &8» &f{message}
+# Bot uses chat.suffix instead of LuckPerms suffix.
 
 chat:
   enabled: false
   max-history: 20
   display-name: "скорен"
-  # Like CMI (%luckperms_suffix% &7{name} &8» &f{msg}), but with ◇ bot marker
-  message-format: "<yellow>◇ <gray>%name% <dark_gray>» <white>%message%"
+  suffix: "&e◇"
+  message-format: "%suffix% &7%name% &8» &f%message%"
   relay-discord: true
   relay-telegram: true
