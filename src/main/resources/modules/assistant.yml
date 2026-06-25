@@ -1,7 +1,10 @@
-# Chat assistant prompts and toggles. LLM credentials: modules/llm.yml
+# Chat assistant. Prompt: prompts/chat.txt | LLM: modules/llm.yml
 
 chat:
   enabled: false
   max-history: 20
-
-chat-prefix: "<gold>Бот <gray>» </gray><white>"
+  display-name: "скорен"
+  # Like CMI (%luckperms_suffix% &7{name} &8» &f{msg}), but with ◇ bot marker
+  message-format: "<yellow>◇ <gray>%name% <dark_gray>» <white>%message%"
+  relay-discord: true
+  relay-telegram: true

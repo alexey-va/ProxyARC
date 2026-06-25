@@ -5,6 +5,7 @@ import com.velocitypowered.api.event.player.PlayerChatEvent
 import com.velocitypowered.api.proxy.ProxyServer
 import org.slf4j.LoggerFactory
 import ru.arc.Utils
+import ru.arc.ai.AssistantChatFormat
 import ru.arc.config.Config
 import ru.arc.config.ProxyConfigs
 import ru.arc.core.delayed
@@ -69,28 +70,46 @@ class ChatListener(
         assistant.addChatMessage(message, playerName)
         assistant.tryEnqueue().thenAccept { response ->
             try {
-                val prefix = assistantConfig.string("chat-prefix", "<gold>Бот <gray>» </gray><white>")
                 log.info("Chat assistant response: {}", response)
                 if (response.isEmpty) {
                     log.error("Empty response from chat assistant")
                     return@thenAccept
                 }
-                val reply = response.get()
-                val chatMessages = reply.replace("\n\n", "\n").split("\n")
-                var delay = 0
-                for (chatMessage in chatMessages) {
-                    if (chatMessage.equals("пропускаю", ignoreCase = true)) continue
-                    val component = Utils.mm(prefix + chatMessage.trim())
-                    delayed(delay * 20L) {
-                        proxyServer.allPlayers
-                            .onEach { log.info("Sending AI message to player {}", it.username) }
-                            .forEach { it.sendMessage(component) }
-                    }
-                    delay += 4
-                }
+                deliverAssistantReply(response.get())
             } catch (e: Exception) {
                 log.error("Error while processing chat assistant response", e)
             }
+        }
+    }
+
+    private fun deliverAssistantReply(rawReply: String) {
+        val botName = AssistantChatFormat.displayName(assistantConfig)
+        val relayDiscord = AssistantChatFormat.relayDiscord(assistantConfig)
+        val relayTelegram = AssistantChatFormat.relayTelegram(assistantConfig)
+        val chatMessages = rawReply.replace("\n\n", "\n").split("\n")
+        var delay = 0
+        for (chatMessage in chatMessages) {
+            if (chatMessage.equals("пропускаю", ignoreCase = true)) continue
+            val trimmed = chatMessage.trim()
+            if (trimmed.isEmpty()) continue
+
+            val inGameText = AssistantChatFormat.inGameMessage(assistantConfig, trimmed)
+            delayed(delay * 20L) {
+                val component = Utils.mm(inGameText)
+                proxyServer.allPlayers.forEach { it.sendMessage(component) }
+            }
+
+            if (relayDiscord) {
+                Velocity.discordBot?.sendChatMessage(
+                    AssistantChatFormat.discordMessage(mainConfig, botName, trimmed),
+                )
+            }
+            if (relayTelegram) {
+                Velocity.telegramBot?.sendChatMessage(
+                    AssistantChatFormat.telegramMessage(mainConfig, botName, trimmed),
+                )
+            }
+            delay += 4
         }
     }
 
