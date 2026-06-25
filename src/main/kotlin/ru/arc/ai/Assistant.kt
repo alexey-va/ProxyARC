@@ -14,6 +14,7 @@ import ru.arc.ai.tools.Tool
 import ru.arc.ai.tools.Tools
 import ru.arc.config.Config
 import java.nio.file.Files
+import java.nio.file.Path
 import java.util.Date
 import java.util.Deque
 import java.util.Optional
@@ -55,15 +56,22 @@ class Assistant(
             }
             val promptPath = promptFolder.resolve("$type.txt")
             if (!Files.exists(promptPath)) {
-                Files.createFile(promptPath)
-                Files.writeString(promptPath, DEFAULT_SYSTEM)
-                prompt = DEFAULT_SYSTEM
-            } else {
-                prompt = String(Files.readAllBytes(promptPath))
+                copyBundledPrompt(promptPath, type)
             }
+            if (!Files.exists(promptPath)) {
+                Files.createFile(promptPath)
+                Files.writeString(promptPath, DEFAULT_SYSTEM.trimIndent())
+            }
+            prompt = Files.readString(promptPath)
         } catch (e: Exception) {
             log.info("Error reading prompt file", e)
-            prompt = DEFAULT_SYSTEM
+            prompt = DEFAULT_SYSTEM.trimIndent()
+        }
+    }
+
+    private fun copyBundledPrompt(promptPath: Path, type: String) {
+        Assistant::class.java.getResourceAsStream("/prompts/$type.txt")?.use { input ->
+            Files.copy(input, promptPath)
         }
     }
 
