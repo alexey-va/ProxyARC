@@ -1,7 +1,6 @@
 package ru.arc.xserver
 
 import ru.arc.ai.config.LlmModuleConfig
-import ru.arc.ai.config.LlmConfigBootstrap
 import ru.arc.ai.llm.OpenRouterLlmClient
 import ru.arc.ai.tools.PlayerServerResolver
 import ru.arc.ai.tools.ToolRpcClient
@@ -18,7 +17,6 @@ class NetworkRegistry(
         redisManager.registerChannelUnique(auctionMessager.channelAll, auctionMessager)
 
         val dataPath = Velocity.dataFolder ?: return
-        LlmConfigBootstrap.mergeLegacyProxy(dataPath)
         val llmConfig = LlmModuleConfig.load(dataPath)
         Velocity.llmClient = OpenRouterLlmClient.create(llmConfig)
 
