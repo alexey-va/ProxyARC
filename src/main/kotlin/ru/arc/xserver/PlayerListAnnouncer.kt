@@ -40,6 +40,9 @@ class PlayerListAnnouncer(
             .thenAccept { json -> redisManager.publish(channel, json) }
     }
 
+    fun serverForUsername(username: String): String? =
+        map.values.firstOrNull { it.username.equals(username, ignoreCase = true) }?.server
+
     data class PlayerData(
         var username: String,
         var server: String,

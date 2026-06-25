@@ -1,7 +1,6 @@
 package ru.arc.ai
 
 import com.openai.client.OpenAIClient
-import com.openai.client.okhttp.OpenAIOkHttpClient
 import com.openai.models.chat.completions.ChatCompletionCreateParams
 import com.openai.models.chat.completions.ChatCompletionMessageParam
 import com.openai.models.chat.completions.ChatCompletionMessageToolCall
@@ -9,14 +8,12 @@ import com.openai.models.chat.completions.ChatCompletionToolMessageParam
 import com.openai.models.chat.completions.ChatCompletionUserMessageParam
 import org.slf4j.LoggerFactory
 import ru.arc.ai.Defaults.DEFAULT_SYSTEM
+import ru.arc.ai.llm.OpenRouterLlmClient
+import ru.arc.ai.tools.RemoteToolSupport
 import ru.arc.ai.tools.Tool
 import ru.arc.ai.tools.Tools
 import ru.arc.config.Config
-import java.net.InetSocketAddress
-import java.net.Proxy
 import java.nio.file.Files
-import java.time.Duration
-import java.time.temporal.ChronoUnit
 import java.util.Date
 import java.util.Deque
 import java.util.Optional
@@ -26,24 +23,24 @@ import java.util.concurrent.ConcurrentLinkedDeque
 class Assistant(
     private val config: Config,
     private val type: String,
+    private val llmClient: OpenRouterLlmClient,
 ) {
     private val log = LoggerFactory.getLogger(Assistant::class.java)
 
-    private var apiBaseUrl: String = config.string("api-base-url", "https://openrouter.ai/api/v1")
-    private var client: OpenAIClient? = null
     private var prompt: String = DEFAULT_SYSTEM
     private var leftConversationUntil: Long = 0
     private val history: Deque<ChatCompletionMessageParam> = ConcurrentLinkedDeque()
     var currentRequest: CompletableFuture<Optional<String>>? = null
 
+    private val client: OpenAIClient?
+        get() = llmClient.client
+
     init {
-        updateClient()
         loadPrompt()
         assistants.add(this)
     }
 
     fun reload() {
-        updateClient()
         loadPrompt()
         history.clear()
         currentRequest = null
@@ -75,31 +72,6 @@ class Assistant(
         leftConversationUntil = System.currentTimeMillis() + minutes.toLong() * 60 * 1000
     }
 
-    private fun updateClient() {
-        val apiKey = config.string("api-key", "none")
-        if (apiKey == "none") {
-            log.error("API key is not set for assistant type {}", type)
-            client = null
-        } else {
-            client = createClient(apiKey)
-        }
-    }
-
-    private fun createClient(apiKey: String): OpenAIClient {
-        val proxyEnabled = config.bool("proxy.enabled", true)
-        val proxyHost = config.string("proxy.host", "127.0.0.1")
-        val proxyPort = config.integer("proxy.port", 8888)
-        val builder = OpenAIOkHttpClient.builder()
-            .apiKey(apiKey)
-            .timeout(Duration.of(10, ChronoUnit.SECONDS))
-            .baseUrl(apiBaseUrl)
-        if (proxyEnabled) {
-            val proxy = Proxy(Proxy.Type.HTTP, InetSocketAddress(proxyHost, proxyPort))
-            builder.proxy(proxy)
-        }
-        return builder.build()
-    }
-
     fun addChatMessage(message: String, player: String) {
         history.addLast(
             ChatCompletionMessageParam.ofUser(
@@ -111,22 +83,17 @@ class Assistant(
         )
         val maxHistory = config.integer("$type.max-history", 20)
         while (history.size > maxHistory) {
-            log.info("Trimming chat history, size: {}", history.size)
             history.pollFirst()
         }
     }
 
     fun tryEnqueue(): CompletableFuture<Optional<String>> {
         if (!config.bool("$type.enabled", true)) {
-            log.info("Assistant of type {} is disabled", type)
             return CompletableFuture.completedFuture(Optional.empty())
         }
-        if (client == null) {
-            updateClient()
-            if (client == null) {
-                log.info("Assistant client is not initialized, check API key")
-                return CompletableFuture.completedFuture(Optional.empty())
-            }
+        if (!llmClient.enabled || client == null) {
+            log.info("Assistant client is not initialized, check modules/llm.yml api-key")
+            return CompletableFuture.completedFuture(Optional.empty())
         }
         if (System.currentTimeMillis() < leftConversationUntil) {
             log.info("Assistant of type {} is currently away until {}", type, Date(leftConversationUntil))
@@ -136,7 +103,6 @@ class Assistant(
             currentRequest = null
         }
         if (currentRequest != null) {
-            log.info("Request already in progress")
             return CompletableFuture.completedFuture(Optional.empty())
         }
         currentRequest = sendRequest(0)
@@ -144,10 +110,11 @@ class Assistant(
     }
 
     private fun sendRequest(depth: Int): CompletableFuture<Optional<String>> {
-        val builder = ChatCompletionCreateParams.builder()
-            .addSystemMessage(systemMessage)
-            .temperature(temperature)
-            .model(model)
+        val builder =
+            ChatCompletionCreateParams.builder()
+                .addSystemMessage(systemMessage)
+                .temperature(temperature)
+                .model(model)
         for (message in history) {
             builder.addMessage(message)
         }
@@ -174,14 +141,10 @@ class Assistant(
                     )
                 }
                 if (toolCalls.isNotEmpty() && depth < 3) {
-                    log.info("Tool calls detected, sending follow-up request")
                     sendRequest(depth + 1).join()
                 } else {
-                    log.info("No tool calls, returning response\n{}", message.content().orElse(""))
                     val messageContent = message.content().orElse("")
-                    if (messageContent.equals("пропускаю", ignoreCase = true)) {
-                        Optional.empty()
-                    } else if (messageContent.trim().isEmpty()) {
+                    if (messageContent.equals("пропускаю", ignoreCase = true) || messageContent.isBlank()) {
                         Optional.empty()
                     } else {
                         Optional.of(messageContent)
@@ -194,20 +157,18 @@ class Assistant(
         }
     }
 
-    private val systemMessage: String
-        get() = prompt
+    private val systemMessage: String get() = prompt
 
-    private val model: String
-        get() = config.string("$type.model", "x-ai/grok-4-fast:free")
+    private val model: String get() = config.string("$type.model", "x-ai/grok-4-fast:free")
 
-    private val temperature: Double
-        get() = config.real("$type.temperature", 0.7)
+    private val temperature: Double get() = config.real("$type.temperature", 0.7)
 
     private val tools: Collection<Class<out Tool>>
         get() {
-            val toolNames = config.stringList("$type.tools", emptyList())
-                .map { it.lowercase() }
-                .toSet()
+            val toolNames =
+                config.stringList("$type.tools", emptyList())
+                    .map { it.lowercase() }
+                    .toSet()
             return Tools.getAllTools()
                 .filter { toolNames.contains(it.simpleName.lowercase()) }
                 .toSet()
@@ -221,7 +182,11 @@ class Assistant(
         return try {
             val tool = toolCall.asFunction().function().arguments(toolClass)
             log.info("Executing tool {}", tool)
-            tool.execute(this) ?: ""
+            if (tool is RemoteToolSupport) {
+                tool.executeRemote().join()
+            } else {
+                tool.execute(this) ?: ""
+            }
         } catch (e: Exception) {
             "Error executing tool: ${e.message}"
         }

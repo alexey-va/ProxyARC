@@ -9,6 +9,7 @@ object Tools {
         addTool(DefaultTools.LeaveForTime::class.java)
         addTool(DefaultTools.GetBalTop::class.java)
         addTool(DefaultTools.GetPlayerInfo::class.java)
+        addTool(DefaultTools.GetInventory::class.java)
     }
 
     @JvmStatic

@@ -4,15 +4,18 @@ import ru.arc.config.ProxyConfigs
 import ru.arc.core.PluginModule
 import ru.arc.velocity.Velocity
 
-// ==================== Priority 85: AI Assistant ====================
-
 object AssistantModule : PluginModule {
     override val name = "Assistant"
     override val priority = 85
 
     override fun init() {
+        val llmClient = Velocity.llmClient
+        if (llmClient == null) {
+            Velocity.logger?.warn("AssistantModule: LLM client not ready (NetworkModule must run first)")
+            return
+        }
         Velocity.chatAssistant =
-            Assistant(ProxyConfigs.module("assistant.yml"), "chat")
+            Assistant(ProxyConfigs.module("assistant.yml"), "chat", llmClient)
     }
 
     override fun shutdown() {

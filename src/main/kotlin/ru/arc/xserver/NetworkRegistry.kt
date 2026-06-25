@@ -1,8 +1,13 @@
 package ru.arc.xserver
 
-import ru.arc.ai.tools.ToolsMessager
+import ru.arc.ai.config.LlmModuleConfig
+import ru.arc.ai.config.LlmConfigBootstrap
+import ru.arc.ai.llm.OpenRouterLlmClient
+import ru.arc.ai.tools.PlayerServerResolver
+import ru.arc.ai.tools.ToolRpcClient
 import ru.arc.auction.AuctionMessager
 import ru.arc.discord.DiscordBot
+import ru.arc.velocity.Velocity
 
 class NetworkRegistry(
     private val redisManager: RedisManager,
@@ -12,9 +17,18 @@ class NetworkRegistry(
         redisManager.registerChannelUnique(auctionMessager.channelPartial, auctionMessager)
         redisManager.registerChannelUnique(auctionMessager.channelAll, auctionMessager)
 
-        val toolsMessager = ToolsMessager(redisManager, 2)
-        redisManager.registerChannelUnique(ToolsMessager.CHANNEL_RESPONSE_TOOLS, toolsMessager)
-        ToolsMessager.instance = toolsMessager
+        val dataPath = Velocity.dataFolder ?: return
+        LlmConfigBootstrap.mergeLegacyProxy(dataPath)
+        val llmConfig = LlmModuleConfig.load(dataPath)
+        Velocity.llmClient = OpenRouterLlmClient.create(llmConfig)
+
+        val resolver =
+            PlayerServerResolver { playerName ->
+                Velocity.playerListAnnouncer?.serverForUsername(playerName)
+            }
+        val toolRpcClient = ToolRpcClient(redisManager, llmConfig, resolver, expectedResponses = 2)
+        toolRpcClient.start()
+        ToolRpcClient.instance = toolRpcClient
 
         redisManager.init()
     }

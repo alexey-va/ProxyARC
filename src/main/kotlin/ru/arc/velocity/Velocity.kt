@@ -181,6 +181,9 @@ class Velocity @Inject constructor(
         var playerListAnnouncer: PlayerListAnnouncer? = null
 
         @JvmField
+        var llmClient: ru.arc.ai.llm.OpenRouterLlmClient? = null
+
+        @JvmField
         var antibot: Antibot? = null
 
         @JvmField
