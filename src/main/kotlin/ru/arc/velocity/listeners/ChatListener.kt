@@ -84,32 +84,26 @@ class ChatListener(
 
     private fun deliverAssistantReply(rawReply: String) {
         val botName = AssistantChatFormat.displayName(assistantConfig)
+        val trimmed = AssistantChatFormat.normalizeReply(assistantConfig, rawReply) ?: return
+
         val relayDiscord = AssistantChatFormat.relayDiscord(assistantConfig)
         val relayTelegram = AssistantChatFormat.relayTelegram(assistantConfig)
-        val chatMessages = rawReply.replace("\n\n", "\n").split("\n")
-        var delay = 0
-        for (chatMessage in chatMessages) {
-            if (chatMessage.equals("пропускаю", ignoreCase = true)) continue
-            val trimmed = chatMessage.trim()
-            if (trimmed.isEmpty()) continue
+        val inGameText = AssistantChatFormat.inGameMessage(assistantConfig, trimmed)
 
-            val inGameText = AssistantChatFormat.inGameMessage(assistantConfig, trimmed)
-            delayed(delay * 20L) {
-                val component = Utils.legacy(inGameText)
-                proxyServer.allPlayers.forEach { it.sendMessage(component) }
-            }
+        delayed(0L) {
+            val component = Utils.legacy(inGameText)
+            proxyServer.allPlayers.forEach { it.sendMessage(component) }
+        }
 
-            if (relayDiscord) {
-                Velocity.discordBot?.sendChatMessage(
-                    AssistantChatFormat.discordMessage(mainConfig, botName, trimmed),
-                )
-            }
-            if (relayTelegram) {
-                Velocity.telegramBot?.sendChatMessage(
-                    AssistantChatFormat.telegramMessage(mainConfig, botName, trimmed),
-                )
-            }
-            delay += 4
+        if (relayDiscord) {
+            Velocity.discordBot?.sendChatMessage(
+                AssistantChatFormat.discordMessage(mainConfig, botName, trimmed),
+            )
+        }
+        if (relayTelegram) {
+            Velocity.telegramBot?.sendChatMessage(
+                AssistantChatFormat.telegramMessage(mainConfig, botName, trimmed),
+            )
         }
     }
 
