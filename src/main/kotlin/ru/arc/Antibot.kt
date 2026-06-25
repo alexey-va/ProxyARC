@@ -1,7 +1,7 @@
 package ru.arc
 
 import org.slf4j.LoggerFactory
-import ru.arc.config.ConfigManager
+import ru.arc.config.ProxyConfigs
 import java.nio.file.Path
 import java.util.ArrayDeque
 import java.util.UUID
@@ -9,7 +9,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 class Antibot(path: Path, private val firstJoinData: FirstJoinData) {
     private val log = LoggerFactory.getLogger(Antibot::class.java)
-    private val config = ConfigManager.of(path, "antibot.yml")
+    private val config = ProxyConfigs.module(path, "antibot.yml")
     private val joinTimestamps = ArrayDeque<Long>()
     private val activePlayers = ConcurrentHashMap.newKeySet<UUID>()
 

@@ -1,12 +1,20 @@
 package ru.arc.core.modules
 
 import org.slf4j.LoggerFactory
-import ru.arc.Logging
 import ru.arc.config.ConfigManager
+import ru.arc.config.ProxyConfigs
 import ru.arc.core.PluginModule
+import ru.arc.logging.ArcLogging
+import ru.arc.logging.LoggingConfigSource
+import ru.arc.logging.LokiAttachTarget
+import ru.arc.logging.LokiInstallSpec
+import ru.arc.logging.Slf4jLoggingPlatform
 import ru.arc.velocity.Velocity
 import ru.arc.xserver.NetworkRegistry
+import ru.arc.redis.RedisConfigBootstrap
+import ru.arc.redis.RedisModuleConfig
 import ru.arc.xserver.RedisManager
+import ru.arc.xserver.ServerIdentity
 
 private val log = LoggerFactory.getLogger("ru.arc.core.modules.Infrastructure")
 
@@ -19,7 +27,22 @@ object LoggingModule : PluginModule {
     override fun init() {
         val folder = Velocity.dataFolder ?: return
         try {
-            Logging.addLokiAppender(folder)
+            val configSource =
+                object : LoggingConfigSource {
+                    override fun config() = ProxyConfigs.module("logging.yml")
+
+                    override fun configVersion(): Int = ConfigManager.getVersion()
+                }
+            ArcLogging.install(
+                platform = Slf4jLoggingPlatform("ProxyARC"),
+                configSource = configSource,
+                loki =
+                    LokiInstallSpec(
+                        dataFolder = folder,
+                        target = LokiAttachTarget.ROOT,
+                        appenderName = "lokiAppender",
+                    ),
+            )
         } catch (e: Exception) {
             log.error("Error adding loki appender", e)
         }
@@ -36,8 +59,9 @@ object ConfigModule : PluginModule {
 
     override fun init() {
         val folder = Velocity.dataFolder!!
-        Velocity.config = ConfigManager.of(folder, "config.yml")
-        Velocity.serverName = Velocity.config!!.string("server-name", "proxy")
+        RedisConfigBootstrap.ensure(folder)
+        Velocity.config = ProxyConfigs.main()
+        Velocity.serverName = RedisModuleConfig.load(folder).serverName
     }
 
     override fun reload() {
@@ -53,16 +77,25 @@ object RedisModule : PluginModule {
     override val priority = 20
 
     override fun init() {
-        val config = Velocity.config ?: ConfigManager.of(Velocity.dataFolder!!, "config.yml")
-        val host = config.string("redis.host", "localhost")
-        val port = config.integer("redis.port", 6379)
-        val username = config.string("redis.username", "default")
-        val password = config.string("redis.password", "")
+        val folder = Velocity.dataFolder ?: return
+        RedisConfigBootstrap.ensure(folder)
+        val redis = RedisModuleConfig.load(folder)
+
+        if (!redis.enabled) {
+            log.info("Redis disabled — skipping connection (redis.enabled=false)")
+            return
+        }
+
+        val connection = redis.connection()
 
         if (Velocity.redisManager != null) {
-            Velocity.redisManager!!.connect(host, port, username, password)
+            Velocity.redisManager!!.connect(connection)
         } else {
-            Velocity.redisManager = RedisManager(host, port, username, password)
+            Velocity.redisManager =
+                RedisManager(
+                    connection,
+                    ServerIdentity { Velocity.serverName ?: redis.serverName },
+                )
         }
     }
 

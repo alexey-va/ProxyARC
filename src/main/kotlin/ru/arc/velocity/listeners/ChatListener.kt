@@ -6,7 +6,7 @@ import com.velocitypowered.api.proxy.ProxyServer
 import org.slf4j.LoggerFactory
 import ru.arc.Utils
 import ru.arc.config.Config
-import ru.arc.config.ConfigManager
+import ru.arc.config.ProxyConfigs
 import ru.arc.core.delayed
 import ru.arc.velocity.Velocity
 import java.util.UUID
@@ -17,8 +17,8 @@ class ChatListener(
     private val proxyServer: ProxyServer,
     private val jippityConfig: Config,
 ) {
-    private val mainConfig: Config = ConfigManager.of(Velocity.dataFolder!!, "config.yml")
-    private val assistantConfig: Config = ConfigManager.of(Velocity.dataFolder!!, "assistant.yml")
+    private val mainConfig: Config get() = ProxyConfigs.main()
+    private val assistantConfig: Config get() = ProxyConfigs.module("assistant.yml")
 
     private val warnings = ConcurrentHashMap<UUID, ModerationStatus>()
 

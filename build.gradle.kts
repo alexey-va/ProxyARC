@@ -12,6 +12,7 @@ java { toolchain { languageVersion.set(JavaLanguageVersion.of(25)) } }
 kotlin { jvmToolchain(25) }
 
 repositories {
+    mavenLocal()
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://s01.oss.sonatype.org/content/repositories/snapshots/")
     maven("https://repo.minebench.de/")
@@ -21,6 +22,8 @@ repositories {
 
 dependencies {
     implementation("ru.arc:arc-core:1.0-SNAPSHOT")
+    implementation("ru.arc:arc-core-logging:1.0-SNAPSHOT")
+    implementation("ru.arc:arc-core-redis:1.0-SNAPSHOT")
     implementation("ru.arc:arc-core-velocity:1.0-SNAPSHOT")
 
     compileOnly("com.velocitypowered:velocity-api:3.3.0-SNAPSHOT")
@@ -68,6 +71,25 @@ tasks {
         )
 
         exclude("META-INF/DEPENDENCIES", "META-INF/LICENSE", "META-INF/NOTICE")
+
+        from({
+            val loggingJar =
+                project.configurations.getByName("runtimeClasspath").files.first {
+                    it.name.startsWith("arc-core-logging")
+                }
+            zipTree(loggingJar)
+        }) {
+            include("modules/logging.yml")
+        }
+        from({
+            val redisJar =
+                project.configurations.getByName("runtimeClasspath").files.first {
+                    it.name.startsWith("arc-core-redis")
+                }
+            zipTree(redisJar)
+        }) {
+            include("modules/redis.yml")
+        }
     }
 
     register<Copy>("copyShadowJar") {

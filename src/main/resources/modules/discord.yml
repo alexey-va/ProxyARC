@@ -1,0 +1,30 @@
+enabled: false
+token: "token"
+
+channels:
+  join-messages: "none"
+  player-list: "none"
+  auction: "none"
+  chat: "none"
+  general: "none"
+
+chat-format: "<blue>D <gray>%player_name% <dark_gray>» <white>%message%"
+telegram-format: "**%player_name%** » %message%"
+
+player-list:
+  max-players: 100
+  title: "Игроки на сервере (%amount%/%max%)"
+
+auction:
+  title: "Предметы на аукционе"
+
+discord:
+  join:
+    color: "#00ff00"
+    message: "Игрок %player_name% присоединился к серверу!"
+  first-time:
+    color: "#0000ff"
+    message: "Игрок %player_name% впервые на сервере!"
+  leave:
+    color: "#ff0000"
+    message: "Игрок %player_name% покинул сервер!"

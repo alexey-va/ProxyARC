@@ -1,6 +1,6 @@
 package ru.arc.core.modules
 
-import ru.arc.config.ConfigManager
+import ru.arc.config.ProxyConfigs
 import ru.arc.core.PluginModule
 import ru.arc.core.ScheduledTask
 import ru.arc.core.repeating
@@ -18,14 +18,13 @@ object ListenersModule : PluginModule {
     override fun init() {
         val plugin = Velocity.plugin!!
         val server = Velocity.proxyServer!!
-        val folder = Velocity.dataFolder!!
         server.eventManager.register(
             plugin,
-            JoinListener(server, ConfigManager.of(folder, "join_config.yml")),
+            JoinListener(server, ProxyConfigs.module("join_config.yml")),
         )
         server.eventManager.register(
             plugin,
-            ChatListener(server, ConfigManager.of(folder, "config.yml")),
+            ChatListener(server, ProxyConfigs.main()),
         )
     }
 

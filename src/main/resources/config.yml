@@ -1,2 +1,11 @@
-test: 1
-abc: "asdasd"
+# ProxyARC main config (data folder root). Feature modules: modules/*.yml
+# Redis: modules/redis.yml (arc-core-redis)
+
+time-format: "%dд %dч %dм"
+
+discord:
+  min-play-time-sec: 600
+  chat-pattern: "**%player_name%** » %message%"
+
+telegram:
+  chat-pattern: "**%player_name%** » %message%"

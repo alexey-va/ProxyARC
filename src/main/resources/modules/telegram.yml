@@ -1,0 +1,15 @@
+enabled: false
+token: "none"
+chat-id: 0
+
+topics:
+  chat: 0
+  general: 0
+
+chat-format: "<blue>T <gray>%sender% <dark_gray>» <white>%message%"
+discord-format: "**%sender%** » %message%"
+
+messages:
+  join: "Игрок %player_name% присоединился к серверу"
+  first_time: "Игрок %player_name% впервые присоединился к серверу"
+  leave: "Игрок %player_name% покинул сервер"

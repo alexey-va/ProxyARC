@@ -1,6 +1,6 @@
 package ru.arc.core.modules
 
-import ru.arc.config.ConfigManager
+import ru.arc.config.ProxyConfigs
 import ru.arc.core.PluginModule
 import ru.arc.velocity.Velocity
 import ru.arc.xserver.JoinMessages
@@ -17,7 +17,7 @@ object PlayerListModule : PluginModule {
         val redis = Velocity.redisManager ?: return
         Velocity.playerListAnnouncer =
             PlayerListAnnouncer(
-                ConfigManager.of(Velocity.dataFolder!!, "config.yml"),
+                ProxyConfigs.main(),
                 redis,
                 "arc.proxy_player_list",
             )

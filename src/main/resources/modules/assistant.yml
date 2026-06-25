@@ -1,0 +1,15 @@
+# OpenRouter / compatible chat assistant. prompts/ — per-type system prompts.
+
+api-base-url: https://openrouter.ai/api/v1
+api-key: "none"
+
+proxy:
+  enabled: false
+  host: 127.0.0.1
+  port: 8888
+
+chat:
+  enabled: false
+  max-history: 20
+
+chat-prefix: "<gold>Бот <gray>» </gray><white>"

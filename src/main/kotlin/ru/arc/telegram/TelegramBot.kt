@@ -8,11 +8,10 @@ import ru.arc.velocity.Velocity
 import ru.arc.Utils.mm
 import ru.arc.Utils.plain
 import ru.arc.config.Config
-import ru.arc.config.ConfigManager
+import ru.arc.config.ProxyConfigs
 import ru.arc.discord.DiscordBot
 
 class TelegramBot : TelegramLongPollingBot(config.string("token", "none")) {
-
     override fun onUpdateReceived(update: Update) {
         log.info("onUpdateReceived {}", update)
         if (update.message.from.isBot) return
@@ -106,6 +105,6 @@ class TelegramBot : TelegramLongPollingBot(config.string("token", "none")) {
 
     companion object {
         private val log = LoggerFactory.getLogger(TelegramBot::class.java)
-        private val config: Config = ConfigManager.of(Velocity.dataFolder!!, "telegram.yml")
+        private val config: Config get() = ProxyConfigs.module("telegram.yml")
     }
 }

@@ -3,7 +3,7 @@ package ru.arc
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
-import ru.arc.config.ConfigManager
+import ru.arc.config.ProxyConfigs
 import ru.arc.util.TextUtils
 import ru.arc.velocity.Velocity
 import java.util.concurrent.TimeUnit
@@ -16,7 +16,7 @@ object Utils {
         val minutes = (millis % (60 * 60 * 1000)) / (60 * 1000)
 
         return String.format(
-            ConfigManager.of(Velocity.dataFolder!!, "config.yml")
+            ProxyConfigs.main()
                 .string("time-format", "%dд %dч %dм"),
             days,
             hours,

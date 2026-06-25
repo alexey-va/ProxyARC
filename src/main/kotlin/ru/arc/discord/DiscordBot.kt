@@ -16,7 +16,7 @@ import ru.arc.Utils.mm
 import ru.arc.Utils.plain
 import ru.arc.auction.AuctionItemDto
 import ru.arc.config.Config
-import ru.arc.config.ConfigManager
+import ru.arc.config.ProxyConfigs
 import java.awt.Color
 import java.time.OffsetDateTime
 import java.util.ArrayDeque
@@ -32,8 +32,8 @@ class DiscordBot {
 
     private val log = LoggerFactory.getLogger(DiscordBot::class.java)
 
-    private val config: Config = ConfigManager.of(Velocity.dataFolder!!, "discord.yml")
-    private val joinConfig: Config = ConfigManager.of(Velocity.dataFolder!!, "join_config.yml")
+    private val config: Config get() = ProxyConfigs.module("discord.yml")
+    private val joinConfig: Config get() = ProxyConfigs.module("join_config.yml")
     private var jda: JDA? = null
     private var joinChannel: TextChannel? = null
     private var playerListChannel: TextChannel? = null

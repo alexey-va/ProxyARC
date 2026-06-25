@@ -7,7 +7,7 @@ import net.dv8tion.jda.api.hooks.ListenerAdapter
 import ru.arc.velocity.Velocity
 import ru.arc.Utils.mm
 import ru.arc.config.Config
-import ru.arc.config.ConfigManager
+import ru.arc.config.ProxyConfigs
 
 class DiscordListener(
     private val chatChanel: TextChannel,
@@ -45,6 +45,6 @@ class DiscordListener(
 
     companion object {
         private val log = LoggerFactory.getLogger(DiscordListener::class.java)
-        private val config: Config = ConfigManager.of(Velocity.dataFolder!!, "discord.yml")
+        private val config: Config get() = ProxyConfigs.module("discord.yml")
     }
 }

@@ -1,0 +1,6 @@
+new_player_threshold_seconds: 60
+join_window_seconds: 60
+max_joins_per_window: 6
+max_concurrent_players: 30
+banned_substrings:
+  - NeoWare

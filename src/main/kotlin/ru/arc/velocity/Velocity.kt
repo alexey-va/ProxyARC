@@ -42,7 +42,6 @@ import ru.arc.hooks.LiteBansHook
 import ru.arc.hooks.LuckpermsHook
 import ru.arc.telegram.TelegramBot
 import ru.arc.telegram.TelegramModule
-import ru.arc.velocity.core.VelocityTaskScheduler
 import ru.arc.xserver.JoinMessages
 import ru.arc.xserver.NetworkRegistry
 import ru.arc.xserver.PlayerListAnnouncer
@@ -71,7 +70,7 @@ class Velocity @Inject constructor(
     @Subscribe
     fun onProxyInit(@Suppress("UNUSED_PARAMETER") event: ProxyInitializeEvent) {
         logger!!.info("Initializing ProxyARC")
-        Tasks.scheduler = VelocityTaskScheduler(proxyServer!!, this)
+        VelocityArcRuntime.installScheduling(proxyServer!!, this)
         VelocityArcRuntime.installModuleLifecycleReporting(
             consoleLog = { line -> logger!!.info(stripMiniMessage(line)) },
             logError = { msg, t -> logger!!.error(msg, t) },
