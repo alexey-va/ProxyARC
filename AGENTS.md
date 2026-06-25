@@ -18,7 +18,7 @@ cd ~/mcserver && ./scripts/mc proxyarc --fast
 
 ## Runtime configs
 
-`~/mcserver/velocity/plugins/ProxyARC/` — `config.yml`, `modules/*.yml`
+`~/mcserver/velocity/plugins/proxyarc/` — `modules/*.yml`, `prompts/chat.txt`
 
 See [`~/mcserver/velocity/AGENTS.md`](../../velocity/AGENTS.md).
 
