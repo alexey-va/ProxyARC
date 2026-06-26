@@ -18,4 +18,8 @@ object AntibotModule : PluginModule {
     override fun shutdown() {
         Velocity.antibot = null
     }
+
+    override fun reload() {
+        if (Velocity.antibot == null) init()
+    }
 }

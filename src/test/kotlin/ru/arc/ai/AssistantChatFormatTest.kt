@@ -8,23 +8,22 @@ import kotlin.io.path.createTempDirectory
 
 class AssistantChatFormatTest : FreeSpec({
     "AssistantChatFormat" - {
-        "should match CMI global shout with gold bot name" {
+        "should match CMI global shout format" {
             val dir = createTempDirectory()
             Files.writeString(
                 dir.resolve("assistant.yml"),
                 """
                 chat:
-                  display-name: "скорен"
+                  display-name: "Скорен"
                   shout-prefix: "&6Ⓖ &7"
-                  suffix: ""
-                  name-color: "&e"
-                  message-format: "%shout%%suffix%%name_color%%name% &8» &f%message%"
+                  message-format: "%shout%%suffix% &7%name% &8» &f%message%"
                 """.trimIndent(),
             )
             val config = Config(dir, "assistant.yml")
+            val redstone = AssistantChatFormat.DEFAULT_SUFFIX
 
             AssistantChatFormat.inGameMessage(config, "привет") shouldBe
-                "&6Ⓖ &7&eскорен &8» &fпривет"
+                "&6Ⓖ &7$redstone &7Скорен &8» &fпривет"
         }
 
         "should accept CMI placeholder names" {
@@ -34,15 +33,15 @@ class AssistantChatFormatTest : FreeSpec({
                 dir.resolve("assistant.yml"),
                 """
                 chat:
-                  display-name: "скорен"
+                  display-name: "Скорен"
                   shout-prefix: "&6Ⓖ &7"
-                  suffix: ""
                 """.trimIndent(),
             )
             val config = Config(dir, "assistant.yml")
+            val redstone = AssistantChatFormat.DEFAULT_SUFFIX
 
             AssistantChatFormat.applyPlaceholders(format, config, "test") shouldBe
-                "&6Ⓖ &7 &7скорен &8» &ftest"
+                "&6Ⓖ &7$redstone &7Скорен &8» &ftest"
         }
 
         "should keep only first block and clamp length" {
@@ -67,6 +66,13 @@ class AssistantChatFormatTest : FreeSpec({
             ) shouldBe "очень длинное"
         }
 
+        "should explain skip reason for пропускаю" {
+            val config = Config(createTempDirectory(), "assistant.yml")
+            val result = AssistantChatFormat.normalizeReplyDetail(config, "пропускаю")
+            result.hasText shouldBe false
+            result.skipReason shouldBe "model said пропускаю"
+        }
+
         "should format discord like regular player chat" {
             val dir = createTempDirectory()
             Files.writeString(
@@ -75,8 +81,8 @@ class AssistantChatFormatTest : FreeSpec({
             )
             val main = Config(dir, "config.yml")
 
-            AssistantChatFormat.discordMessage(main, "скорен", "привет") shouldBe
-                "**скорен** » привет"
+            AssistantChatFormat.discordMessage(main, "Скорен", "привет") shouldBe
+                "**Скорен** » привет"
         }
     }
 })

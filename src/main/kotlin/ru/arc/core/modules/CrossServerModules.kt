@@ -26,6 +26,8 @@ object PlayerListModule : PluginModule {
     override fun shutdown() {
         Velocity.playerListAnnouncer = null
     }
+
+    override fun reload() {}
 }
 
 object JoinMessagesModule : PluginModule {
@@ -51,4 +53,6 @@ object JoinMessagesModule : PluginModule {
         Velocity.joinMessagesRedisRepo?.close()
         Velocity.joinMessagesRedisRepo = null
     }
+
+    override fun reload() {}
 }

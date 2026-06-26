@@ -30,4 +30,6 @@ object HooksModule : PluginModule {
         Velocity.luckpermsHook = null
         Velocity.liteBansHook = null
     }
+
+    override fun reload() {}
 }

@@ -2,9 +2,7 @@ package ru.arc.velocity
 
 import com.velocitypowered.api.command.SimpleCommand
 import ru.arc.Utils
-import ru.arc.ai.Assistant
-import ru.arc.config.ConfigManager
-import ru.arc.core.ModuleRegistry
+import ru.arc.core.modules.ProxyArcReload
 import java.util.concurrent.CompletableFuture
 
 class ProxyARCCommand : SimpleCommand {
@@ -21,10 +19,10 @@ class ProxyARCCommand : SimpleCommand {
         } else {
             when {
                 args[0].equals("reload", ignoreCase = true) -> {
-                    Velocity.firstJoinData?.save()
-                    ModuleRegistry.reloadAll()
-                    Assistant.assistants.forEach { it.reload() }
-                    commandSource.sendMessage(Utils.mm("Перезагрузка успешна!"))
+                    ProxyArcReload.configsAndAssistant()
+                    commandSource.sendMessage(
+                        Utils.mm("<green>Конфиги и промпт скорена перезагружены. Discord/Redis — только restart velocity."),
+                    )
                 }
                 args[0].equals("cleardiscord", ignoreCase = true) -> {
                     if (args.size != 3) {

@@ -24,6 +24,7 @@ import ru.arc.config.ConfigManager
 import ru.arc.core.ModuleRegistry
 import ru.arc.core.Tasks
 import ru.arc.core.VelocityArcRuntime
+import ru.arc.core.modules.ProxyArcReload
 import ru.arc.core.modules.ConfigModule
 import ru.arc.core.modules.FirstJoinModule
 import ru.arc.core.modules.JoinMessagesModule
@@ -121,9 +122,7 @@ class Velocity @Inject constructor(
 
     @Subscribe
     fun onProxyReload(@Suppress("UNUSED_PARAMETER") event: ProxyReloadEvent) {
-        Velocity.firstJoinData?.save()
-        ModuleRegistry.reloadAll()
-        Assistant.assistants.forEach { it.reload() }
+        ProxyArcReload.configsAndAssistant()
     }
 
     @Subscribe

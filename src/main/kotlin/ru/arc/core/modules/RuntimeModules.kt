@@ -73,4 +73,9 @@ object ProxyTasksModule : PluginModule {
         redisPlayerListTask = null
         counter.set(0)
     }
+
+    override fun reload() {
+        shutdown()
+        init()
+    }
 }

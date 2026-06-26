@@ -18,6 +18,8 @@ object FirstJoinModule : PluginModule {
         Velocity.firstJoinData!!.load()
     }
 
+    override fun reload() {}
+
     override fun shutdown() {
         Velocity.firstJoinData?.save()
         Velocity.firstJoinData = null
@@ -28,7 +30,7 @@ object SaveModule : PluginModule {
     override val name = "Save"
     override val priority = 55
 
-    private val saveService = Executors.newScheduledThreadPool(1)
+    private var saveService = Executors.newScheduledThreadPool(1)
     private var saveTask: ScheduledFuture<*>? = null
 
     override fun init() {
@@ -40,6 +42,10 @@ object SaveModule : PluginModule {
                 60,
                 TimeUnit.SECONDS,
             )
+    }
+
+    override fun reload() {
+        init()
     }
 
     override fun shutdown() {

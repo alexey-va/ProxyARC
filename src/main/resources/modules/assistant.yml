@@ -1,16 +1,18 @@
 # Chat assistant. Prompt: prompts/chat.txt | LLM: modules/llm.yml
 #
-# In-game: CMI global ! chat (Locale_RU shoutPrefix + GeneralFormat).
-# Players: &6Ⓖ &7 + gray name. Bot: same G, gold name (&e).
+# In-game = CMI global ! chat:
+#   Locale_RU shoutPrefix: &6Ⓖ &7
+#   Chat.yml GeneralFormat: %luckperms_suffix% &7{name} &8» &f{msg}
+# Bot suffix default: ItemsAdder lzranks:supporter_icon (Kotlin default if omitted)
 
 chat:
   enabled: false
   max-history: 20
-  display-name: "скорен"
+  display-name: "Скорен"
   shout-prefix: "&6Ⓖ &7"
-  suffix: ""
-  name-color: "&e"
-  message-format: "%shout%%suffix%%name_color%%name% &8» &f%message%"
+  suffix: "&f"
+  message-format: "%shout%%suffix% &7%name% &8» &f%message%"
   max-message-length: 70
+  discord-inbound: true
   relay-discord: true
   relay-telegram: true

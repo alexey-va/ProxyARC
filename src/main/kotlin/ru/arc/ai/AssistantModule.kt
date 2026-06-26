@@ -21,4 +21,8 @@ object AssistantModule : PluginModule {
     override fun shutdown() {
         Velocity.chatAssistant = null
     }
+
+    override fun reload() {
+        Velocity.chatAssistant?.reload() ?: init()
+    }
 }

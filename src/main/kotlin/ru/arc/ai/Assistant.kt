@@ -17,7 +17,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Date
 import java.util.Deque
-import java.util.Optional
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentLinkedDeque
 
@@ -31,7 +30,7 @@ class Assistant(
     private var prompt: String = DEFAULT_SYSTEM
     private var leftConversationUntil: Long = 0
     private val history: Deque<ChatCompletionMessageParam> = ConcurrentLinkedDeque()
-    var currentRequest: CompletableFuture<Optional<String>>? = null
+    var currentRequest: CompletableFuture<AssistantEnqueueResult>? = null
 
     private val client: OpenAIClient?
         get() = llmClient.client
@@ -95,29 +94,66 @@ class Assistant(
         }
     }
 
-    fun tryEnqueue(): CompletableFuture<Optional<String>> {
+    fun tryEnqueue(
+        triggerPlayer: String? = null,
+        triggerMessage: String? = null,
+    ): CompletableFuture<AssistantEnqueueResult> {
         if (!config.bool("$type.enabled", true)) {
-            return CompletableFuture.completedFuture(Optional.empty())
+            return completedSkip(SkipReason.DISABLED, triggerPlayer, triggerMessage)
         }
         if (!llmClient.enabled || client == null) {
-            log.info("Assistant client is not initialized, check modules/llm.yml api-key")
-            return CompletableFuture.completedFuture(Optional.empty())
+            return completedSkip(SkipReason.LLM_NOT_READY, triggerPlayer, triggerMessage)
         }
         if (System.currentTimeMillis() < leftConversationUntil) {
-            log.info("Assistant of type {} is currently away until {}", type, Date(leftConversationUntil))
-            return CompletableFuture.completedFuture(Optional.empty())
+            return completedSkip(
+                SkipReason.AWAY,
+                triggerPlayer,
+                triggerMessage,
+                detail = "until ${Date(leftConversationUntil)}",
+            )
         }
         if (currentRequest != null && currentRequest!!.isDone) {
             currentRequest = null
         }
         if (currentRequest != null) {
-            return CompletableFuture.completedFuture(Optional.empty())
+            log.debug(
+                "Assistant [{}] skip for {} on \"{}\": reason={} ({})",
+                type,
+                triggerPlayer ?: "?",
+                triggerMessage,
+                SkipReason.BUSY.code,
+                SkipReason.BUSY.description,
+            )
+            return completedSkip(SkipReason.BUSY, triggerPlayer, triggerMessage)
         }
-        currentRequest = sendRequest(0)
+        currentRequest = sendRequest(0, triggerPlayer, triggerMessage)
         return currentRequest!!
     }
 
-    private fun sendRequest(depth: Int): CompletableFuture<Optional<String>> {
+    private fun completedSkip(
+        reason: SkipReason,
+        triggerPlayer: String?,
+        triggerMessage: String?,
+        raw: String? = null,
+        detail: String? = null,
+    ): CompletableFuture<AssistantEnqueueResult> {
+        val result =
+            AssistantEnqueueResult.skip(
+                reason = reason,
+                raw = raw,
+                triggerPlayer = triggerPlayer,
+                triggerMessage = triggerMessage,
+                detail = detail,
+            )
+        result.logSummary(log, type)
+        return CompletableFuture.completedFuture(result)
+    }
+
+    private fun sendRequest(
+        depth: Int,
+        triggerPlayer: String?,
+        triggerMessage: String?,
+    ): CompletableFuture<AssistantEnqueueResult> {
         val builder =
             ChatCompletionCreateParams.builder()
                 .addSystemMessage(systemMessage)
@@ -149,20 +185,68 @@ class Assistant(
                     )
                 }
                 if (toolCalls.isNotEmpty() && depth < 3) {
-                    sendRequest(depth + 1).join()
+                    sendRequest(depth + 1, triggerPlayer, triggerMessage).join()
                 } else {
-                    val messageContent = message.content().orElse("")
-                    if (messageContent.equals("пропускаю", ignoreCase = true) || messageContent.isBlank()) {
-                        Optional.empty()
-                    } else {
-                        Optional.of(messageContent)
-                    }
+                    evaluateModelContent(
+                        raw = message.content().orElse(""),
+                        hadToolCalls = toolCalls.isNotEmpty(),
+                        depth = depth,
+                        triggerPlayer = triggerPlayer,
+                        triggerMessage = triggerMessage,
+                    )
                 }
             } catch (e: Exception) {
-                log.error("Error during chat completion", e)
-                Optional.empty()
+                log.error(
+                    "Assistant [{}] LLM error for {} on \"{}\": {}",
+                    type,
+                    triggerPlayer ?: "?",
+                    triggerMessage,
+                    e.message,
+                    e,
+                )
+                AssistantEnqueueResult.skip(
+                    reason = SkipReason.LLM_ERROR,
+                    triggerPlayer = triggerPlayer,
+                    triggerMessage = triggerMessage,
+                    detail = e.message,
+                ).also { it.logSummary(log, type) }
             }
         }
+    }
+
+    private fun evaluateModelContent(
+        raw: String,
+        hadToolCalls: Boolean,
+        depth: Int,
+        triggerPlayer: String?,
+        triggerMessage: String?,
+    ): AssistantEnqueueResult {
+        val trimmed = raw.trim()
+        if (trimmed.equals("пропускаю", ignoreCase = true)) {
+            return AssistantEnqueueResult.skip(
+                reason = SkipReason.MODEL_SKIP,
+                raw = raw,
+                triggerPlayer = triggerPlayer,
+                triggerMessage = triggerMessage,
+            ).also { it.logSummary(log, type) }
+        }
+        if (trimmed.isEmpty()) {
+            val reason =
+                if (hadToolCalls) SkipReason.MODEL_TOOL_ONLY else SkipReason.MODEL_BLANK
+            return AssistantEnqueueResult.skip(
+                reason = reason,
+                raw = raw,
+                triggerPlayer = triggerPlayer,
+                triggerMessage = triggerMessage,
+                detail = if (hadToolCalls) "tool round depth=$depth" else null,
+            ).also { it.logSummary(log, type) }
+        }
+        return AssistantEnqueueResult.reply(
+            text = raw,
+            raw = raw,
+            triggerPlayer = triggerPlayer,
+            triggerMessage = triggerMessage,
+        ).also { it.logSummary(log, type) }
     }
 
     private val systemMessage: String get() = prompt

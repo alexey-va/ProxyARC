@@ -50,7 +50,30 @@ object LoggingModule : PluginModule {
 
     override fun shutdown() {}
 
-    override fun reload() {}
+    override fun reload() {
+        ConfigManager.reloadAll()
+        val folder = Velocity.dataFolder ?: return
+        try {
+            val configSource =
+                object : LoggingConfigSource {
+                    override fun config() = ProxyConfigs.module("logging.yml")
+
+                    override fun configVersion(): Int = ConfigManager.getVersion()
+                }
+            ArcLogging.install(
+                platform = Slf4jLoggingPlatform("ProxyARC"),
+                configSource = configSource,
+                loki =
+                    LokiInstallSpec(
+                        dataFolder = folder,
+                        target = LokiAttachTarget.ROOT,
+                        appenderName = "lokiAppender",
+                    ),
+            )
+        } catch (e: Exception) {
+            log.error("Error reloading Loki appender", e)
+        }
+    }
 }
 
 object ConfigModule : PluginModule {
@@ -120,4 +143,6 @@ object NetworkModule : PluginModule {
     override fun shutdown() {
         Velocity.networkRegistry = null
     }
+
+    override fun reload() {}
 }

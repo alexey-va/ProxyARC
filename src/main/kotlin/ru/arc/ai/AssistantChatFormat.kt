@@ -3,22 +3,19 @@ package ru.arc.ai
 import ru.arc.config.Config
 
 object AssistantChatFormat {
-    const val DEFAULT_DISPLAY_NAME = "скорен"
+    const val DEFAULT_DISPLAY_NAME = "Скорен"
 
-    /** CMI `Locale_RU.yml` → `Chat.shoutPrefix` (global `!` chat). */
+    /** CMI `Locale_RU.yml` → `Chat.shoutPrefix`. */
     const val CMI_SHOUT_PREFIX = "&6Ⓖ &7"
 
     /**
-     * CMI global shout: `{shout}` + `GeneralFormat`.
-     * Bot name color `&e` instead of player `&7` — без отдельной иконки.
+     * CMI global `!` shout: `{shout}` + `Chat.yml` `GeneralFormat`.
+     * `%luckperms_suffix%` → ItemsAdder rank icon in suffix slot.
      */
-    const val CMI_GLOBAL_FORMAT = "%shout%%suffix%%name_color%%name% &8» &f%message%"
+    const val CMI_GLOBAL_FORMAT = "%shout%%suffix% &7%name% &8» &f%message%"
 
-    /** Rank slot (`%luckperms_suffix%`) — пусто у обычных игроков. */
-    const val DEFAULT_SUFFIX = ""
-
-    /** Имя бота чуть выделяется (игроки: `&7`). */
-    const val DEFAULT_NAME_COLOR = "&e"
+    /** ItemsAdder `lzranks:supporter_icon` — bot marker in rank slot (was redstone_icon). */
+    const val DEFAULT_SUFFIX = "&f${'\uE29D'}"
 
     const val DEFAULT_MAX_MESSAGE_LENGTH = 70
 
@@ -30,9 +27,6 @@ object AssistantChatFormat {
 
     fun suffix(config: Config): String =
         config.string("chat.suffix", DEFAULT_SUFFIX)
-
-    fun nameColor(config: Config): String =
-        config.string("chat.name-color", DEFAULT_NAME_COLOR)
 
     fun maxMessageLength(config: Config): Int =
         config.integer("chat.max-message-length", DEFAULT_MAX_MESSAGE_LENGTH).coerceIn(20, 256)
@@ -56,7 +50,6 @@ object AssistantChatFormat {
             .replace("{shout}", shoutPrefix(config))
             .replace("%suffix%", suffix(config))
             .replace("%luckperms_suffix%", suffix(config))
-            .replace("%name_color%", nameColor(config))
             .replace("%name%", name)
             .replace("{displayName}", name)
             .replace("%message%", message)
@@ -67,13 +60,27 @@ object AssistantChatFormat {
     fun normalizeReply(
         config: Config,
         rawReply: String,
-    ): String? {
+    ): String? = normalizeReplyDetail(config, rawReply).text
+
+    fun normalizeReplyDetail(
+        config: Config,
+        rawReply: String,
+    ): NormalizedChatReply {
         val single = rawReply
             .substringBefore("\n\n")
             .replace('\n', ' ')
             .trim()
-        if (single.isEmpty() || single.equals("пропускаю", ignoreCase = true)) return null
-        return clampForChat(single, maxMessageLength(config))
+        if (single.isEmpty()) {
+            return NormalizedChatReply(skipReason = "empty after trim")
+        }
+        if (single.equals("пропускаю", ignoreCase = true)) {
+            return NormalizedChatReply(skipReason = "model said пропускаю")
+        }
+        val clamped = clampForChat(single, maxMessageLength(config))
+        if (clamped.isEmpty()) {
+            return NormalizedChatReply(skipReason = "empty after length clamp")
+        }
+        return NormalizedChatReply(text = clamped)
     }
 
     internal fun clampForChat(text: String, maxLen: Int): String {

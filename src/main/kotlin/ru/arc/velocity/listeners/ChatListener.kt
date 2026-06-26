@@ -4,11 +4,10 @@ import com.velocitypowered.api.event.Subscribe
 import com.velocitypowered.api.event.player.PlayerChatEvent
 import com.velocitypowered.api.proxy.ProxyServer
 import org.slf4j.LoggerFactory
-import ru.arc.Utils
-import ru.arc.ai.AssistantChatFormat
+import ru.arc.ai.AssistantChatBridge
+import ru.arc.ai.AssistantChatBridge.InboundSource
 import ru.arc.config.Config
 import ru.arc.config.ProxyConfigs
-import ru.arc.core.delayed
 import ru.arc.velocity.Velocity
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
@@ -19,7 +18,6 @@ class ChatListener(
     private val jippityConfig: Config,
 ) {
     private val mainConfig: Config get() = ProxyConfigs.main()
-    private val assistantConfig: Config get() = ProxyConfigs.module("assistant.yml")
 
     private val warnings = ConcurrentHashMap<UUID, ModerationStatus>()
 
@@ -65,46 +63,13 @@ class ChatListener(
         if (!event.message.startsWith("!")) return
         val message = event.message.substring(1)
         val playerName = event.player.username
-        val assistant = Velocity.chatAssistant ?: return
 
-        assistant.addChatMessage(message, playerName)
-        assistant.tryEnqueue().thenAccept { response ->
-            try {
-                log.info("Chat assistant response: {}", response)
-                if (response.isEmpty) {
-                    log.error("Empty response from chat assistant")
-                    return@thenAccept
-                }
-                deliverAssistantReply(response.get())
-            } catch (e: Exception) {
-                log.error("Error while processing chat assistant response", e)
-            }
-        }
-    }
-
-    private fun deliverAssistantReply(rawReply: String) {
-        val botName = AssistantChatFormat.displayName(assistantConfig)
-        val trimmed = AssistantChatFormat.normalizeReply(assistantConfig, rawReply) ?: return
-
-        val relayDiscord = AssistantChatFormat.relayDiscord(assistantConfig)
-        val relayTelegram = AssistantChatFormat.relayTelegram(assistantConfig)
-        val inGameText = AssistantChatFormat.inGameMessage(assistantConfig, trimmed)
-
-        delayed(0L) {
-            val component = Utils.legacy(inGameText)
-            proxyServer.allPlayers.forEach { it.sendMessage(component) }
-        }
-
-        if (relayDiscord) {
-            Velocity.discordBot?.sendChatMessage(
-                AssistantChatFormat.discordMessage(mainConfig, botName, trimmed),
-            )
-        }
-        if (relayTelegram) {
-            Velocity.telegramBot?.sendChatMessage(
-                AssistantChatFormat.telegramMessage(mainConfig, botName, trimmed),
-            )
-        }
+        AssistantChatBridge.processInbound(
+            proxyServer = proxyServer,
+            playerName = playerName,
+            message = message,
+            source = InboundSource.GAME,
+        )
     }
 
     companion object {
