@@ -8,6 +8,20 @@
 chat:
   enabled: false
   max-history: 20
+  compact-threshold: 18
+  compact-keep-recent: 10
+  observe-all-chat: true
+  observe-max-lines: 40
+  observe-format: "%player% » %message%"
+  observe-context-header: "контекст чата (не все сообщения требуют ответа):"
+  memory:
+    enabled: true
+    storage-key: arc.ai.assistant.facts
+    min-confidence: 0.5
+    max-injected: 20
+  tools:
+    - rememberfact
+    - forgetfact
   display-name: "Скорен"
   shout-prefix: "&6Ⓖ &7"
   suffix: "&f"

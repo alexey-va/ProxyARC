@@ -8,6 +8,8 @@ import com.openai.models.chat.completions.ChatCompletionToolMessageParam
 import com.openai.models.chat.completions.ChatCompletionUserMessageParam
 import org.slf4j.LoggerFactory
 import ru.arc.ai.Defaults.DEFAULT_SYSTEM
+import ru.arc.ai.memory.AssistantHistoryCompactor
+import ru.arc.ai.memory.AssistantMemoryStore
 import ru.arc.ai.llm.OpenRouterLlmClient
 import ru.arc.ai.tools.RemoteToolSupport
 import ru.arc.ai.tools.Tool
@@ -24,13 +26,18 @@ class Assistant(
     private val config: Config,
     private val type: String,
     private val llmClient: OpenRouterLlmClient,
+    val memoryStore: AssistantMemoryStore = AssistantMemoryStore(null),
 ) {
     private val log = LoggerFactory.getLogger(Assistant::class.java)
 
     private var prompt: String = DEFAULT_SYSTEM
     private var leftConversationUntil: Long = 0
     private val history: Deque<ChatCompletionMessageParam> = ConcurrentLinkedDeque()
+    private val historyLabels: Deque<String> = ConcurrentLinkedDeque()
+    private val chatObservations: Deque<String> = ConcurrentLinkedDeque()
     var currentRequest: CompletableFuture<AssistantEnqueueResult>? = null
+    var lastTriggerPlayer: String? = null
+        private set
 
     private val client: OpenAIClient?
         get() = llmClient.client
@@ -43,8 +50,17 @@ class Assistant(
     fun reload() {
         loadPrompt()
         history.clear()
+        historyLabels.clear()
+        chatObservations.clear()
         currentRequest = null
         leftConversationUntil = 0
+    }
+
+    fun observeChat(formattedLine: String) {
+        if (formattedLine.isBlank()) return
+        chatObservations.addLast(formattedLine.trim())
+        val maxLines = config.integer("$type.observe-max-lines", 40)
+        AssistantHistoryCompactor.compactObservations(chatObservations, maxLines)
     }
 
     private fun loadPrompt() {
@@ -80,6 +96,7 @@ class Assistant(
     }
 
     fun addChatMessage(message: String, player: String) {
+        val label = "$player: $message"
         history.addLast(
             ChatCompletionMessageParam.ofUser(
                 ChatCompletionUserMessageParam.builder()
@@ -88,10 +105,19 @@ class Assistant(
                     .build(),
             ),
         )
+        historyLabels.addLast(label)
+        trimAndCompactHistory()
+    }
+
+    private fun trimAndCompactHistory() {
         val maxHistory = config.integer("$type.max-history", 20)
         while (history.size > maxHistory) {
             history.pollFirst()
+            historyLabels.pollFirst()
         }
+        val threshold = config.integer("$type.compact-threshold", maxHistory)
+        val keepRecent = config.integer("$type.compact-keep-recent", maxHistory / 2)
+        AssistantHistoryCompactor.compactHistory(history, historyLabels, threshold, keepRecent)
     }
 
     fun tryEnqueue(
@@ -126,6 +152,7 @@ class Assistant(
             )
             return completedSkip(SkipReason.BUSY, triggerPlayer, triggerMessage)
         }
+        lastTriggerPlayer = triggerPlayer
         currentRequest = sendRequest(0, triggerPlayer, triggerMessage)
         return currentRequest!!
     }
@@ -159,6 +186,7 @@ class Assistant(
                 .addSystemMessage(systemMessage)
                 .temperature(temperature)
                 .model(model)
+        chatContextMessage()?.let { builder.addMessage(it) }
         for (message in history) {
             builder.addMessage(message)
         }
@@ -172,6 +200,7 @@ class Assistant(
                 val response = client!!.chat().completions().create(params)
                 val message = response.choices().first().message()
                 history.addLast(ChatCompletionMessageParam.ofAssistant(message.toParam()))
+                historyLabels.addLast("бот: ${message.content().orElse("")}")
                 val toolCalls = message.toolCalls().orElse(emptyList())
                 toolCalls.forEach { toolCall ->
                     val result = executeTool(toolCall)
@@ -183,6 +212,7 @@ class Assistant(
                                 .build(),
                         ),
                     )
+                    historyLabels.addLast("tool:${toolCall.asFunction().function().name()}")
                 }
                 if (toolCalls.isNotEmpty() && depth < 3) {
                     sendRequest(depth + 1, triggerPlayer, triggerMessage).join()
@@ -249,7 +279,34 @@ class Assistant(
         ).also { it.logSummary(log, type) }
     }
 
-    private val systemMessage: String get() = prompt
+    private val systemMessage: String
+        get() {
+            val parts = mutableListOf(prompt)
+            if (config.bool("$type.memory.enabled", true)) {
+                val minConf = config.real("$type.memory.min-confidence", 0.5)
+                val maxFacts = config.integer("$type.memory.max-injected", 20)
+                memoryStore.formatForPrompt(minConf, maxFacts)?.let { block ->
+                    parts.add("\nзапомненные факты (rememberfact/forgetfact):\n$block")
+                }
+            }
+            return parts.joinToString("\n")
+        }
+
+    private fun chatContextMessage(): ChatCompletionMessageParam? {
+        if (!config.bool("$type.observe-all-chat", true)) return null
+        if (chatObservations.isEmpty()) return null
+        val header = config.string(
+            "$type.observe-context-header",
+            "контекст чата (не все сообщения требуют ответа):",
+        )
+        val body = chatObservations.joinToString("\n") { "- $it" }
+        return ChatCompletionMessageParam.ofUser(
+            ChatCompletionUserMessageParam.builder()
+                .content("$header\n$body")
+                .name("chat-log")
+                .build(),
+        )
+    }
 
     private val model: String get() = config.string("$type.model", "x-ai/grok-4-fast:free")
 

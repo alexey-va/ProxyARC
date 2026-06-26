@@ -28,8 +28,25 @@ class ChatListener(
 
     @Subscribe(async = true)
     fun onChatMessage(event: PlayerChatEvent) {
+        observeChatForAssistant(event)
         aiProcess(event)
         chatProcess(event)
+    }
+
+    private fun observeChatForAssistant(event: PlayerChatEvent) {
+        if (!event.result.isAllowed) return
+        val assistantConfig = ProxyConfigs.module("assistant.yml")
+        if (!assistantConfig.bool("chat.enabled", true)) return
+        if (!assistantConfig.bool("chat.observe-all-chat", true)) return
+        val assistant = ru.arc.velocity.Velocity.chatAssistant ?: return
+
+        val raw = event.message
+        val displayMessage = if (raw.startsWith("!")) raw.substring(1) else raw
+        val formatted =
+            assistantConfig.string("chat.observe-format", "%player% » %message%")
+                .replace("%player%", event.player.username)
+                .replace("%message%", displayMessage)
+        assistant.observeChat(formatted)
     }
 
     private fun chatProcess(event: PlayerChatEvent) {

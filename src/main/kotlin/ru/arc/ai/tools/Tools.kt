@@ -6,6 +6,8 @@ object Tools {
     private val tools: MutableMap<String, Class<out Tool>> = ConcurrentHashMap()
 
     init {
+        addTool(DefaultTools.RememberFact::class.java)
+        addTool(DefaultTools.ForgetFact::class.java)
         addTool(DefaultTools.LeaveForTime::class.java)
         addTool(DefaultTools.GetBalTop::class.java)
         addTool(DefaultTools.GetPlayerInfo::class.java)
