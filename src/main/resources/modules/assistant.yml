@@ -15,6 +15,7 @@ routing:
   max-route-history: 5
   timeout-sec: 15
   log-level-skip-debug: true
+  log-route-info: true
   context:
     recent-open-tickets: 3
   enabled-intents:

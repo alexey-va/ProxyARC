@@ -101,6 +101,7 @@ private fun defaultConfig(): RouterConfig =
         observeFormat = "[%time%] %player% » %message%",
         timeoutSec = 15,
         logSkipAtDebug = true,
+        logRouteInfo = true,
         enabledIntents = setOf(RouteIntent.CHAT, RouteIntent.BUG),
         recentOpenTickets = 3,
     )

@@ -13,17 +13,20 @@ class AssistantRouter(
 
     fun classify(context: RouterContext): CompletableFuture<RouteDecision> {
         val userContent = context.toUserContent()
-        return classifyWithModel(userContent, config.model).thenCompose { first ->
-            val resolved = applyIntentPolicy(first)
-            if (resolved.parseOk) {
-                CompletableFuture.completedFuture(resolved)
+        val player = context.message.player
+        return classifyWithModel(context, userContent, config.model).thenCompose { first ->
+            if (first.parseOk) {
+                CompletableFuture.completedFuture(applyIntentPolicy(first))
             } else {
-                log.debug(
-                    "Router parse failed on {}, retrying with {}",
-                    config.model,
+                log.warn(
+                    "Router parse failed player={} model={} reason={} — retry {}",
+                    player,
+                    first.model ?: config.model,
+                    first.reason,
                     config.fallbackModel,
                 )
-                classifyWithModel(userContent, config.fallbackModel).thenApply(::applyIntentPolicy)
+                classifyWithModel(context, userContent, config.fallbackModel)
+                    .thenApply(::applyIntentPolicy)
             }
         }
     }
@@ -37,6 +40,7 @@ class AssistantRouter(
     }
 
     private fun classifyWithModel(
+        context: RouterContext,
         userContent: String,
         model: String,
     ): CompletableFuture<RouteDecision> =
@@ -44,17 +48,21 @@ class AssistantRouter(
             .complete(prompt.systemPrompt, userContent, model)
             .handle { raw, error ->
                 if (error != null) {
-                    log.warn("Router LLM error (model={}): {}", model, error.message)
+                    RouteLog.logLlmError(log, context.message.player, model, error)
                     RouteDecision(
                         intent = RouteIntent.SKIP,
                         confidence = 0.0,
-                        reason = "llm_error: ${error.message}",
+                        reason = "llm_error: ${RouteLog.describeError(error)}",
                         raw = "",
                         model = model,
                         parseOk = false,
                     )
                 } else {
-                    RouterJsonParser.parse(raw).copy(model = model)
+                    val parsed = RouterJsonParser.parse(raw).copy(model = model)
+                    if (config.logRouteInfo) {
+                        RouteLog.logClassified(log, context.message, parsed, model)
+                    }
+                    parsed
                 }
             }
 }

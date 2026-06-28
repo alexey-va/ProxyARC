@@ -14,6 +14,7 @@ data class RouterConfig(
     val observeFormat: String,
     val timeoutSec: Int,
     val logSkipAtDebug: Boolean,
+    val logRouteInfo: Boolean,
     val enabledIntents: Set<RouteIntent>,
     val recentOpenTickets: Int,
 ) {
@@ -70,6 +71,7 @@ data class RouterConfig(
                     ),
                 timeoutSec = config.integer("routing.timeout-sec", 15),
                 logSkipAtDebug = config.bool("routing.log-level-skip-debug", true),
+                logRouteInfo = config.bool("routing.log-route-info", true),
                 enabledIntents = enabledIntents,
                 recentOpenTickets =
                     config.integer("routing.context.recent-open-tickets", 3).coerceIn(0, 10),

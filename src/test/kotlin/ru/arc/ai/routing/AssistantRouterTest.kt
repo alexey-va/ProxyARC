@@ -29,6 +29,7 @@ class AssistantRouterTest : FreeSpec({
                     observeFormat = "[%time%] %player% » %message%",
                     timeoutSec = 15,
                     logSkipAtDebug = true,
+                    logRouteInfo = false,
                     enabledIntents = setOf(RouteIntent.CHAT, RouteIntent.BUG),
                     recentOpenTickets = 3,
                 )
@@ -91,6 +92,7 @@ class AssistantRouterTest : FreeSpec({
                     observeFormat = "[%time%] %player% » %message%",
                     timeoutSec = 15,
                     logSkipAtDebug = true,
+                    logRouteInfo = false,
                     enabledIntents = setOf(RouteIntent.CHAT),
                     recentOpenTickets = 3,
                 )
