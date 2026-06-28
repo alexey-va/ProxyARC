@@ -45,7 +45,7 @@ object ProxyTasksModule : PluginModule {
     override fun init() {
         val plugin = Velocity.plugin!!
         playerListTask =
-            repeating(0, 200) {
+            repeating(0, 1200) {
                 Velocity.discordBot?.updatePlayerList(plugin.onlinePlayerNames())
             }
 

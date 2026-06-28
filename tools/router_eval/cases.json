@@ -1,0 +1,124 @@
+[
+  {
+    "id": "skip_greeting",
+    "input": { "player": "metal", "message": "че как все" },
+    "expected": "skip"
+  },
+  {
+    "id": "skip_voice",
+    "input": { "player": "gros", "message": "го в войс" },
+    "expected": "skip"
+  },
+  {
+    "id": "skip_joke_bug",
+    "input": { "player": "cmi", "message": "вернулся как баг который не фиксят" },
+    "expected": "skip"
+  },
+  {
+    "id": "skip_to_other",
+    "input": {
+      "player": "grocer",
+      "message": "грос ты где",
+      "flags": "[к gros]"
+    },
+    "expected": "skip"
+  },
+  {
+    "id": "chat_direct",
+    "input": {
+      "player": "grocer",
+      "message": "скорен ты тут",
+      "flags": "[→скорен]"
+    },
+    "expected": "chat"
+  },
+  {
+    "id": "chat_bot",
+    "input": { "player": "ninja", "message": "бот а че" },
+    "expected": "chat"
+  },
+  {
+    "id": "chat_continue",
+    "input": {
+      "player": "grocer",
+      "message": "а почему",
+      "flags": "[продолжение с скореном]",
+      "seconds_since_bot": 12
+    },
+    "expected": "chat"
+  },
+  {
+    "id": "bug_rtp",
+    "input": {
+      "player": "grocer",
+      "message": "у меня rtp не работает после рестарта",
+      "server": "survival"
+    },
+    "expected": "bug_new"
+  },
+  {
+    "id": "bug_crash",
+    "input": {
+      "player": "metal",
+      "message": "крашит клиент когда захожу в энд",
+      "server": "survival"
+    },
+    "expected": "bug_new"
+  },
+  {
+    "id": "bug_dup",
+    "input": { "player": "gros", "message": "дюпается алмаз если так делать" },
+    "expected": "bug_new"
+  },
+  {
+    "id": "bug_no_keyword",
+    "input": {
+      "player": "newbie",
+      "message": "после рестарта /rtp просто молчит и ниче",
+      "server": "survival"
+    },
+    "expected": "bug_new"
+  },
+  {
+    "id": "chat_and_bug",
+    "input": {
+      "player": "grocer",
+      "message": "скорен rtp не работает",
+      "flags": "[→скорен]"
+    },
+    "expected": "chat"
+  },
+  {
+    "id": "followup_detail",
+    "input": {
+      "player": "grocer",
+      "message": "да я писал /rtp в чат и ниче",
+      "open_ticket_id": "RB-00007",
+      "server": "survival"
+    },
+    "expected": "bug_followup"
+  },
+  {
+    "id": "followup_close",
+    "input": {
+      "player": "grocer",
+      "message": "а нет стоп уже работает, закрывай",
+      "open_ticket_id": "RB-00007"
+    },
+    "expected": "bug_followup"
+  },
+  {
+    "id": "skip_short",
+    "input": { "player": "gros", "message": "ок" },
+    "expected": "skip"
+  },
+  {
+    "id": "bug_lag_server",
+    "input": {
+      "player": "metal",
+      "message": "на survival тпс упал до 5, не норм",
+      "server": "survival"
+    },
+    "expected": "bug_new"
+  }
+]

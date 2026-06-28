@@ -44,7 +44,7 @@ class AssistantChatFormatTest : FreeSpec({
                 "&6Ⓖ &7$redstone &7Скорен &8» &ftest"
         }
 
-        "should keep only first block and clamp length" {
+        "should split on blank line and clamp each part" {
             val dir = createTempDirectory()
             Files.writeString(
                 dir.resolve("assistant.yml"),
@@ -55,15 +55,23 @@ class AssistantChatFormatTest : FreeSpec({
             )
             val config = Config(dir, "assistant.yml")
 
-            AssistantChatFormat.normalizeReply(
+            AssistantChatFormat.splitReplyParts(
                 config,
-                "первая строка\n\nвторая строка которую надо выкинуть",
-            ) shouldBe "первая строка"
+                "первая строка\n\nвторая строка которую надо обрезать",
+            ) shouldBe listOf("первая строка", "вторая строка")
 
             AssistantChatFormat.normalizeReply(
                 config,
                 "очень длинное сообщение которое точно не влезет в чат",
             ) shouldBe "очень длинное"
+        }
+
+        "should cap at three parts" {
+            val config = Config(createTempDirectory(), "assistant.yml")
+            AssistantChatFormat.splitReplyParts(
+                config,
+                "один\n\nдва\n\nтри\n\nчетыре",
+            ) shouldBe listOf("один", "два", "три")
         }
 
         "should explain skip reason for пропускаю" {

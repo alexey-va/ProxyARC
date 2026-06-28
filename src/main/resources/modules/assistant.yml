@@ -1,27 +1,52 @@
-# Chat assistant. Prompt: prompts/chat.txt | LLM: modules/llm.yml
+# Skorin assistant scenarios. Prompts: prompts/chat.txt, bug-ticket.txt, router.txt
+# LLM API: modules/llm.yml
 #
-# In-game = CMI global ! chat:
+# In-game global chat = CMI ! prefix:
 #   Locale_RU shoutPrefix: &6Ⓖ &7
 #   Chat.yml GeneralFormat: %luckperms_suffix% &7{name} &8» &f{msg}
-# Bot suffix default: ItemsAdder lzranks:supporter_icon (Kotlin default if omitted)
+
+routing:
+  enabled: true
+  model: openai/gpt-oss-20b:free
+  fallback-model: deepseek/deepseek-v4-flash
+  temperature: 0
+  max-tokens: 120
+  max-context-lines: 15
+  max-route-history: 5
+  timeout-sec: 15
+  log-level-skip-debug: true
+  context:
+    recent-open-tickets: 3
+  enabled-intents:
+    - chat
+    - bug
 
 chat:
-  enabled: false
+  enabled: true
+  model: deepseek/deepseek-v4-flash
+  temperature: 1.0
   max-history: 20
   compact-threshold: 18
   compact-keep-recent: 10
   observe-all-chat: true
   observe-max-lines: 40
-  observe-format: "%player% » %message%"
-  observe-context-header: "контекст чата (не все сообщения требуют ответа):"
+  observe-format: "[%time% %delta%] %flags%%player% » %message%"
+  observe-context-header: "контекст чата (время, +Xs после скорена, флаги [→скорен] [ответ скорену] [к ник]):"
+  continuation-window-sec: 90
+  multi-message-delay-ms: 1000
+  context:
+    trigger-enabled: true
+    trigger-header: "текущее обращение:"
   memory:
     enabled: true
     storage-key: arc.ai.assistant.facts
     min-confidence: 0.5
     max-injected: 20
+    prompt-header: "запомненные факты (rememberfact/forgetfact):"
   tools:
     - rememberfact
     - forgetfact
+  private-message-format: "&7[%name%] &f%message%"
   display-name: "Скорен"
   shout-prefix: "&6Ⓖ &7"
   suffix: "&f"
@@ -30,3 +55,19 @@ chat:
   discord-inbound: true
   relay-discord: true
   relay-telegram: true
+
+bug:
+  enabled: true
+  tools:
+    - createissueticket
+    - updateissueticket
+    - sendprivatemessage
+    - listissuetickets
+  context:
+    sync-enabled: true
+    sync-interval-sec: 300
+    recent-tickets-enabled: true
+    recent-tickets: 10
+    open-ticket-enabled: true
+    recent-chat-enabled: true
+    recent-chat-lines: 8

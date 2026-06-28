@@ -4,6 +4,7 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
+import ru.arc.ai.tools.DefaultTools
 import ru.arc.redis.InMemoryRedis
 import java.util.concurrent.ConcurrentLinkedDeque
 
@@ -36,6 +37,24 @@ class AssistantMemoryStoreTest : FreeSpec({
         val reloaded = AssistantMemoryStore(redis, "test.facts")
         reloaded.list() shouldHaveSize 1
         reloaded.list().first().fact shouldBe "построил базу"
+    }
+
+    "findByIdPrefix resolves unique prefix" {
+        val store = AssistantMemoryStore(null)
+        val saved = store.remember("a", "one", 0.5)
+        store.findByIdPrefix(saved.id.take(8))?.fact shouldBe "one"
+        store.findByIdPrefix(saved.id)?.fact shouldBe "one"
+        store.findByIdPrefix("missing") shouldBe null
+    }
+})
+
+class RememberFactSubjectTest : FreeSpec({
+
+    "resolveSubject maps server keywords to general facts" {
+        DefaultTools.resolveSubject("server", "grocermc") shouldBe null
+        DefaultTools.resolveSubject("общее", "grocermc") shouldBe null
+        DefaultTools.resolveSubject(null, "grocermc") shouldBe "grocermc"
+        DefaultTools.resolveSubject("Steve", "grocermc") shouldBe "Steve"
     }
 })
 

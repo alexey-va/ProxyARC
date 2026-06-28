@@ -3,49 +3,14 @@ package ru.arc.ai
 import com.velocitypowered.api.proxy.ProxyServer
 import org.slf4j.LoggerFactory
 import ru.arc.Utils
+import ru.arc.ai.routing.RoutingModule
 import ru.arc.config.ProxyConfigs
+import ru.arc.core.TickConstants
 import ru.arc.core.delayed
 import ru.arc.velocity.Velocity
 
 object AssistantChatBridge {
     private val log = LoggerFactory.getLogger(AssistantChatBridge::class.java)
-
-    fun processInbound(
-        proxyServer: ProxyServer,
-        playerName: String,
-        message: String,
-        source: InboundSource = InboundSource.GAME,
-    ) {
-        val assistantConfig = ProxyConfigs.module("assistant.yml")
-        if (source == InboundSource.DISCORD && !assistantConfig.bool("chat.discord-inbound", true)) {
-            log.debug("Discord inbound disabled, skip assistant for {}", playerName)
-            return
-        }
-
-        val assistant = Velocity.chatAssistant ?: return
-
-        assistant.addChatMessage(message, playerName)
-        assistant.tryEnqueue(triggerPlayer = playerName, triggerMessage = message).thenAccept { result ->
-            try {
-                if (!result.hasReply) return@thenAccept
-                deliverReply(
-                    proxyServer = proxyServer,
-                    rawReply = result.reply!!,
-                    triggerPlayer = playerName,
-                    triggerMessage = message,
-                    rawModelContent = result.rawModelContent,
-                )
-            } catch (e: Exception) {
-                log.error(
-                    "Error while processing assistant response for {} on \"{}\": {}",
-                    playerName,
-                    message,
-                    e.message,
-                    e,
-                )
-            }
-        }
-    }
 
     fun deliverReply(
         proxyServer: ProxyServer,
@@ -69,31 +34,35 @@ object AssistantChatBridge {
             )
             return
         }
-        val trimmed = normalized.text!!
 
         val relayDiscord = AssistantChatFormat.relayDiscord(assistantConfig)
         val relayTelegram = AssistantChatFormat.relayTelegram(assistantConfig)
-        val inGameText = AssistantChatFormat.inGameMessage(assistantConfig, trimmed)
+        val delayMs = AssistantChatFormat.multiMessageDelayMs(assistantConfig)
+        val assistant = Velocity.chatAssistant
 
-        delayed(0L) {
-            val component = Utils.legacy(inGameText)
-            proxyServer.allPlayers.forEach { it.sendMessage(component) }
-        }
+        normalized.parts.forEachIndexed { index, part ->
+            val delayTicks = TickConstants.millisToTicks(delayMs * index)
+            delayed(delayTicks) {
+                val inGameText = AssistantChatFormat.inGameMessage(assistantConfig, part)
+                val component = Utils.legacy(inGameText)
+                proxyServer.allPlayers.forEach { it.sendMessage(component) }
 
-        if (relayDiscord) {
-            Velocity.discordBot?.sendChatMessage(
-                AssistantChatFormat.discordMessage(mainConfig, botName, trimmed),
-            )
-        }
-        if (relayTelegram) {
-            Velocity.telegramBot?.sendChatMessage(
-                AssistantChatFormat.telegramMessage(mainConfig, botName, trimmed),
-            )
-        }
-    }
+                RoutingModule.recordBotReply(triggerPlayer)
+                assistant?.observeChat(
+                    RoutingModule.formatBotObserveLine(part, botName),
+                )
 
-    enum class InboundSource {
-        GAME,
-        DISCORD,
+                if (relayDiscord) {
+                    Velocity.discordBot?.sendChatMessage(
+                        AssistantChatFormat.discordMessage(mainConfig, botName, part),
+                    )
+                }
+                if (relayTelegram) {
+                    Velocity.telegramBot?.sendChatMessage(
+                        AssistantChatFormat.telegramMessage(mainConfig, botName, part),
+                    )
+                }
+            }
+        }
     }
 }

@@ -92,6 +92,19 @@ class AssistantMemoryStore(
             .take(limit)
     }
 
+    /** Resolve fact by full id or unique prefix (for admin GUI click commands). */
+    fun findByIdPrefix(prefix: String): AssistantFact? {
+        ensureLoaded()
+        val needle = prefix.trim()
+        if (needle.isEmpty()) return null
+        cache[needle]?.let { return it }
+        val matches = cache.values.filter { it.id.startsWith(needle, ignoreCase = true) }
+        return when (matches.size) {
+            1 -> matches.first()
+            else -> matches.singleOrNull { it.id.equals(needle, ignoreCase = true) }
+        }
+    }
+
     fun formatForPrompt(minConfidence: Double, maxFacts: Int): String? {
         val facts = list(minConfidence, maxFacts)
         if (facts.isEmpty()) return null

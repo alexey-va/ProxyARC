@@ -4,8 +4,7 @@ import com.velocitypowered.api.event.Subscribe
 import com.velocitypowered.api.event.player.PlayerChatEvent
 import com.velocitypowered.api.proxy.ProxyServer
 import org.slf4j.LoggerFactory
-import ru.arc.ai.AssistantChatBridge
-import ru.arc.ai.AssistantChatBridge.InboundSource
+import ru.arc.ai.routing.ingress.ChatIngress
 import ru.arc.config.Config
 import ru.arc.config.ProxyConfigs
 import ru.arc.velocity.Velocity
@@ -28,25 +27,8 @@ class ChatListener(
 
     @Subscribe(async = true)
     fun onChatMessage(event: PlayerChatEvent) {
-        observeChatForAssistant(event)
-        aiProcess(event)
+        ChatIngress.onPlayerChat(event)
         chatProcess(event)
-    }
-
-    private fun observeChatForAssistant(event: PlayerChatEvent) {
-        if (!event.result.isAllowed) return
-        val assistantConfig = ProxyConfigs.module("assistant.yml")
-        if (!assistantConfig.bool("chat.enabled", true)) return
-        if (!assistantConfig.bool("chat.observe-all-chat", true)) return
-        val assistant = ru.arc.velocity.Velocity.chatAssistant ?: return
-
-        val raw = event.message
-        val displayMessage = if (raw.startsWith("!")) raw.substring(1) else raw
-        val formatted =
-            assistantConfig.string("chat.observe-format", "%player% » %message%")
-                .replace("%player%", event.player.username)
-                .replace("%message%", displayMessage)
-        assistant.observeChat(formatted)
     }
 
     private fun chatProcess(event: PlayerChatEvent) {
@@ -73,20 +55,6 @@ class ChatListener(
             chatMessage = telegramPattern.replace("%player_name%", username).replace("%message%", message)
             Velocity.telegramBot?.sendChatMessage(chatMessage)
         }
-    }
-
-    private fun aiProcess(event: PlayerChatEvent) {
-        if (!event.result.isAllowed) return
-        if (!event.message.startsWith("!")) return
-        val message = event.message.substring(1)
-        val playerName = event.player.username
-
-        AssistantChatBridge.processInbound(
-            proxyServer = proxyServer,
-            playerName = playerName,
-            message = message,
-            source = InboundSource.GAME,
-        )
     }
 
     companion object {

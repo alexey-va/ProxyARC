@@ -4,8 +4,7 @@ import net.dv8tion.jda.api.entities.channel.concrete.TextChannel
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent
 import net.dv8tion.jda.api.hooks.ListenerAdapter
 import org.slf4j.LoggerFactory
-import ru.arc.ai.AssistantChatBridge
-import ru.arc.ai.AssistantChatBridge.InboundSource
+import ru.arc.ai.routing.ingress.ChatIngress
 import ru.arc.config.Config
 import ru.arc.config.ProxyConfigs
 import ru.arc.velocity.Velocity
@@ -29,7 +28,7 @@ class DiscordListener(
             if (messageText.isNotEmpty()) {
                 relayToGame(playerName, messageText)
                 relayToTelegram(playerName, messageText)
-                relayToAssistant(playerName, messageText)
+                relayToAssistant(event, playerName, messageText)
             }
         }
         if (event.message.hasChannel() && event.message.channelId == generalChannel.id) {
@@ -59,13 +58,23 @@ class DiscordListener(
         Velocity.telegramBot?.sendChatMessage(telegramMessage)
     }
 
-    private fun relayToAssistant(playerName: String, messageText: String) {
+    private fun relayToAssistant(
+        event: MessageReceivedEvent,
+        playerName: String,
+        messageText: String,
+    ) {
         val proxy = Velocity.proxyServer ?: return
-        AssistantChatBridge.processInbound(
+        val ref = event.message.referencedMessage
+        val botId = event.jda.selfUser.id
+        val replyToBot = ref?.author?.id == botId
+        val replyToPlayer =
+            ref?.author?.name?.takeIf { it.isNotEmpty() && ref.author.id != botId }
+        ChatIngress.onDiscordInbound(
             proxyServer = proxy,
             playerName = playerName,
-            message = messageText,
-            source = InboundSource.DISCORD,
+            messageText = messageText,
+            replyToBot = replyToBot,
+            replyToPlayer = replyToPlayer,
         )
     }
 

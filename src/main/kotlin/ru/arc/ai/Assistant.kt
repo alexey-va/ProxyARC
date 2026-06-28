@@ -31,6 +31,7 @@ class Assistant(
     private val log = LoggerFactory.getLogger(Assistant::class.java)
 
     private var prompt: String = DEFAULT_SYSTEM
+    private var bugPrompt: String = DEFAULT_SYSTEM
     private var leftConversationUntil: Long = 0
     private val history: Deque<ChatCompletionMessageParam> = ConcurrentLinkedDeque()
     private val historyLabels: Deque<String> = ConcurrentLinkedDeque()
@@ -38,22 +39,34 @@ class Assistant(
     var currentRequest: CompletableFuture<AssistantEnqueueResult>? = null
     var lastTriggerPlayer: String? = null
         private set
+    var lastTriggerMessage: String? = null
+        private set
+    var lastTriggerServer: String? = null
+        private set
 
     private val client: OpenAIClient?
         get() = llmClient.client
 
     init {
         loadPrompt()
+        loadBugPrompt()
         assistants.add(this)
     }
 
     fun reload() {
         loadPrompt()
+        loadBugPrompt()
         history.clear()
         historyLabels.clear()
         chatObservations.clear()
         currentRequest = null
         leftConversationUntil = 0
+    }
+
+    fun snapshotChatObservations(maxLines: Int = 10): String {
+        if (chatObservations.isEmpty()) return ""
+        val lines = chatObservations.toList().takeLast(maxLines.coerceAtLeast(1))
+        return lines.joinToString("\n")
     }
 
     fun observeChat(formattedLine: String) {
@@ -63,24 +76,69 @@ class Assistant(
         AssistantHistoryCompactor.compactObservations(chatObservations, maxLines)
     }
 
+    private fun systemPrompt(mode: AssistantRunMode): String =
+        when (mode) {
+            AssistantRunMode.CHAT -> prompt
+            AssistantRunMode.BUG -> bugPrompt
+        }
+
+    private val tools: Collection<Class<out Tool>>
+        get() = tools(AssistantRunMode.CHAT)
+
+    private fun tools(mode: AssistantRunMode): Collection<Class<out Tool>> {
+        val section = mode.configSection()
+        val defaults =
+            when (mode) {
+                AssistantRunMode.CHAT -> emptyList()
+                AssistantRunMode.BUG ->
+                    listOf(
+                        "createissueticket",
+                        "updateissueticket",
+                        "sendprivatemessage",
+                        "listissuetickets",
+                    )
+            }
+        val toolNames =
+            config.stringList("$section.tools", defaults)
+                .map { it.lowercase() }
+                .toSet()
+        return Tools.getAllTools()
+            .filter { toolNames.contains(it.simpleName.lowercase()) }
+            .toSet()
+    }
+
+    private fun isModeEnabled(mode: AssistantRunMode): Boolean =
+        config.bool("${mode.configSection()}.enabled", true)
+
+    private fun loadBugPrompt() {
+        bugPrompt = loadPromptFile("bug-ticket", DEFAULT_SYSTEM.trimIndent())
+    }
+
     private fun loadPrompt() {
+        prompt = loadPromptFile(type, DEFAULT_SYSTEM.trimIndent())
+    }
+
+    private fun loadPromptFile(
+        promptType: String,
+        fallback: String,
+    ): String {
         try {
             val promptFolder = config.dataFolder.toPath().resolve("prompts")
             if (!Files.exists(promptFolder)) {
                 Files.createDirectories(promptFolder)
             }
-            val promptPath = promptFolder.resolve("$type.txt")
+            val promptPath = promptFolder.resolve("$promptType.txt")
             if (!Files.exists(promptPath)) {
-                copyBundledPrompt(promptPath, type)
+                copyBundledPrompt(promptPath, promptType)
             }
             if (!Files.exists(promptPath)) {
-                Files.createFile(promptPath)
-                Files.writeString(promptPath, DEFAULT_SYSTEM.trimIndent())
+                return fallback
             }
-            prompt = Files.readString(promptPath)
+            val text = Files.readString(promptPath).trim()
+            return if (text.isEmpty()) fallback else text
         } catch (e: Exception) {
-            log.info("Error reading prompt file", e)
-            prompt = DEFAULT_SYSTEM.trimIndent()
+            log.info("Error reading prompt file {}", promptType, e)
+            return fallback
         }
     }
 
@@ -95,17 +153,19 @@ class Assistant(
         leftConversationUntil = System.currentTimeMillis() + minutes.toLong() * 60 * 1000
     }
 
-    fun addChatMessage(message: String, player: String) {
-        val label = "$player: $message"
+    fun addChatMessage(
+        content: String,
+        player: String,
+    ) {
         history.addLast(
             ChatCompletionMessageParam.ofUser(
                 ChatCompletionUserMessageParam.builder()
-                    .content(message)
+                    .content(content)
                     .name(player)
                     .build(),
             ),
         )
-        historyLabels.addLast(label)
+        historyLabels.addLast(content)
         trimAndCompactHistory()
     }
 
@@ -123,8 +183,10 @@ class Assistant(
     fun tryEnqueue(
         triggerPlayer: String? = null,
         triggerMessage: String? = null,
+        mode: AssistantRunMode = AssistantRunMode.CHAT,
+        triggerServer: String? = null,
     ): CompletableFuture<AssistantEnqueueResult> {
-        if (!config.bool("$type.enabled", true)) {
+        if (!isModeEnabled(mode)) {
             return completedSkip(SkipReason.DISABLED, triggerPlayer, triggerMessage)
         }
         if (!llmClient.enabled || client == null) {
@@ -153,7 +215,9 @@ class Assistant(
             return completedSkip(SkipReason.BUSY, triggerPlayer, triggerMessage)
         }
         lastTriggerPlayer = triggerPlayer
-        currentRequest = sendRequest(0, triggerPlayer, triggerMessage)
+        lastTriggerMessage = triggerMessage
+        lastTriggerServer = triggerServer?.trim()?.takeIf { it.isNotEmpty() }
+        currentRequest = sendRequest(0, triggerPlayer, triggerMessage, mode)
         return currentRequest!!
     }
 
@@ -180,17 +244,32 @@ class Assistant(
         depth: Int,
         triggerPlayer: String?,
         triggerMessage: String?,
+        mode: AssistantRunMode,
     ): CompletableFuture<AssistantEnqueueResult> {
+        val runModel = model(mode)
         val builder =
             ChatCompletionCreateParams.builder()
-                .addSystemMessage(systemMessage)
-                .temperature(temperature)
-                .model(model)
-        chatContextMessage()?.let { builder.addMessage(it) }
+                .addSystemMessage(AssistantPromptLayers.staticSystemPrompt(systemPrompt(mode)))
+                .temperature(temperature(mode))
+                .model(runModel)
+        if (mode == AssistantRunMode.CHAT) {
+            AssistantPromptLayers.memoryContextMessage(config, type, memoryStore)?.let { builder.addMessage(it) }
+            AssistantPromptLayers.chatContextMessage(config, type, chatObservations)?.let { builder.addMessage(it) }
+            AssistantPromptLayers.chatTriggerContextMessage(
+                config,
+                triggerPlayer,
+                triggerMessage,
+                lastTriggerServer,
+            )?.let { builder.addMessage(it) }
+        } else if (mode == AssistantRunMode.BUG) {
+            AssistantPromptLayers.bugRecentOpenTicketsMessage(config)?.let { builder.addMessage(it) }
+            AssistantPromptLayers.bugOpenTicketMessage(config, triggerPlayer)?.let { builder.addMessage(it) }
+            AssistantPromptLayers.bugRecentChatMessage(config, type, chatObservations)?.let { builder.addMessage(it) }
+        }
         for (message in history) {
             builder.addMessage(message)
         }
-        for (tool in tools) {
+        for (tool in tools(mode)) {
             builder.addTool(tool)
         }
         val params = builder.build()
@@ -198,6 +277,7 @@ class Assistant(
         return CompletableFuture.supplyAsync {
             try {
                 val response = client!!.chat().completions().create(params)
+                AssistantPromptLayers.logCompletionUsage(log, runModel, response)
                 val message = response.choices().first().message()
                 history.addLast(ChatCompletionMessageParam.ofAssistant(message.toParam()))
                 historyLabels.addLast("бот: ${message.content().orElse("")}")
@@ -215,7 +295,7 @@ class Assistant(
                     historyLabels.addLast("tool:${toolCall.asFunction().function().name()}")
                 }
                 if (toolCalls.isNotEmpty() && depth < 3) {
-                    sendRequest(depth + 1, triggerPlayer, triggerMessage).join()
+                    sendRequest(depth + 1, triggerPlayer, triggerMessage, mode).join()
                 } else {
                     evaluateModelContent(
                         raw = message.content().orElse(""),
@@ -223,6 +303,7 @@ class Assistant(
                         depth = depth,
                         triggerPlayer = triggerPlayer,
                         triggerMessage = triggerMessage,
+                        mode = mode,
                     )
                 }
             } catch (e: Exception) {
@@ -250,6 +331,7 @@ class Assistant(
         depth: Int,
         triggerPlayer: String?,
         triggerMessage: String?,
+        mode: AssistantRunMode,
     ): AssistantEnqueueResult {
         val trimmed = raw.trim()
         if (trimmed.equals("пропускаю", ignoreCase = true)) {
@@ -271,6 +353,21 @@ class Assistant(
                 detail = if (hadToolCalls) "tool round depth=$depth" else null,
             ).also { it.logSummary(log, type) }
         }
+        if (mode == AssistantRunMode.BUG) {
+            return AssistantEnqueueResult.skip(
+                reason = SkipReason.MODEL_SKIP,
+                raw = raw,
+                triggerPlayer = triggerPlayer,
+                triggerMessage = triggerMessage,
+                detail = "bug_mode_public_reply_blocked",
+            ).also {
+                log.info(
+                    "Bug agent blocked public reply for {}: {}",
+                    triggerPlayer ?: "?",
+                    trimmed.take(120),
+                )
+            }
+        }
         return AssistantEnqueueResult.reply(
             text = raw,
             raw = raw,
@@ -279,49 +376,17 @@ class Assistant(
         ).also { it.logSummary(log, type) }
     }
 
-    private val systemMessage: String
-        get() {
-            val parts = mutableListOf(prompt)
-            if (config.bool("$type.memory.enabled", true)) {
-                val minConf = config.real("$type.memory.min-confidence", 0.5)
-                val maxFacts = config.integer("$type.memory.max-injected", 20)
-                memoryStore.formatForPrompt(minConf, maxFacts)?.let { block ->
-                    parts.add("\nзапомненные факты (rememberfact/forgetfact):\n$block")
-                }
-            }
-            return parts.joinToString("\n")
-        }
-
-    private fun chatContextMessage(): ChatCompletionMessageParam? {
-        if (!config.bool("$type.observe-all-chat", true)) return null
-        if (chatObservations.isEmpty()) return null
-        val header = config.string(
-            "$type.observe-context-header",
-            "контекст чата (не все сообщения требуют ответа):",
-        )
-        val body = chatObservations.joinToString("\n") { "- $it" }
-        return ChatCompletionMessageParam.ofUser(
-            ChatCompletionUserMessageParam.builder()
-                .content("$header\n$body")
-                .name("chat-log")
-                .build(),
-        )
+    private fun model(mode: AssistantRunMode): String {
+        val section = mode.configSection()
+        val chatDefault = config.string("chat.model", "x-ai/grok-4-fast:free")
+        return config.string("$section.model", chatDefault)
     }
 
-    private val model: String get() = config.string("$type.model", "x-ai/grok-4-fast:free")
-
-    private val temperature: Double get() = config.real("$type.temperature", 0.7)
-
-    private val tools: Collection<Class<out Tool>>
-        get() {
-            val toolNames =
-                config.stringList("$type.tools", emptyList())
-                    .map { it.lowercase() }
-                    .toSet()
-            return Tools.getAllTools()
-                .filter { toolNames.contains(it.simpleName.lowercase()) }
-                .toSet()
-        }
+    private fun temperature(mode: AssistantRunMode): Double {
+        val section = mode.configSection()
+        val chatDefault = config.real("chat.temperature", 0.7)
+        return config.real("$section.temperature", chatDefault)
+    }
 
     private fun executeTool(toolCall: ChatCompletionMessageToolCall): Any {
         val toolClass = Tools.getTool(toolCall.asFunction().function().name())

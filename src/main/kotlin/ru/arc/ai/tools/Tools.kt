@@ -12,6 +12,10 @@ object Tools {
         addTool(DefaultTools.GetBalTop::class.java)
         addTool(DefaultTools.GetPlayerInfo::class.java)
         addTool(DefaultTools.GetInventory::class.java)
+        addTool(DefaultTools.CreateIssueTicket::class.java)
+        addTool(DefaultTools.SendPrivateMessage::class.java)
+        addTool(DefaultTools.UpdateIssueTicket::class.java)
+        addTool(DefaultTools.ListIssueTickets::class.java)
     }
 
     @JvmStatic

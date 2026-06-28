@@ -7,6 +7,12 @@ channels:
   auction: "none"
   chat: "none"
   general: "none"
+  # Forum channel for Skorin bug tickets (Пивопровод)
+  issue-tickets: "1520758206282858666"
+
+issue-tickets:
+  title-prefix: ""
+  color: "#ff6600"
 
 chat-format: "<blue>D <gray>%player_name% <dark_gray>» <white>%message%"
 telegram-format: "**%player_name%** » %message%"

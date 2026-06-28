@@ -34,6 +34,7 @@ class JoinListener(
             event.player.username,
             serverName,
         )
+        Velocity.discordBot?.refreshPlayerListFromProxy()
         val allow =
             Velocity.antibot?.processPlayerJoin(
                 event.player.username,
@@ -52,8 +53,9 @@ class JoinListener(
 
     @Subscribe(async = true)
     fun onPlayerLeave(event: DisconnectEvent) {
-        if (!event.player.hasPermission("arc.join-message.leave")) return
         if (Velocity.isShuttingDown.get()) return
+        Velocity.discordBot?.refreshPlayerListFromProxy()
+        if (!event.player.hasPermission("arc.join-message.leave")) return
         delayed(20) { leaveMessage(event.player) }
         Velocity.playerListAnnouncer?.removePlayer(event.player.uniqueId)
         Velocity.antibot?.processPlayerLeave(event.player.uniqueId)
@@ -64,6 +66,7 @@ class JoinListener(
         val server = event.server.serverInfo.name
         val username = event.player.username
         Velocity.playerListAnnouncer?.updatePlayer(event.player.uniqueId, username, server)
+        Velocity.discordBot?.refreshPlayerListFromProxy()
     }
 
     private fun sendMessageToAll(component: Component) {

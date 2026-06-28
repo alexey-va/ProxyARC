@@ -18,6 +18,10 @@ object AssistantChatFormat {
     const val DEFAULT_SUFFIX = "&f${'\uE29D'}"
 
     const val DEFAULT_MAX_MESSAGE_LENGTH = 70
+    const val DEFAULT_MULTI_MESSAGE_DELAY_MS = 1000L
+    const val DEFAULT_CONTINUATION_WINDOW_SEC = 90
+    const val DEFAULT_OBSERVE_FORMAT = "[%time% %delta%] %flags%%player% » %message%"
+    const val MAX_REPLY_PARTS = 3
 
     fun displayName(config: Config): String =
         config.string("chat.display-name", DEFAULT_DISPLAY_NAME)
@@ -31,12 +35,30 @@ object AssistantChatFormat {
     fun maxMessageLength(config: Config): Int =
         config.integer("chat.max-message-length", DEFAULT_MAX_MESSAGE_LENGTH).coerceIn(20, 256)
 
+    fun multiMessageDelayMs(config: Config): Long =
+        config.longValue("chat.multi-message-delay-ms", DEFAULT_MULTI_MESSAGE_DELAY_MS).coerceIn(200L, 5000L)
+
+    fun continuationWindowSec(config: Config): Int =
+        config.integer("chat.continuation-window-sec", DEFAULT_CONTINUATION_WINDOW_SEC).coerceIn(10, 600)
+
+    fun observeFormat(config: Config): String =
+        config.string("chat.observe-format", DEFAULT_OBSERVE_FORMAT)
+
     fun inGameMessage(
         config: Config,
         message: String,
     ): String {
         val format = config.string("chat.message-format", CMI_GLOBAL_FORMAT)
         return applyPlaceholders(format, config, message)
+    }
+
+    fun privateMessage(
+        config: Config,
+        message: String,
+    ): String {
+        val name = displayName(config)
+        val template = config.string("chat.private-message-format", "&7[$name] &f%message%")
+        return template.replace("%name%", name).replace("%message%", message)
     }
 
     internal fun applyPlaceholders(
@@ -66,21 +88,36 @@ object AssistantChatFormat {
         config: Config,
         rawReply: String,
     ): NormalizedChatReply {
-        val single = rawReply
-            .substringBefore("\n\n")
-            .replace('\n', ' ')
-            .trim()
-        if (single.isEmpty()) {
-            return NormalizedChatReply(skipReason = "empty after trim")
+        val parts = splitReplyParts(config, rawReply)
+        if (parts.isEmpty()) {
+            val trimmed = rawReply.trim()
+            return when {
+                trimmed.isEmpty() -> NormalizedChatReply(skipReason = "empty after trim")
+                trimmed.equals("пропускаю", ignoreCase = true) ->
+                    NormalizedChatReply(skipReason = "model said пропускаю")
+                else -> NormalizedChatReply(skipReason = "empty after length clamp")
+            }
         }
-        if (single.equals("пропускаю", ignoreCase = true)) {
-            return NormalizedChatReply(skipReason = "model said пропускаю")
+        return NormalizedChatReply(parts = parts)
+    }
+
+    /** Split on blank line; each block is one chat message (single line inside). */
+    fun splitReplyParts(
+        config: Config,
+        rawReply: String,
+    ): List<String> {
+        val trimmed = rawReply.trim()
+        if (trimmed.isEmpty() || trimmed.equals("пропускаю", ignoreCase = true)) {
+            return emptyList()
         }
-        val clamped = clampForChat(single, maxMessageLength(config))
-        if (clamped.isEmpty()) {
-            return NormalizedChatReply(skipReason = "empty after length clamp")
-        }
-        return NormalizedChatReply(text = clamped)
+        val maxLen = maxMessageLength(config)
+        return trimmed
+            .split("\n\n")
+            .map { block -> block.replace('\n', ' ').trim() }
+            .filter { it.isNotEmpty() && !it.equals("пропускаю", ignoreCase = true) }
+            .map { clampForChat(it, maxLen) }
+            .filter { it.isNotEmpty() }
+            .take(MAX_REPLY_PARTS)
     }
 
     internal fun clampForChat(text: String, maxLen: Int): String {
