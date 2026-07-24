@@ -17,6 +17,8 @@ data class RouterConfig(
     val logRouteInfo: Boolean,
     val enabledIntents: Set<RouteIntent>,
     val recentOpenTickets: Int,
+    val prefilterEnabled: Boolean = true,
+    val maxConsecutiveReplies: Int = 2,
 ) {
     fun isIntentEnabled(intent: RouteIntent): Boolean {
         if (intent == RouteIntent.SKIP) return true
@@ -30,7 +32,9 @@ data class RouterConfig(
                 RouteIntent.BUG,
             )
 
-        private const val DEFAULT_OBSERVE_FORMAT = "[%time% %delta%] %flags%%player% » %message%"
+        private const val DEFAULT_OBSERVE_FORMAT = "[%time% %delta%] %player% » %message%"
+
+        private const val DEFAULT_MODEL = "deepseek/deepseek-v4-flash@preset/deepseek"
 
         fun from(config: Config): RouterConfig {
             val configuredIntents =
@@ -49,11 +53,11 @@ data class RouterConfig(
                 }
             return RouterConfig(
                 enabled = config.bool("routing.enabled", true),
-                model = config.string("routing.model", "openai/gpt-oss-20b:free"),
+                model = config.string("routing.model", DEFAULT_MODEL),
                 fallbackModel =
                     config.string(
                         "routing.fallback-model",
-                        "deepseek/deepseek-v4-flash",
+                        DEFAULT_MODEL,
                     ),
                 temperature = config.real("routing.temperature", 0.0),
                 maxTokens = config.integer("routing.max-tokens", 120),
@@ -75,6 +79,9 @@ data class RouterConfig(
                 enabledIntents = enabledIntents,
                 recentOpenTickets =
                     config.integer("routing.context.recent-open-tickets", 3).coerceIn(0, 10),
+                prefilterEnabled = config.bool("routing.prefilter-enabled", true),
+                maxConsecutiveReplies =
+                    config.integer("chat.max-consecutive-replies", 2).coerceIn(1, 5),
             )
         }
     }

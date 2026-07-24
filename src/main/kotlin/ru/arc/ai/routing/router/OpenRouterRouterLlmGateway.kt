@@ -2,6 +2,7 @@ package ru.arc.ai.routing.router
 
 import com.openai.models.chat.completions.ChatCompletionCreateParams
 import org.slf4j.LoggerFactory
+import ru.arc.ai.llm.LlmRequestLogger
 import ru.arc.ai.llm.OpenRouterLlmClient
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
@@ -16,6 +17,7 @@ class OpenRouterRouterLlmGateway(
         systemPrompt: String,
         userContent: String,
         model: String,
+        player: String?,
     ): CompletableFuture<String> {
         val client = llmClient.client
         if (!llmClient.enabled) {
@@ -29,6 +31,14 @@ class OpenRouterRouterLlmGateway(
             return CompletableFuture.failedFuture(IllegalStateException(msg))
         }
 
+        LlmRequestLogger.logRouterRequestStart(
+            log = log,
+            model = model,
+            player = player,
+            message = extractMessagePreview(userContent),
+            userChars = systemPrompt.length + userContent.length,
+        )
+
         return CompletableFuture
             .supplyAsync {
                 try {
@@ -40,8 +50,26 @@ class OpenRouterRouterLlmGateway(
                             .temperature(config.temperature)
                             .maxTokens(config.maxTokens.toLong())
                             .build()
+                    val startedNs = System.nanoTime()
                     val response = client.chat().completions().create(params)
-                    response.choices().first().message().content().orElse("")
+                    val latencyMs = (System.nanoTime() - startedNs) / 1_000_000
+                    LlmRequestLogger.logRouterRequestComplete(
+                        log = log,
+                        model = model,
+                        player = player,
+                        latencyMs = latencyMs,
+                        response = response,
+                    )
+                    val choice = response.choices().first()
+                    val content = choice.message().content().orElse("")
+                    if (content.isBlank()) {
+                        log.warn(
+                            "Router gateway empty content model={} finish_reason={}",
+                            model,
+                            choice.finishReason()?.toString() ?: "null",
+                        )
+                    }
+                    content
                 } catch (e: Exception) {
                     log.warn(
                         "Router gateway HTTP error model={}: {}",
@@ -52,5 +80,14 @@ class OpenRouterRouterLlmGateway(
                     throw e
                 }
             }.orTimeout(config.timeoutSec.toLong(), TimeUnit.SECONDS)
+    }
+
+    private fun extractMessagePreview(userContent: String): String? {
+        return userContent
+            .lineSequence()
+            .firstOrNull { it.startsWith("message=") }
+            ?.substringAfter("message=")
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
     }
 }

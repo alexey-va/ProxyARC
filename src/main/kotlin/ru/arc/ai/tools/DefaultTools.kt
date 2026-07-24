@@ -4,9 +4,18 @@ import com.fasterxml.jackson.annotation.JsonClassDescription
 import com.fasterxml.jackson.annotation.JsonPropertyDescription
 import com.google.gson.Gson
 import ru.arc.ai.Assistant
+import ru.arc.ai.AssistantChatFormat
 import ru.arc.ai.IssueTicketContext
 import ru.arc.ai.PlayerMessaging
 import ru.arc.ai.routing.RoutingModule
+import ru.arc.ai.routing.survey.BugSurveySessionStore
+import ru.arc.ai.tickets.BugTicketDialogContext
+import ru.arc.ai.tickets.IssueTicketFormat
+import ru.arc.ai.tickets.IssueTicketStore
+import ru.arc.ai.tickets.IssueTicketTitles
+import ru.arc.ai.tickets.PlayerWorldNames
+import ru.arc.ai.tickets.TicketDialogStore
+import ru.arc.config.ProxyConfigs
 import ru.arc.velocity.Velocity
 import java.util.concurrent.CompletableFuture
 
@@ -145,13 +154,63 @@ object DefaultTools {
             val ctx = IssueTicketContext.build(a, rep, server)
             val bot = Velocity.discordBot
             if (bot == null) return mapOf("status" to "error", "message" to "discord bot unavailable")
-            return bot.createIssueTicket(ticketTitle, ticketDescription, ctx).join()
+            val normalizedTitle =
+                IssueTicketFormat.normalizeTitle(
+                    ticketTitle,
+                    ctx.displayServer,
+                )
+            val normalizedDescription =
+                IssueTicketFormat.buildDescription(ticketDescription, rep)
+            val result = bot.createIssueTicket(normalizedTitle, normalizedDescription, ctx).join()
+            bindSurveyTicket(rep, ticketTitle, result)
+            return result
         }
     }
 
-    @JsonClassDescription("Send a private in-game message to an online player")
+    private fun bindSurveyTicket(
+        reporter: String,
+        title: String,
+        result: Any,
+    ) {
+        if (result !is Map<*, *>) return
+        val status = result["status"]?.toString()
+        if (status != "created") return
+        val ticketId = result["ticketId"]?.toString()?.trim().orEmpty()
+        if (ticketId.isEmpty()) return
+        val boundTitle = result["title"]?.toString()?.trim()?.takeIf { it.isNotEmpty() } ?: title
+        BugSurveySessionStore.bindTicket(reporter, ticketId, boundTitle)
+    }
+
+    @JsonClassDescription("Send a global in-game message to all online players on the proxy")
+    data class SendGlobalMessage(
+        @JsonPropertyDescription("Short question or announcement for everyone online")
+        @JvmField var message: String? = null,
+    ) : Tool {
+        override fun execute(assistant: Assistant?): Any {
+            val text = message?.trim().orEmpty()
+            if (text.isEmpty()) return "message required"
+            val result = PlayerMessaging.sendGlobal(text)
+            if (result["status"] == "sent") {
+                assistant?.lastTriggerPlayer?.trim()?.takeIf { it.isNotEmpty() }?.let { primary ->
+                    BugSurveySessionStore.markAwaitingGlobalResponses(primary, text)
+                }
+                assistant?.recordTicketDialog("скорен (глобал): $text")
+                assistant?.observeChat(
+                    RoutingModule.formatBotObserveLine(
+                        text,
+                        AssistantChatFormat.displayName(ProxyConfigs.module("assistant.yml")),
+                    ),
+                )
+            }
+            return result
+        }
+    }
+
+    @JsonClassDescription(
+        "Send a private in-game message to a player. Offline players are logged (ok for ops simulate).",
+    )
     data class SendPrivateMessage(
-        @JsonPropertyDescription("Exact online player name")
+        @JsonPropertyDescription("Exact player name (online or offline)")
         @JvmField var playerName: String? = null,
         @JsonPropertyDescription("Message text, short and clear")
         @JvmField var message: String? = null,
@@ -162,8 +221,23 @@ object DefaultTools {
             if (name.isEmpty()) return "playerName required"
             if (text.isEmpty()) return "message required"
             val result = PlayerMessaging.sendPrivate(name, text)
-            if (result["status"] == "sent") {
-                RoutingModule.recordBotReply(name)
+            if (PlayerMessaging.isPrivateMessageAccepted(result)) {
+                if (result["status"] == "sent") {
+                    RoutingModule.recordBotReply(name)
+                }
+                val suffix =
+                    if (result["status"] == "offline") {
+                        " [offline, logged]"
+                    } else {
+                        ""
+                    }
+                assistant?.recordTicketDialog("скорен (личка → $name)$suffix: $text")
+                assistant?.observeChat(
+                    RoutingModule.formatBotObserveLine(
+                        "личка: $text",
+                        AssistantChatFormat.displayName(ProxyConfigs.module("assistant.yml")),
+                    ),
+                )
             }
             return result
         }
@@ -185,7 +259,80 @@ object DefaultTools {
             if (id.isEmpty()) return "ticketId required"
             val bot = Velocity.discordBot
             if (bot == null) return mapOf("status" to "error", "message" to "discord bot unavailable")
-            return bot.updateIssueTicket(id, appendDescription, title, status).join()
+            val statusNorm = status?.trim()?.lowercase()
+            val stored = IssueTicketStore.find(id)
+            val reporter =
+                assistant?.lastTriggerPlayer?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: stored?.reporter
+                    ?: ""
+            val enrichedAppend =
+                BugTicketDialogContext.enrichAppend(
+                    agentText = appendDescription,
+                    dialog = TicketDialogStore.snapshot(reporter, 12),
+                    triggerMessage = assistant?.lastTriggerMessage,
+                    reporter = reporter,
+                ).ifBlank { null }
+            val titleRaw = title?.trim()?.takeIf { it.isNotEmpty() }
+            val storedTitle = stored?.title.orEmpty()
+            val worldFromTitle =
+                IssueTicketFormat.extractWorldSuffix(
+                    storedTitle.removePrefix(IssueTicketTitles.CLOSED_PREFIX).trim(),
+                )
+            val worldLabel =
+                PlayerWorldNames.resolveDisplay(
+                    proxyOrHint = stored?.server ?: assistant?.lastTriggerServer,
+                    messageText = assistant?.lastTriggerMessage ?: storedTitle,
+                    llmServerHint = stored?.server ?: worldFromTitle,
+                ).takeIf { it != "неизвестно" }
+                    ?: worldFromTitle
+                    ?: PlayerWorldNames.displayProxyOrWorld(assistant?.lastTriggerServer)
+            val resolvedTitle =
+                when {
+                    statusNorm == "closed" ->
+                        IssueTicketFormat.normalizeTitle(
+                            titleRaw ?: stored?.title.orEmpty(),
+                            worldLabel,
+                            closed = true,
+                        )
+                    titleRaw != null ->
+                        IssueTicketFormat.normalizeTitle(
+                            titleRaw,
+                            worldLabel,
+                        )
+                    else -> null
+                }
+            val result = bot.updateIssueTicket(id, enrichedAppend, resolvedTitle, status).join()
+            val closedSuccessfully =
+                statusNorm == "closed" &&
+                    result is Map<*, *> &&
+                    result["status"] == "updated" &&
+                    result["ticketStatus"] == "closed"
+            if (closedSuccessfully) {
+                val reporter =
+                    assistant?.lastTriggerPlayer?.trim()?.takeIf { it.isNotEmpty() }
+                        ?: IssueTicketStore.find(id)?.reporter
+                if (reporter != null) {
+                    BugSurveySessionStore.close(reporter, "ticket_closed")
+                }
+            }
+            return result
+        }
+    }
+
+    @JsonClassDescription("Finish bug-survey session when ticket is complete or message was not a real bug")
+    data class CompleteBugSurvey(
+        @JsonPropertyDescription("Optional note for server logs")
+        @JvmField var note: String? = null,
+    ) : Tool {
+        override fun execute(assistant: Assistant?): Any {
+            val player = assistant?.lastTriggerPlayer?.trim().orEmpty()
+            if (player.isEmpty()) return mapOf("status" to "error", "message" to "no trigger player")
+            val closed = BugSurveySessionStore.close(player, note?.trim()?.takeIf { it.isNotEmpty() } ?: "complete_tool")
+            return if (closed) {
+                mapOf("status" to "closed")
+            } else {
+                mapOf("status" to "no_active_session")
+            }
         }
     }
 

@@ -1,4 +1,4 @@
-# Skorin Router — implementation plan
+# Скорен Router — implementation plan
 
 **Status:** Done (live dispatch). Shadow phase and legacy paths removed.
 

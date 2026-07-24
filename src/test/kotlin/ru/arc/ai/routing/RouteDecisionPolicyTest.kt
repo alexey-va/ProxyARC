@@ -6,11 +6,34 @@ import ru.arc.ai.routing.dispatch.RouteDecisionPolicy
 import ru.arc.ai.routing.ingress.InboundMessage
 import ru.arc.ai.routing.router.RouteDecision
 import ru.arc.ai.routing.router.RouteIntent
+import ru.arc.ai.routing.ingress.InboundMeta
 import ru.arc.ai.routing.router.RouterConfig
+import ru.arc.ai.routing.survey.BugSurveySessionStore
+import ru.arc.ai.tickets.IssueTicket
+import ru.arc.ai.tickets.IssueTicketStore
 
 class RouteDecisionPolicyTest : FreeSpec({
+    beforeEach {
+        BugSurveySessionStore.clear()
+        IssueTicketStore.bind(null)
+        IssueTicketStore.save(
+            IssueTicket(
+                ticketId = "RB-00099",
+                threadId = "t1",
+                starterMessageId = "m1",
+                reporter = "MoonLint",
+                title = "test",
+                createdAt = 1L,
+            ),
+        )
+    }
+    afterEach {
+        BugSurveySessionStore.clear()
+        IssueTicketStore.bind(null)
+    }
+
     "RouteDecisionPolicy" - {
-        "blocks chat without ! in game" {
+        "allows explicitly addressed chat without ! in game" {
             val config = defaultConfig()
             val message =
                 InboundMessage(
@@ -24,6 +47,13 @@ class RouteDecisionPolicyTest : FreeSpec({
             val decision =
                 RouteDecisionPolicy.apply(
                     message,
+                    InboundMeta(
+                        directedAtBot = true,
+                        replyToBot = false,
+                        continuationWithBot = false,
+                        secondsSinceBot = null,
+                        replyToPlayer = null,
+                    ),
                     RouteDecision(
                         intent = RouteIntent.CHAT,
                         confidence = 0.9,
@@ -32,8 +62,40 @@ class RouteDecisionPolicyTest : FreeSpec({
                     ),
                     config,
                 )
-            decision.intent shouldBe RouteIntent.SKIP
-            decision.reason shouldBe "chat_requires_!_prefix; обращение"
+            decision.intent shouldBe RouteIntent.CHAT
+            decision.reason shouldBe "обращение"
+        }
+
+        "allows a same-player continuation without another ! prefix" {
+            val config = defaultConfig()
+            val message =
+                InboundMessage(
+                    player = "grocer",
+                    rawText = "как попасть на выживание",
+                    displayText = "как попасть на выживание",
+                    timestampMs = 1L,
+                    server = "survival",
+                    source = InboundMessage.Source.GAME,
+                )
+            val decision =
+                RouteDecisionPolicy.apply(
+                    message,
+                    InboundMeta(
+                        directedAtBot = false,
+                        replyToBot = true,
+                        continuationWithBot = true,
+                        secondsSinceBot = 4,
+                        replyToPlayer = null,
+                    ),
+                    RouteDecision(
+                        intent = RouteIntent.CHAT,
+                        confidence = 0.9,
+                        reason = "continuation",
+                        raw = "{}",
+                    ),
+                    config,
+                )
+            decision.intent shouldBe RouteIntent.CHAT
         }
 
         "allows chat with ! in game" {
@@ -50,6 +112,13 @@ class RouteDecisionPolicyTest : FreeSpec({
             val decision =
                 RouteDecisionPolicy.apply(
                     message,
+                    InboundMeta(
+                        directedAtBot = false,
+                        replyToBot = false,
+                        continuationWithBot = false,
+                        secondsSinceBot = null,
+                        replyToPlayer = null,
+                    ),
                     RouteDecision(
                         intent = RouteIntent.CHAT,
                         confidence = 0.9,
@@ -75,6 +144,13 @@ class RouteDecisionPolicyTest : FreeSpec({
             val decision =
                 RouteDecisionPolicy.apply(
                     message,
+                    InboundMeta(
+                        directedAtBot = false,
+                        replyToBot = false,
+                        continuationWithBot = false,
+                        secondsSinceBot = null,
+                        replyToPlayer = null,
+                    ),
                     RouteDecision(
                         intent = RouteIntent.BUG,
                         confidence = 0.9,
@@ -84,6 +160,193 @@ class RouteDecisionPolicyTest : FreeSpec({
                     config,
                 )
             decision.intent shouldBe RouteIntent.BUG
+        }
+
+        "survey primary overrides router skip to bug" {
+            val config = defaultConfig()
+            BugSurveySessionStore.openOrTouch("GrocerMC")
+            val message =
+                InboundMessage(
+                    player = "GrocerMC",
+                    rawText = "в меню написано скорен лох",
+                    displayText = "в меню написано скорен лох",
+                    timestampMs = 1L,
+                    server = "survival",
+                    source = InboundMessage.Source.GAME,
+                )
+            val decision =
+                RouteDecisionPolicy.apply(
+                    message,
+                    InboundMeta(
+                        directedAtBot = false,
+                        replyToBot = true,
+                        continuationWithBot = false,
+                        secondsSinceBot = 5,
+                        replyToPlayer = null,
+                    ),
+                    RouteDecision(
+                        intent = RouteIntent.SKIP,
+                        confidence = 0.95,
+                        reason = "шутка",
+                        raw = "{}",
+                    ),
+                    config,
+                )
+            decision.intent shouldBe RouteIntent.BUG
+            decision.reason shouldBe "survey_primary_not_skip; шутка"
+        }
+
+        "survey primary does not override skip for offtopic smalltalk" {
+            val config = defaultConfig()
+            BugSurveySessionStore.openOrTouch("Dorfik")
+            val message =
+                InboundMessage(
+                    player = "Dorfik",
+                    rawText = "скорен а ты видел новый спавн?",
+                    displayText = "скорен а ты видел новый спавн?",
+                    timestampMs = 1L,
+                    server = "survival",
+                    source = InboundMessage.Source.GAME,
+                )
+            val decision =
+                RouteDecisionPolicy.apply(
+                    message,
+                    InboundMeta(
+                        directedAtBot = true,
+                        replyToBot = false,
+                        continuationWithBot = false,
+                        secondsSinceBot = null,
+                        replyToPlayer = null,
+                    ),
+                    RouteDecision(
+                        intent = RouteIntent.SKIP,
+                        confidence = 0.95,
+                        reason = "не баг",
+                        raw = "{}",
+                    ),
+                    config,
+                )
+            decision.intent shouldBe RouteIntent.SKIP
+        }
+
+        "survey primary keeps explicit prefixed off topic chat out of bug intake" {
+            val config = defaultConfig()
+            BugSurveySessionStore.openOrTouch("Dorfik")
+            val message =
+                InboundMessage(
+                    player = "Dorfik",
+                    rawText = "!скорен а ты видел новый спавн?",
+                    displayText = "скорен а ты видел новый спавн?",
+                    timestampMs = 1L,
+                    server = "survival",
+                    source = InboundMessage.Source.GAME,
+                )
+            val decision =
+                RouteDecisionPolicy.apply(
+                    message,
+                    InboundMeta(
+                        directedAtBot = true,
+                        replyToBot = true,
+                        continuationWithBot = true,
+                        secondsSinceBot = 5,
+                        replyToPlayer = null,
+                    ),
+                    RouteDecision(
+                        intent = RouteIntent.CHAT,
+                        confidence = 0.95,
+                        reason = "prefilter:survey_direct_chat",
+                        raw = "",
+                        model = "prefilter",
+                    ),
+                    config,
+                )
+            decision.intent shouldBe RouteIntent.CHAT
+        }
+
+        "open ticket close request overrides router chat to bug" {
+            val config = defaultConfig()
+            val message =
+                InboundMessage(
+                    player = "MoonLint",
+                    rawText = "!ладно починилось закрой тикет",
+                    displayText = "ладно починилось закрой тикет",
+                    timestampMs = 1L,
+                    server = "classic",
+                    source = InboundMessage.Source.GAME,
+                )
+            val decision =
+                RouteDecisionPolicy.apply(
+                    message,
+                    InboundMeta(
+                        directedAtBot = false,
+                        replyToBot = true,
+                        continuationWithBot = true,
+                        secondsSinceBot = 5,
+                        replyToPlayer = null,
+                    ),
+                    RouteDecision(
+                        intent = RouteIntent.CHAT,
+                        confidence = 0.95,
+                        reason = "continuation",
+                        raw = "{}",
+                    ),
+                    config,
+                )
+            decision.intent shouldBe RouteIntent.BUG
+            decision.reason shouldBe "open_ticket_resolved_or_close; continuation"
+        }
+
+        "vague есть бага overrides router skip to bug" {
+            val config = defaultConfig()
+            val message =
+                InboundMessage(
+                    player = "NovaShard",
+                    rawText = "есть бага",
+                    displayText = "есть бага",
+                    timestampMs = 1L,
+                    server = "classic",
+                    source = InboundMessage.Source.GAME,
+                )
+            val decision =
+                RouteDecisionPolicy.apply(
+                    message,
+                    InboundMeta(
+                        directedAtBot = false,
+                        replyToBot = false,
+                        continuationWithBot = false,
+                        secondsSinceBot = null,
+                        replyToPlayer = null,
+                    ),
+                    RouteDecision(
+                        intent = RouteIntent.SKIP,
+                        confidence = 0.8,
+                        reason = "vague",
+                        raw = "{}",
+                    ),
+                    config,
+                )
+            decision.intent shouldBe RouteIntent.BUG
+            decision.reason shouldBe "bug_like_not_skip; vague"
+        }
+
+        "general bug discussion does not override a local skip" {
+            val message =
+                InboundMessage(
+                    player = "Talker",
+                    rawText = "а баги щас какие есть кто знает",
+                    displayText = "а баги щас какие есть кто знает",
+                    timestampMs = 1L,
+                    server = "classic",
+                    source = InboundMessage.Source.GAME,
+                )
+            val decision =
+                RouteDecisionPolicy.apply(
+                    message,
+                    InboundMeta(false, false, false, null, null),
+                    RouteDecision(RouteIntent.SKIP, 0.9, "prefilter", "{}"),
+                    defaultConfig(),
+                )
+            decision.intent shouldBe RouteIntent.SKIP
         }
     }
 })

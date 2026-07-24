@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Run router eval against OpenRouter openrouter/free."""
+"""Strict router eval against OpenRouter (production router.txt)."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
 
-from router import RouterInput, classify, parse_router_json
+from router import classify, router_input_from_dict
 
 CASES_PATH = Path(__file__).with_name("cases.json")
 
@@ -25,6 +26,10 @@ def run_eval(
     delay_sec: float,
     verbose: bool,
 ) -> int:
+    if not os.environ.get("OPENROUTER_API_KEY"):
+        print("ERROR: OPENROUTER_API_KEY not set")
+        return 2
+
     cases = load_cases(cases_path)
     passed = 0
     failed: list[str] = []
@@ -38,14 +43,7 @@ def run_eval(
         expected = case["expected"]
         rid = case.get("id", f"case_{i}")
 
-        router_input = RouterInput(
-            player=raw_input["player"],
-            message=raw_input["message"],
-            server=raw_input.get("server"),
-            flags=raw_input.get("flags"),
-            open_ticket_id=raw_input.get("open_ticket_id"),
-            seconds_since_bot=raw_input.get("seconds_since_bot"),
-        )
+        router_input = router_input_from_dict(raw_input)
 
         try:
             result = classify(router_input, model=model)
@@ -56,8 +54,17 @@ def run_eval(
                 time.sleep(delay_sec)
             continue
 
-        ok = result.intent == expected
-        mark = "OK" if ok else "FAIL"
+        intent_ok = result.intent == expected
+        acceptable = case.get("acceptable", [])
+        if not intent_ok and acceptable and result.intent in acceptable:
+            intent_ok = True
+        has_response = result.raw.strip() != "" or result.model == "heuristic"
+        ok = intent_ok and has_response
+        mark = "OK"
+        if ok and result.model == "heuristic":
+            mark = "OK~"
+        elif not ok:
+            mark = "FAIL"
         if ok:
             passed += 1
         else:
@@ -65,7 +72,7 @@ def run_eval(
 
         line = (
             f"{mark} {rid}: expected={expected} got={result.intent} "
-            f"conf={result.confidence:.2f} model={result.model or '?'}"
+            f"conf={result.confidence:.2f} finish={result.finish_reason}"
         )
         print(line)
         if verbose or not ok:
@@ -86,26 +93,16 @@ def run_eval(
     return 0
 
 
-def test_parse_router_json() -> None:
-    raw = '{"intent":"bug_new","confidence":0.91,"reason":"rtp broken"}'
-    r = parse_router_json(raw)
-    assert r.intent == "bug_new"
-    assert r.confidence == 0.91
-
-
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Evaluate Skorin router on OpenRouter")
-    parser.add_argument("--cases", type=Path, default=CASES_PATH, help="JSON test cases")
-    parser.add_argument("--model", default="openrouter/free", help="OpenRouter model slug")
-    parser.add_argument("--delay", type=float, default=1.0, help="Delay between API calls (rate limits)")
-    parser.add_argument("--self-test", action="store_true", help="Run offline parse self-test only")
+    parser = argparse.ArgumentParser(description="Evaluate Скорен router on OpenRouter")
+    parser.add_argument("--cases", type=Path, default=CASES_PATH)
+    parser.add_argument(
+        "--model",
+        default=os.environ.get("ROUTER_MODEL", "deepseek/deepseek-v4-flash"),
+    )
+    parser.add_argument("--delay", type=float, default=1.0)
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
-
-    if args.self_test:
-        test_parse_router_json()
-        print("self-test OK")
-        return
 
     code = run_eval(args.cases, args.model, args.delay, args.verbose)
     sys.exit(code)

@@ -1,9 +1,10 @@
 package ru.arc.ai
 
-import ru.arc.ai.routing.RoutingModule
 import ru.arc.ai.memory.AssistantMemoryStore
+import ru.arc.ai.routing.RoutingModule
 import ru.arc.ai.tickets.ForumTicketSync
 import ru.arc.ai.tickets.IssueTicketStore
+import ru.arc.ai.tickets.TicketDialogStore
 import ru.arc.config.ProxyConfigs
 import ru.arc.core.PluginModule
 import ru.arc.velocity.Velocity
@@ -33,6 +34,13 @@ object AssistantModule : PluginModule {
                 llmClient,
                 AssistantMemoryStore(Velocity.redisManager, storageKey),
             )
+        // Keep tool calls, ticket details, and survey history out of public chat context.
+        Velocity.bugSurveyAssistant =
+            Assistant(
+                config,
+                "bug-survey",
+                llmClient,
+            )
         RoutingModule.init(proxy, config, llmClient)
     }
 
@@ -40,17 +48,41 @@ object AssistantModule : PluginModule {
         ForumTicketSync.stop()
         RoutingModule.shutdown()
         Velocity.chatAssistant = null
+        Velocity.bugSurveyAssistant = null
+        TicketDialogStore.clearAll()
     }
 
     override fun reload() {
         val llmClient = Velocity.llmClient
         val proxy = Velocity.proxyServer
         if (llmClient == null || proxy == null) {
-            Velocity.chatAssistant?.reload() ?: init()
+            val hadAssistant = Velocity.chatAssistant != null || Velocity.bugSurveyAssistant != null
+            Velocity.chatAssistant?.reload()
+            Velocity.bugSurveyAssistant?.reload()
+            if (!hadAssistant) init()
             return
         }
         val config = ProxyConfigs.module("assistant.yml")
         RoutingModule.init(proxy, config, llmClient)
-        Velocity.chatAssistant?.reload() ?: init()
+        val storageKey = config.string("chat.memory.storage-key", AssistantMemoryStore.DEFAULT_STORAGE_KEY)
+        Velocity.chatAssistant?.reload()
+            ?: run {
+                Velocity.chatAssistant =
+                    Assistant(
+                        config,
+                        "chat",
+                        llmClient,
+                        AssistantMemoryStore(Velocity.redisManager, storageKey),
+                    )
+            }
+        Velocity.bugSurveyAssistant?.reload()
+            ?: run {
+                Velocity.bugSurveyAssistant =
+                    Assistant(
+                        config,
+                        "bug-survey",
+                        llmClient,
+                    )
+            }
     }
 }

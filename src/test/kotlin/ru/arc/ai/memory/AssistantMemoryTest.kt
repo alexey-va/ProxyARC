@@ -64,7 +64,8 @@ class AssistantHistoryCompactorTest : FreeSpec({
         val lines = ConcurrentLinkedDeque<String>()
         repeat(5) { lines.addLast("line-$it") }
         AssistantHistoryCompactor.compactObservations(lines, maxLines = 3)
-        lines.size shouldBe 4
+        lines.size shouldBe 3
         lines.first() shouldContain "сводка чата"
+        lines.first() shouldContain "3 старых строк опущено"
     }
 })

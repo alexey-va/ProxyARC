@@ -7,7 +7,7 @@ channels:
   auction: "none"
   chat: "none"
   general: "none"
-  # Forum channel for Skorin bug tickets (Пивопровод)
+  # Forum channel for Скорен bug tickets (Пивопровод)
   issue-tickets: "1520758206282858666"
 
 issue-tickets:

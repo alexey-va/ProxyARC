@@ -22,6 +22,8 @@ import ru.arc.ai.tickets.ForumTicketSync
 import ru.arc.ai.tickets.IssueTicket
 import ru.arc.ai.tickets.IssueTicketEmbedParser
 import ru.arc.ai.tickets.IssueTicketStore
+import ru.arc.ai.tickets.IssueTicketFormat
+import ru.arc.ai.tickets.IssueTicketTitles
 import ru.arc.auction.AuctionItemDto
 import ru.arc.config.Config
 import ru.arc.config.ProxyConfigs
@@ -163,7 +165,12 @@ class DiscordBot {
             return CompletableFuture.completedFuture(0)
         }
         val threads = forum.threadChannels.sortedByDescending { it.timeCreated }
+        val presentThreadIds = threads.map { it.id }.toSet()
         if (threads.isEmpty()) {
+            val closed = IssueTicketStore.reconcileForumThreads(presentThreadIds)
+            if (closed > 0) {
+                log.info("Forum ticket sync closed {} stale tickets (forum empty)", closed)
+            }
             return CompletableFuture.completedFuture(0)
         }
         val futures =
@@ -194,6 +201,10 @@ class DiscordBot {
         return CompletableFuture.allOf(*futures.toTypedArray()).thenApply {
             futures.sumOf { it.getNow(0) }
         }.whenComplete { count, _ ->
+            val closed = IssueTicketStore.reconcileForumThreads(presentThreadIds)
+            if (closed > 0) {
+                log.info("Forum ticket sync closed {} stale tickets (thread deleted in Discord)", closed)
+            }
             if (count != null && count > 0) {
                 log.info("Forum ticket sync updated {} threads", count)
             }
@@ -482,10 +493,13 @@ class DiscordBot {
                 .setTimestamp(OffsetDateTime.now())
 
         context.triggerMessage?.trim()?.takeIf { it.isNotEmpty() }?.let { trigger ->
-            embedBuilder.addField("Сообщение", trigger.take(1024), false)
+            embedBuilder.addField("Триггер", trigger.take(1024), false)
         }
         context.chatSnippet?.let { snippet ->
             embedBuilder.addField("Контекст чата", snippet.take(1024), false)
+        }
+        context.dialogSnippet?.let { dialog ->
+            embedBuilder.addField("Диалог", dialog.take(1024), false)
         }
 
         val embed = embedBuilder.build()
@@ -610,23 +624,46 @@ class DiscordBot {
                     future.complete(mapOf("status" to "error", "message" to "starter message has no embed"))
                     return@queue
                 }
-                val builder = EmbedBuilder(oldEmbed)
-                if (titleUpdate != null) {
-                    builder.setTitle(titleUpdate.take(256))
+                val embedTitle = oldEmbed.title?.takeIf { it.isNotBlank() } ?: ticket.title
+                val resolvedTitle =
+                    when {
+                        titleUpdate != null -> titleUpdate
+                        statusUpdate == "closed" -> IssueTicketTitles.markClosed(embedTitle)
+                        else -> null
+                    }
+                val builder =
+                    EmbedBuilder()
+                        .setTitle((resolvedTitle ?: embedTitle).take(256))
+                        .setDescription(oldEmbed.description)
+                        .setColor(oldEmbed.color ?: Color.decode(config.string("issue-tickets.color", "#ff6600")))
+                        .setTimestamp(oldEmbed.timestamp ?: OffsetDateTime.now())
+                for (field in oldEmbed.fields) {
+                    val fieldName = field.name ?: continue
+                    val fieldValue = field.value ?: continue
+                    when {
+                        fieldName.equals("Диалог", ignoreCase = true) -> continue
+                        fieldName.equals("Статус", ignoreCase = true) && statusUpdate == "closed" -> continue
+                        else -> builder.addField(fieldName, fieldValue, field.isInline)
+                    }
                 }
                 if (append != null) {
-                    val stamp = IssueTicketContext.formatNow()
-                    val block = "\n\n**Обновление $stamp:**\n${append.take(2000)}"
-                    builder.setDescription((oldEmbed.description.orEmpty() + block).take(4096))
+                    val existingDialog =
+                        oldEmbed.fields
+                            .firstOrNull { it.name.equals("Диалог", ignoreCase = true) }
+                            ?.value
+                    val mergedDialog = IssueTicketFormat.mergeDialog(existingDialog, append)
+                    builder.addField("Диалог", mergedDialog, false)
+                }
+                if (statusUpdate == "closed") {
+                    builder.addField("Статус", "Закрыт", true)
                 }
                 message.editMessageEmbeds(builder.build()).queue(
                     { _ ->
-                        val updatedTitle = titleUpdate ?: ticket.title
+                        val updatedTitle = resolvedTitle ?: titleUpdate ?: ticket.title
                         val updatedStatus = statusUpdate ?: ticket.status
                         val updatedSummary =
                             if (append != null) {
-                                val combined = (oldEmbed.description.orEmpty() + "\n" + append).trim()
-                                combined.replace("\n", " ").take(300)
+                                append.replace("\n", " ").take(300)
                             } else {
                                 ticket.summary
                             }
@@ -638,15 +675,29 @@ class DiscordBot {
                             )
                         IssueTicketStore.save(updated)
                         service.submit { syncForumTickets() }
-                        future.complete(
+                        val result =
                             mapOf(
                                 "status" to "updated",
                                 "ticketId" to ticket.ticketId,
                                 "threadId" to ticket.threadId,
                                 "url" to thread.jumpUrl,
                                 "ticketStatus" to updated.status,
-                            ),
-                        )
+                            )
+                        if (statusUpdate == "closed") {
+                            thread.manager.setArchived(true).queue(
+                                { future.complete(result) },
+                                { error ->
+                                    log.warn(
+                                        "Issue ticket archive failed for {}: {}",
+                                        ticket.ticketId,
+                                        error.message,
+                                    )
+                                    future.complete(result)
+                                },
+                            )
+                        } else {
+                            future.complete(result)
+                        }
                     },
                     { error ->
                         log.warn("Issue ticket edit failed for {}: {}", ticket.ticketId, error.message)

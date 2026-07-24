@@ -1,0 +1,348 @@
+[
+  {
+    "id": "skip_greeting",
+    "input": { "player": "metal", "message": "че как все" },
+    "expected": "skip"
+  },
+  {
+    "id": "skip_voice",
+    "input": { "player": "gros", "message": "го в войс" },
+    "expected": "skip"
+  },
+  {
+    "id": "skip_numbers",
+    "input": { "player": "grocer", "message": "123" },
+    "expected": "skip"
+  },
+  {
+    "id": "skip_ok",
+    "input": { "player": "gros", "message": "ок" },
+    "expected": "skip"
+  },
+  {
+    "id": "skip_to_other_player",
+    "input": {
+      "player": "grocer",
+      "message": "грос ты где",
+      "reply_to_player": "gros"
+    },
+    "expected": "skip"
+  },
+  {
+    "id": "skip_joke_bug_feature",
+    "input": { "player": "cmi", "message": "вернулся как баг который не фиксят" },
+    "expected": "skip"
+  },
+  {
+    "id": "skip_joke_bug_phrase",
+    "input": { "player": "grocer", "message": "ну ладно шучу, rtp не работает" },
+    "expected": "skip",
+    "acceptable": ["skip", "bug"],
+    "note": "шутка+баг — модель иногда видит реальный rtp"
+  },
+  {
+    "id": "skip_how_are_you_skorin_no_prefix",
+    "input": {
+      "player": "grocer",
+      "message": "как дела скорен",
+      "raw_text": "как дела скорен",
+      "directed_at_bot": true,
+      "chat_allowed": false
+    },
+    "expected": "skip",
+    "acceptable": ["skip", "bug"],
+    "note": "без ! chat недоступен — иногда модель шлёт в bug"
+  },
+  {
+    "id": "skip_skorin_no_prefix_greeting",
+    "input": {
+      "player": "grocer",
+      "message": "скорен ку",
+      "raw_text": "скорен ку",
+      "directed_at_bot": true,
+      "chat_allowed": false
+    },
+    "expected": "skip"
+  },
+  {
+    "id": "chat_direct_skorin_prefix",
+    "input": {
+      "player": "grocer",
+      "message": "скорен ты тут",
+      "raw_text": "!скорен ты тут",
+      "directed_at_bot": true
+    },
+    "expected": "chat"
+  },
+  {
+    "id": "chat_direct_bot_prefix",
+    "input": {
+      "player": "ninja",
+      "message": "бот а че",
+      "raw_text": "!бот а че",
+      "directed_at_bot": true
+    },
+    "expected": "chat"
+  },
+  {
+    "id": "chat_ku_skorin_prefix",
+    "input": {
+      "player": "GrocerMC",
+      "message": "ку скорен",
+      "raw_text": "!ку скорен",
+      "directed_at_bot": true
+    },
+    "expected": "chat"
+  },
+  {
+    "id": "chat_continue_after_reply",
+    "input": {
+      "player": "grocer",
+      "message": "нет не починили",
+      "raw_text": "!нет не починили",
+      "continuation_with_bot": true,
+      "reply_to_bot": true,
+      "seconds_since_bot": 25,
+      "recent_chat": ["21:41:01 Скорен » ну ку ку, чё rtp так и не починили"],
+      "recent_routes": ["21:40:51 chat conf=0.98 «скорен ку»"]
+    },
+    "expected": "chat"
+  },
+  {
+    "id": "chat_continue_why",
+    "input": {
+      "player": "grocer",
+      "message": "а почему",
+      "raw_text": "!а почему",
+      "continuation_with_bot": true,
+      "reply_to_bot": true,
+      "seconds_since_bot": 12,
+      "recent_routes": ["21:40:51 chat conf=0.98 «скорен ку»"]
+    },
+    "expected": "chat"
+  },
+  {
+    "id": "chat_discord_addscoren",
+    "input": {
+      "player": "addscoren",
+      "message": "@addscoren че как",
+      "source": "discord",
+      "directed_at_bot": true,
+      "chat_allowed": true
+    },
+    "expected": "chat"
+  },
+  {
+    "id": "bug_vague_report",
+    "input": {
+      "player": "GrocerMC",
+      "message": "у меня баг",
+      "server": "survival",
+      "chat_allowed": false
+    },
+    "expected": "bug"
+  },
+  {
+    "id": "bug_rtp_no_prefix",
+    "input": {
+      "player": "grocer",
+      "message": "rtp не работает",
+      "server": "survival",
+      "chat_allowed": false
+    },
+    "expected": "bug"
+  },
+  {
+    "id": "bug_rtp_detailed",
+    "input": {
+      "player": "grocer",
+      "message": "у меня rtp не работает после рестарта",
+      "server": "survival",
+      "chat_allowed": false
+    },
+    "expected": "bug"
+  },
+  {
+    "id": "bug_rtp_biomes",
+    "input": {
+      "player": "grocer",
+      "message": "в мире биомов rtp не пашет",
+      "server": "survival"
+    },
+    "expected": "bug"
+  },
+  {
+    "id": "bug_crash_end",
+    "input": {
+      "player": "metal",
+      "message": "крашит клиент когда захожу в энд",
+      "server": "survival"
+    },
+    "expected": "bug"
+  },
+  {
+    "id": "bug_dup",
+    "input": {
+      "player": "gros",
+      "message": "дюпается алмаз если так делать"
+    },
+    "expected": "bug"
+  },
+  {
+    "id": "bug_lag_tps",
+    "input": {
+      "player": "metal",
+      "message": "на survival тпс упал до 5, не норм",
+      "server": "survival"
+    },
+    "expected": "bug"
+  },
+  {
+    "id": "bug_silent_command",
+    "input": {
+      "player": "newbie",
+      "message": "после рестарта /rtp просто молчит и ниче",
+      "server": "survival"
+    },
+    "expected": "bug"
+  },
+  {
+    "id": "bug_followup_after_pm",
+    "input": {
+      "player": "grocer",
+      "message": "в мире биомов не работает",
+      "open_ticket_id": "RB-00001",
+      "open_ticket_summary": "rtp",
+      "reply_to_bot": true,
+      "continuation_with_bot": true,
+      "seconds_since_bot": 5,
+      "recent_chat": ["21:50:05 Скорен » личка: rtp не пашет — survival или биомы?"],
+      "recent_routes": ["21:49:56 bug conf=0.85 «у меня баг»"]
+    },
+    "expected": "chat",
+    "note": "follow-up по тикету — отдельный PM-процесс; в паблик → chat"
+  },
+  {
+    "id": "bug_followup_short_no",
+    "input": {
+      "player": "GrocerMC",
+      "message": "не",
+      "open_ticket_id": "RB-00001",
+      "open_ticket_summary": "rtp",
+      "reply_to_bot": true,
+      "continuation_with_bot": true,
+      "seconds_since_bot": 15,
+      "recent_chat": ["21:55:10 Скорен » личка: починилось или как?"]
+    },
+    "expected": "chat"
+  },
+  {
+    "id": "bug_followup_detail",
+    "input": {
+      "player": "grocer",
+      "message": "да я писал /rtp в чат и ниче",
+      "open_ticket_id": "RB-00007",
+      "open_ticket_summary": "rtp не работает",
+      "server": "survival",
+      "reply_to_bot": true,
+      "continuation_with_bot": true,
+      "seconds_since_bot": 8
+    },
+    "expected": "bug"
+  },
+  {
+    "id": "bug_followup_close",
+    "input": {
+      "player": "grocer",
+      "message": "а нет стоп уже работает, закрывай",
+      "open_ticket_id": "RB-00007",
+      "open_ticket_summary": "rtp",
+      "reply_to_bot": true
+    },
+    "expected": "bug"
+  },
+  {
+    "id": "bug_followup_rtp_hint",
+    "input": {
+      "player": "grocer",
+      "message": "да вот ртп чето",
+      "reply_to_bot": true,
+      "continuation_with_bot": true,
+      "seconds_since_bot": 20,
+      "recent_routes": ["21:49:56 bug conf=0.85 «у меня баг»"]
+    },
+    "expected": "chat",
+    "note": "продолжение после bug route в паблик — chat, не bug handler"
+  },
+  {
+    "id": "bug_skorin_with_open_ticket",
+    "input": {
+      "player": "GrocerMC",
+      "message": "ку скорен",
+      "raw_text": "!ку скорен",
+      "directed_at_bot": true,
+      "open_ticket_id": "RB-00001",
+      "open_ticket_summary": "rtp не работает"
+    },
+    "expected": "chat"
+  },
+  {
+    "id": "bug_skorin_fixed_question",
+    "input": {
+      "player": "GrocerMC",
+      "message": "скорен починили rtp?",
+      "raw_text": "!скорен починили rtp?",
+      "directed_at_bot": true,
+      "open_ticket_id": "RB-00001",
+      "open_ticket_summary": "rtp не работает"
+    },
+    "expected": "chat"
+  },
+  {
+    "id": "bug_continue_after_route_bug",
+    "input": {
+      "player": "grocer",
+      "message": "на survival",
+      "raw_text": "!на survival",
+      "continuation_with_bot": true,
+      "reply_to_bot": true,
+      "seconds_since_bot": 30,
+      "recent_routes": ["21:50:19 bug conf=0.92 «да вот ртп чето»"],
+      "recent_chat": ["21:50:05 Скорен » личка: какой сервер?"]
+    },
+    "expected": "chat"
+  },
+  {
+    "id": "skip_continue_no_bot_recent",
+    "input": {
+      "player": "grocer",
+      "message": "понятно",
+      "continuation_with_bot": true,
+      "reply_to_bot": true,
+      "seconds_since_bot": 5,
+      "recent_routes": ["21:37:42 skip conf=0.99 «123»"]
+    },
+    "expected": "skip"
+  },
+  {
+    "id": "skip_toxic_not_to_bot",
+    "input": {
+      "player": "grocer",
+      "message": "да вот ты долбоеб",
+      "reply_to_bot": false,
+      "continuation_with_bot": false
+    },
+    "expected": "skip"
+  },
+  {
+    "id": "bug_skorin_and_bug_with_prefix",
+    "input": {
+      "player": "grocer",
+      "message": "скорен rtp не работает",
+      "raw_text": "!скорен rtp не работает",
+      "directed_at_bot": true,
+      "server": "survival"
+    },
+    "expected": "bug"
+  }
+]

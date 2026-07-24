@@ -2,6 +2,7 @@ package ru.arc.core.modules
 
 import ru.arc.config.ConfigManager
 import ru.arc.config.ProxyConfigs
+import ru.arc.ops.ProxyOpsHttpModule
 import ru.arc.velocity.Velocity
 
 /**
@@ -14,5 +15,7 @@ object ProxyArcReload {
         ConfigManager.reloadAll()
         Velocity.config = ProxyConfigs.main()
         Velocity.chatAssistant?.reload()
+        Velocity.bugSurveyAssistant?.reload()
+        ProxyOpsHttpModule.reload()
     }
 }

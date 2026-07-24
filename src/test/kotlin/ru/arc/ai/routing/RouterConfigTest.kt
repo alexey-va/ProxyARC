@@ -16,6 +16,7 @@ class RouterConfigTest : FreeSpec({
             routerConfig.isIntentEnabled(RouteIntent.CHAT) shouldBe true
             routerConfig.isIntentEnabled(RouteIntent.BUG) shouldBe true
             routerConfig.isIntentEnabled(RouteIntent.SKIP) shouldBe true
+            routerConfig.prefilterEnabled shouldBe true
         }
 
         "parses enabled-intents list" {
@@ -32,6 +33,19 @@ class RouterConfigTest : FreeSpec({
             val routerConfig = RouterConfig.from(config)
             routerConfig.isIntentEnabled(RouteIntent.CHAT) shouldBe true
             routerConfig.isIntentEnabled(RouteIntent.BUG) shouldBe false
+        }
+
+        "can disable deterministic prefilter for rollback" {
+            val tmp = Files.createTempDirectory("router-config-prefilter")
+            Files.writeString(
+                tmp.resolve("assistant.yml"),
+                """
+                routing:
+                  prefilter-enabled: false
+                """.trimIndent(),
+            )
+            val config = Config(tmp, "assistant.yml")
+            RouterConfig.from(config).prefilterEnabled shouldBe false
         }
     }
 })

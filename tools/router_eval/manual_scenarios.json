@@ -1,0 +1,110 @@
+[
+  {
+    "id": "manual_bug_new_report",
+    "title": "Новый репорт бага в чат",
+    "steps_in_game": [
+      "В глобальном чате БЕЗ !: «rtp не работает»",
+      "Router → bug, дальше отдельный bug-процесс (PM + тикет)"
+    ],
+    "acceptance": [
+      "Router intent=bug только для нового репорта",
+      "Не путать с обычным «ку скорен»"
+    ],
+    "input": {
+      "player": "GrocerMC",
+      "message": "rtp не работает",
+      "server": "survival",
+      "chat_allowed": false
+    },
+    "expected": "bug"
+  },
+  {
+    "id": "manual_skorin_open_ticket_chat",
+    "title": "Скорен в чат при открытом тикете",
+    "steps_in_game": [
+      "Открыт тикет RB-00001",
+      "В чат с !: «ку скорен»"
+    ],
+    "acceptance": [
+      "Router intent=chat (НЕ bug)",
+      "Обычный диалог, open_ticket не тянет в bug"
+    ],
+    "input": {
+      "player": "GrocerMC",
+      "message": "ку скорен",
+      "raw_text": "!ку скорен",
+      "directed_at_bot": true,
+      "open_ticket_id": "RB-00001",
+      "open_ticket_summary": "rtp не работает"
+    },
+    "expected": "chat"
+  },
+  {
+    "id": "manual_chat_continuation",
+    "title": "Продолжение обычного диалога",
+    "steps_in_game": [
+      "!скорен ку → ответ в паблик",
+      "Через <90s: «нет не починили»"
+    ],
+    "acceptance": [
+      "Router intent=chat",
+      "Ответ в паблик от chat-агента"
+    ],
+    "input": {
+      "player": "GrocerMC",
+      "message": "нет не починили",
+      "raw_text": "!нет не починили",
+      "continuation_with_bot": true,
+      "reply_to_bot": true,
+      "seconds_since_bot": 25,
+      "recent_chat": [
+        "21:41:01 Скорен » ну ку ку, чё rtp так и не починили"
+      ],
+      "recent_routes": ["21:40:51 chat conf=0.98 «скорен ку»"]
+    },
+    "expected": "chat"
+  },
+  {
+    "id": "manual_skip_no_prefix",
+    "title": "Скорен без ! — не chat",
+    "steps_in_game": [
+      "В чат без !: «скорен ку»"
+    ],
+    "acceptance": [
+      "Router skip (chat_allowed=false)",
+      "Chat-агент не отвечает"
+    ],
+    "input": {
+      "player": "GrocerMC",
+      "message": "скорен ку",
+      "raw_text": "скорен ку",
+      "directed_at_bot": true,
+      "chat_allowed": false
+    },
+    "expected": "skip"
+  },
+  {
+    "id": "manual_vague_bug_open_ticket_pm",
+    "title": "«есть бага» при open ticket — PM в личку",
+    "steps_in_game": [
+      "Открыт тикет RB-00001 (rtp)",
+      "В глобал: «есть бага» или «не работает ртп»"
+    ],
+    "acceptance": [
+      "Router intent=bug → bug-survey агент",
+      "НЕ model_skip / пропускаю без tools",
+      "sendprivatemessage в личку: что сломалось / уточнение",
+      "При необходимости updateissueticket"
+    ],
+    "input": {
+      "player": "GrocerMC",
+      "message": "есть бага",
+      "open_ticket_id": "RB-00001",
+      "open_ticket_summary": "rtp не работает",
+      "active_bug_survey": true,
+      "survey_ticket": "RB-00001",
+      "survey_topic": "rtp"
+    },
+    "expected": "bug"
+  }
+]

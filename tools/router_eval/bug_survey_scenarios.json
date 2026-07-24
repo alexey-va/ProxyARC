@@ -1,0 +1,372 @@
+[
+  {
+    "id": "scenario_new_report_legacy_then_survey",
+    "title": "Новый репорт → legacy bug; после тикета → survey",
+    "description": "GrocerMC первый раз пишет про rtp без open ticket — одноразовый bug-agent. После createissueticket следующее сообщение идёт в survey.",
+    "steps": [
+      {
+        "step": 1,
+        "event": "player_message",
+        "player": "GrocerMC",
+        "message": "rtp не работает на survival",
+        "meta": {},
+        "open_ticket": null,
+        "expect": {
+          "use_survey": false,
+          "agent_mode": "legacy_bug",
+          "witness": false
+        }
+      },
+      {
+        "step": 2,
+        "event": "agent_create_ticket",
+        "player": "GrocerMC",
+        "ticket_id": "RB-00010",
+        "topic": "rtp не работает"
+      },
+      {
+        "step": 3,
+        "event": "player_message",
+        "player": "GrocerMC",
+        "message": "жал /rtp в мире биомов",
+        "meta": {"reply_to_bot": true, "continuation_with_bot": true},
+        "open_ticket": {"ticket_id": "RB-00010", "reporter": "GrocerMC", "title": "rtp"},
+        "expect": {
+          "use_survey": true,
+          "agent_mode": "bug_survey",
+          "primary": "GrocerMC",
+          "witness": false,
+          "session_ticket": "RB-00010"
+        }
+      }
+    ]
+  },
+  {
+    "id": "scenario_global_inquiry_witness_joins",
+    "title": "Глобальный опрос → второй игрок подтверждает баг",
+    "description": "Репортёр заводит тикет, спрашивает всех через sendglobalmessage. Koxae отвечает «да у меня тоже» — попадает в то же расследование как witness.",
+    "steps": [
+      {
+        "step": 1,
+        "event": "setup_survey_with_ticket",
+        "primary": "GrocerMC",
+        "ticket_id": "RB-00020",
+        "topic": "rtp"
+      },
+      {
+        "step": 2,
+        "event": "agent_global_message",
+        "primary": "GrocerMC",
+        "message": "у кого rtp не пашет на survival?"
+      },
+      {
+        "step": 3,
+        "event": "player_message",
+        "player": "Koxae",
+        "message": "да у меня тоже не работает",
+        "meta": {"reply_to_bot": true, "continuation_with_bot": true, "seconds_since_bot": 8},
+        "open_ticket": null,
+        "expect": {
+          "use_survey": true,
+          "agent_mode": "bug_survey",
+          "primary": "GrocerMC",
+          "witness": true,
+          "participants_include": ["GrocerMC", "Koxae"]
+        }
+      },
+      {
+        "step": 4,
+        "event": "player_message",
+        "player": "Koxae",
+        "message": "жму /rtp в мире биомов ничего",
+        "meta": {"reply_to_bot": true, "continuation_with_bot": true},
+        "open_ticket": null,
+        "expect": {
+          "use_survey": true,
+          "witness": true,
+          "primary": "GrocerMC"
+        }
+      }
+    ]
+  },
+  {
+    "id": "scenario_witness_short_confirm_without_reply_meta",
+    "title": "Witness: короткое «да» без reply_to_bot после глобала",
+    "description": "После sendglobalmessage игрок пишет короткое подтверждение в глобал без явного reply_to_bot — всё равно линкуется по эвристике short_confirm.",
+    "steps": [
+      {
+        "step": 1,
+        "event": "agent_global_message",
+        "primary": "GrocerMC",
+        "message": "у кого палка строителя не пашет?"
+      },
+      {
+        "step": 2,
+        "event": "player_message",
+        "player": "Koxae",
+        "message": "да",
+        "meta": {},
+        "open_ticket": null,
+        "expect": {
+          "use_survey": true,
+          "witness": true,
+          "primary": "GrocerMC"
+        }
+      }
+    ]
+  },
+  {
+    "id": "scenario_global_inquiry_ignored_unrelated_chat",
+    "title": "После глобала посторонний флуд не линкуется",
+    "description": "Случайная реплика без маркеров подтверждения не должна попадать в расследование другого игрока.",
+    "steps": [
+      {
+        "step": 1,
+        "event": "agent_global_message",
+        "primary": "GrocerMC",
+        "message": "у кого rtp не пашет?"
+      },
+      {
+        "step": 2,
+        "event": "player_message",
+        "player": "RandomGuy",
+        "message": "какашка лол",
+        "meta": {},
+        "open_ticket": null,
+        "expect": {
+          "use_survey": false,
+          "agent_mode": "legacy_bug",
+          "investigation_resolved": false
+        }
+      }
+    ]
+  },
+  {
+    "id": "scenario_global_inquiry_expired",
+    "title": "Глобальный опрос протух — witness не линкуется",
+    "description": "Если прошло больше global-inquiry-window-sec, ответ другого игрока не привязывается автоматически.",
+    "steps": [
+      {
+        "step": 1,
+        "event": "agent_global_message",
+        "primary": "GrocerMC",
+        "message": "у кого rtp?"
+      },
+      {
+        "step": 2,
+        "event": "advance_time_sec",
+        "seconds": 400
+      },
+      {
+        "step": 3,
+        "event": "player_message",
+        "player": "Koxae",
+        "message": "да у меня тоже",
+        "meta": {"reply_to_bot": true},
+        "open_ticket": null,
+        "expect": {
+          "use_survey": false,
+          "investigation_resolved": false
+        }
+      }
+    ]
+  },
+  {
+    "id": "scenario_mention_ticket_id_starts_survey",
+    "title": "Упоминание RB-xxxxx без своего open ticket",
+    "description": "Игрок пишет «про RB-00042 ещё вопрос» — survey даже без open_ticket в своём имени.",
+    "steps": [
+      {
+        "step": 1,
+        "event": "player_message",
+        "player": "GrocerMC",
+        "message": "про RB-00042 ещё вопрос — rtp всё ещё мёртв",
+        "meta": {},
+        "open_ticket": null,
+        "expect": {
+          "use_survey": true,
+          "agent_mode": "bug_survey",
+          "witness": false
+        }
+      }
+    ]
+  },
+  {
+    "id": "scenario_close_ticket_ends_session",
+    "title": "Закрытие тикета закрывает survey",
+    "description": "После updateissueticket status=closed сессия снимается; следующее сообщение — снова legacy если нет open ticket.",
+    "steps": [
+      {
+        "step": 1,
+        "event": "setup_survey_with_ticket",
+        "primary": "GrocerMC",
+        "ticket_id": "RB-00030",
+        "topic": "rtp fixed"
+      },
+      {
+        "step": 2,
+        "event": "close_survey",
+        "primary": "GrocerMC",
+        "reason": "ticket_closed"
+      },
+      {
+        "step": 3,
+        "event": "player_message",
+        "player": "GrocerMC",
+        "message": "другой баг — палка не работает",
+        "meta": {},
+        "open_ticket": null,
+        "expect": {
+          "use_survey": false,
+          "agent_mode": "legacy_bug"
+        }
+      }
+    ]
+  },
+  {
+    "id": "scenario_three_witnesses_append_dialog",
+    "title": "Три witness — диалог в тикет",
+    "description": "Несколько игроков подтверждают баг после глобала; enrich_ticket_append собирает полный контекст для Discord.",
+    "steps": [
+      {
+        "step": 1,
+        "event": "setup_survey_with_ticket",
+        "primary": "GrocerMC",
+        "ticket_id": "RB-00040",
+        "topic": "farm bug"
+      },
+      {
+        "step": 2,
+        "event": "agent_global_message",
+        "primary": "GrocerMC",
+        "message": "у кого кокос не растёт?"
+      },
+      {
+        "step": 3,
+        "event": "player_message",
+        "player": "Koxae",
+        "message": "да не растёт",
+        "meta": {"reply_to_bot": true},
+        "open_ticket": null,
+        "expect": {"witness": true, "primary": "GrocerMC"}
+      },
+      {
+        "step": 4,
+        "event": "player_message",
+        "player": "yarostuf",
+        "message": "у меня тоже на survival",
+        "meta": {"reply_to_bot": true},
+        "open_ticket": null,
+        "expect": {"witness": true, "primary": "GrocerMC"}
+      },
+      {
+        "step": 5,
+        "event": "assert_participants",
+        "primary": "GrocerMC",
+        "participants": ["GrocerMC", "Koxae", "yarostuf"]
+      },
+      {
+        "step": 6,
+        "event": "assert_ticket_append",
+        "trigger_message": "у меня тоже на survival",
+        "agent_text": "yarostuf подтвердил на survival",
+        "dialog_lines": [
+          "игрок: rtp не работает",
+          "скорен (глобал): у кого кокос не растёт?",
+          "игрок: да не растёт",
+          "игрок: у меня тоже на survival"
+        ],
+        "must_contain": ["**Игрок:**", "**Диалог:**", "yarostuf", "кокос"]
+      }
+    ]
+  },
+  {
+    "id": "scenario_primary_not_witness_to_self_after_global",
+    "title": "Репортёр после своего глобала — не witness сам себе",
+    "description": "Primary продолжает расследование как primary, не как witness linked via global inquiry.",
+    "steps": [
+      {
+        "step": 1,
+        "event": "setup_survey_with_ticket",
+        "primary": "GrocerMC",
+        "ticket_id": "RB-00050",
+        "topic": "builder stick"
+      },
+      {
+        "step": 2,
+        "event": "agent_global_message",
+        "primary": "GrocerMC",
+        "message": "у кого палка не пашет?"
+      },
+      {
+        "step": 3,
+        "event": "player_message",
+        "player": "GrocerMC",
+        "message": "ну у меня точно не пашет",
+        "meta": {"continuation_with_bot": true},
+        "open_ticket": {"ticket_id": "RB-00050", "reporter": "GrocerMC"},
+        "expect": {
+          "use_survey": true,
+          "primary": "GrocerMC",
+          "witness": false
+        }
+      }
+    ]
+  },
+  {
+    "id": "scenario_builder_stick_realistic_flow",
+    "title": "Реалистичный flow Koxae / палка строителя",
+    "description": "Первый vague репорт → legacy + PM; детали → survey; глобал; закрытие когда разобрались.",
+    "steps": [
+      {
+        "step": 1,
+        "event": "player_message",
+        "player": "Koxae",
+        "message": "помогитя баг",
+        "meta": {},
+        "open_ticket": null,
+        "expect": {"use_survey": false, "agent_mode": "legacy_bug"}
+      },
+      {
+        "step": 2,
+        "event": "player_message",
+        "player": "Koxae",
+        "message": "не растёт кокос",
+        "meta": {"reply_to_bot": true},
+        "open_ticket": null,
+        "expect": {"use_survey": false, "agent_mode": "legacy_bug"}
+      },
+      {
+        "step": 3,
+        "event": "agent_create_ticket",
+        "player": "Koxae",
+        "ticket_id": "RB-00003",
+        "topic": "кокос / палка"
+      },
+      {
+        "step": 4,
+        "event": "player_message",
+        "player": "Koxae",
+        "message": "Грос, палка строителя не пашет",
+        "meta": {},
+        "open_ticket": {"ticket_id": "RB-00003", "reporter": "Koxae"},
+        "expect": {"use_survey": true, "primary": "Koxae", "witness": false}
+      },
+      {
+        "step": 5,
+        "event": "player_message",
+        "player": "Koxae",
+        "message": "а. в левую руку блок надо было взять. поняла",
+        "meta": {"reply_to_bot": true, "continuation_with_bot": true},
+        "open_ticket": {"ticket_id": "RB-00003", "reporter": "Koxae"},
+        "expect": {"use_survey": true, "primary": "Koxae"}
+      },
+      {
+        "step": 6,
+        "event": "close_survey",
+        "primary": "Koxae",
+        "reason": "ticket_closed"
+      }
+    ]
+  }
+]

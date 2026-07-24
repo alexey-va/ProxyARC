@@ -14,16 +14,15 @@ object AssistantHistoryCompactor {
         maxLines: Int,
         summaryPrefix: String = "[сводка чата: ",
     ) {
-        if (observations.size <= maxLines) return
-        val overflow = observations.size - maxLines
-        val dropped = ArrayList<String>(overflow)
-        repeat(overflow) {
-            observations.pollFirst()?.let { dropped.add(it) }
+        val boundedMax = maxLines.coerceAtLeast(1)
+        if (observations.size <= boundedMax) return
+        val keepRecent = (boundedMax - 1).coerceAtLeast(0)
+        val removeCount = observations.size - keepRecent
+        var dropped = 0
+        repeat(removeCount) {
+            if (observations.pollFirst() != null) dropped++
         }
-        if (dropped.isNotEmpty()) {
-            val summary = summaryPrefix + dropped.joinToString(" | ") + "]"
-            observations.addFirst(summary)
-        }
+        observations.addFirst("$summaryPrefix$dropped старых строк опущено]")
     }
 
     fun compactHistory(
@@ -44,7 +43,13 @@ object AssistantHistoryCompactor {
         }
         if (dropped.isEmpty()) return
 
-        val summaryText = "[сводка старого диалога: ${dropped.joinToString(" | ")}]"
+        val samples =
+            dropped
+                .takeLast(4)
+                .joinToString(" | ") {
+                    it.replace('\n', ' ').trim().take(120)
+                }
+        val summaryText = "[сводка старого диалога: опущено ${dropped.size}; последние: $samples]"
         val summary =
             ChatCompletionMessageParam.ofUser(
                 ChatCompletionUserMessageParam.builder()

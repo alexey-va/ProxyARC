@@ -29,6 +29,11 @@ object RoutingModule {
         private set
 
     private var chatLineFormatter: ChatLineFormatter? = null
+    private var surveyTimeoutMs: Long = 10 * 60 * 1000L
+
+    fun sweepSurveyTimeouts() {
+        ru.arc.ai.routing.survey.BugSurveySessionStore.closeIdle(surveyTimeoutMs)
+    }
 
     fun init(
         proxyServer: ProxyServer,
@@ -38,6 +43,8 @@ object RoutingModule {
         shutdown()
         val routerConfig = RouterConfig.from(assistantConfig)
         continuationWindowSec = routerConfig.continuationWindowSec
+        surveyTimeoutMs =
+            assistantConfig.integer("bug.survey.timeout-minutes", 10).toLong() * 60 * 1000L
         if (!routerConfig.enabled) return
 
         val observeMaxLines =
@@ -89,7 +96,10 @@ object RoutingModule {
     }
 
     fun recordBotReply(toPlayer: String?) {
-        botReplyTracker.record(toPlayer)
+        botReplyTracker.record(
+            toPlayer = toPlayer,
+            threadGapMs = continuationWindowSec * 1000L,
+        )
     }
 
     fun shutdown() {
@@ -97,5 +107,6 @@ object RoutingModule {
         chatLineFormatter = null
         botReplyTracker.reset()
         RouteDedup.clear()
+        ru.arc.ai.routing.survey.BugSurveySessionStore.clear()
     }
 }

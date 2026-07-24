@@ -3,14 +3,28 @@ package ru.arc.ai.routing.ingress
 import ru.arc.ai.routing.observe.BotReplyTracker
 
 object MetaBuilder {
-    private val skorinWord = Regex("""(?i)(?:^|[\s,.!?])@?скорен(?:[\s,.!?]|$)""")
-    private val botWord = Regex("""(?i)(?:^|[\s,.!?])бот(?:[\s,.!?]|$)""")
+    private val scorenAddress =
+        Regex("""(?iu)(?:^|[,])\s*(?:(?:эй|слушай|ну)\s+)?@?(?:скорен|скроен)(?:[\s,.!?]|$)""")
+    private val scorenThirdPersonPast =
+        Regex(
+            """(?iu)^\s*@?скорен\s+(?:(?:мне|ему|ей|им)\s+)?""" +
+                """.{0,32}(?:помог|ответил|написал|сказал|подсказал)(?:\s|$)""",
+        )
+    private val scorenGreeting =
+        Regex("""(?iu)(?:^|[\s,.!?])(?:ку|привет|даров|здаров|как\s+дела)\s*,?\s*@?скорен(?:[\s,.!?]|$)""")
+    private val scorenTag = Regex("""(?iu)@скорен(?:[\s,.!?]|$)""")
+    private val botWord = Regex("""(?i)(?:^|[,])\s*(?:эй\s+)?@?бот(?:[\s,.!?]|$)""")
     private val addscorenMention = Regex("""(?i)@addscoren\b""")
 
     fun directedAtBot(message: String): Boolean =
-        skorinWord.containsMatchIn(message) ||
+        !scorenThirdPersonPast.containsMatchIn(message) &&
+            (
+                scorenAddress.containsMatchIn(message) ||
+            scorenGreeting.containsMatchIn(message) ||
+            scorenTag.containsMatchIn(message) ||
             botWord.containsMatchIn(message) ||
-            addscorenMention.containsMatchIn(message)
+                addscorenMention.containsMatchIn(message)
+            )
 
     fun build(
         player: String,
@@ -46,6 +60,43 @@ object MetaBuilder {
             continuationWithBot = samePlayerContinues,
             secondsSinceBot = secSinceBot,
             replyToPlayer = replyToPlayer?.trim()?.takeIf { it.isNotEmpty() },
+            botRepliesInThread =
+                if (samePlayerContinues) {
+                    botReplyTracker.consecutiveRepliesToLastPlayer
+                } else {
+                    0
+                },
+        )
+    }
+
+    fun buildSimulation(
+        player: String,
+        message: String,
+        botReplyTracker: BotReplyTracker,
+        continuationWindowSec: Int,
+        timestampMs: Long,
+        replyToBot: Boolean,
+        continuationWithBot: Boolean,
+    ): InboundMeta {
+        val inferred =
+            build(
+                player = player,
+                message = message,
+                botReplyTracker = botReplyTracker,
+                continuationWindowSec = continuationWindowSec,
+                timestampMs = timestampMs,
+            )
+        if (!replyToBot && !continuationWithBot) return inferred
+        return inferred.copy(
+            directedAtBot = directedAtBot(message) || replyToBot,
+            replyToBot = replyToBot,
+            continuationWithBot = continuationWithBot,
+            botRepliesInThread =
+                if (player.equals(botReplyTracker.lastReplyToPlayer, ignoreCase = true)) {
+                    botReplyTracker.consecutiveRepliesToLastPlayer
+                } else {
+                    0
+                },
         )
     }
 
@@ -79,6 +130,12 @@ object MetaBuilder {
             continuationWithBot = samePlayerContinues,
             secondsSinceBot = secSinceBot,
             replyToPlayer = replyToPlayer?.takeIf { !replyToBot },
+            botRepliesInThread =
+                if (samePlayerContinues) {
+                    botReplyTracker.consecutiveRepliesToLastPlayer
+                } else {
+                    0
+                },
         )
     }
 }

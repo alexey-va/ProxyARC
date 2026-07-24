@@ -13,8 +13,10 @@ class ToolsRegistryTest : FreeSpec({
             Tools.getTool("getplayerinfo").shouldNotBeNull()
             Tools.getTool("createissueticket").shouldNotBeNull()
             Tools.getTool("sendprivatemessage").shouldNotBeNull()
+            Tools.getTool("sendglobalmessage").shouldNotBeNull()
             Tools.getTool("updateissueticket").shouldNotBeNull()
             Tools.getTool("listissuetickets").shouldNotBeNull()
+            Tools.getTool("completebugsurvey").shouldNotBeNull()
         }
     }
 })

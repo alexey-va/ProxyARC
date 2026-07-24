@@ -4,17 +4,21 @@ import java.util.concurrent.ConcurrentHashMap
 
 object RouteDedup {
     private val recentKeys = ConcurrentHashMap<String, Long>()
-    private const val DEDUP_MS = 30 * 60 * 1000L
+    private const val DEDUP_MS = 5_000L
 
-    fun isDuplicate(key: String): Boolean {
-        val now = System.currentTimeMillis()
-        val previous = recentKeys[key]
-        if (previous != null && now - previous < DEDUP_MS) {
-            return true
+    fun isDuplicate(
+        key: String,
+        nowMs: Long = System.currentTimeMillis(),
+    ): Boolean {
+        synchronized(recentKeys) {
+            val previous = recentKeys[key]
+            if (previous != null && nowMs - previous < DEDUP_MS) {
+                return true
+            }
+            recentKeys[key] = nowMs
+            pruneOld(nowMs)
+            return false
         }
-        recentKeys[key] = now
-        pruneOld(now)
-        return false
     }
 
     fun clear() {

@@ -1,8 +1,8 @@
 rootProject.name = "ProxyARC"
 
 val arcCoreDir = sequenceOf(
-    file("../../IdeaProjects/arc-core"),
     file("../arc-core"),
+    file("../../IdeaProjects/arc-core"),
 ).firstOrNull { it.resolve("settings.gradle.kts").isFile }
     ?: error(
         """

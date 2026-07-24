@@ -40,6 +40,10 @@ object AssistantChatBridge {
         val delayMs = AssistantChatFormat.multiMessageDelayMs(assistantConfig)
         val assistant = Velocity.chatAssistant
 
+        // Publish conversation state before the scheduler callback. Fast replies
+        // and ops E2E calls must see the updated turn count immediately.
+        RoutingModule.recordBotReply(triggerPlayer)
+
         normalized.parts.forEachIndexed { index, part ->
             val delayTicks = TickConstants.millisToTicks(delayMs * index)
             delayed(delayTicks) {
@@ -47,7 +51,6 @@ object AssistantChatBridge {
                 val component = Utils.legacy(inGameText)
                 proxyServer.allPlayers.forEach { it.sendMessage(component) }
 
-                RoutingModule.recordBotReply(triggerPlayer)
                 assistant?.observeChat(
                     RoutingModule.formatBotObserveLine(part, botName),
                 )

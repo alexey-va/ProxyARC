@@ -7,5 +7,6 @@ fun interface RouterLlmGateway {
         systemPrompt: String,
         userContent: String,
         model: String,
+        player: String?,
     ): CompletableFuture<String>
 }

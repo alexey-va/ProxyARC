@@ -14,11 +14,13 @@ data class AssistantEnqueueResult(
 ) {
     val hasReply: Boolean get() = !reply.isNullOrBlank()
 
-    fun logSummary(log: org.slf4j.Logger, assistantType: String) {
+    fun logSummary(log: org.slf4j.Logger, assistantType: String, mode: AssistantRunMode? = null) {
+        val modeLabel = mode?.name?.lowercase()
+        val tag = if (modeLabel != null) "$assistantType/$modeLabel" else assistantType
         if (hasReply) {
             log.info(
                 "Assistant [{}] reply to {}: raw=\"{}\" delivered=\"{}\"",
-                assistantType,
+                tag,
                 triggerPlayer ?: "?",
                 rawModelContent ?: reply,
                 reply,
@@ -27,7 +29,7 @@ data class AssistantEnqueueResult(
         }
         log.info(
             "Assistant [{}] skip for {} on \"{}\": reason={} ({}) raw=\"{}\"{}",
-            assistantType,
+            tag,
             triggerPlayer ?: "?",
             triggerMessage,
             skipReason?.code ?: "unknown",
@@ -73,7 +75,7 @@ enum class SkipReason(val code: String, val description: String) {
     LLM_NOT_READY("llm_not_ready", "LLM client not initialized — check modules/llm.yml api-key"),
     AWAY("away", "assistant temporarily away (LeaveForTime)"),
     BUSY("busy", "previous LLM request still running"),
-    MODEL_SKIP("model_skip", "model returned пропускаю"),
+    MODEL_SKIP("model_skip", "model returned SKIP"),
     MODEL_BLANK("model_blank", "model returned empty or whitespace-only content"),
     MODEL_TOOL_ONLY("model_tool_only", "model returned only tool calls without user-visible text"),
     POST_FILTER("post_filter", "reply dropped by chat post-processing"),

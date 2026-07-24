@@ -37,7 +37,7 @@ class ChatLineFormatter(
         return template
             .replace("%time%", time)
             .replace("%delta%", "—")
-            .replace("%flags%", "[скорен] ")
+            .replace("%flags%", "")
             .replace("%player%", botName)
             .replace("%message%", message)
     }

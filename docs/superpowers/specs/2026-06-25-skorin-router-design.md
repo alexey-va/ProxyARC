@@ -1,4 +1,4 @@
-# Skorin Intent Router Design
+# Скорен Intent Router Design
 
 **Date:** 2026-06-25 (updated 2026-06-25)  
 **Status:** Implemented — live dispatch, legacy paths removed  

@@ -36,5 +36,23 @@ class IssueTicketStoreTest : FreeSpec({
             IssueTicketStore.listRecent(5, "Grocer").shouldHaveSize(1)
             IssueTicketStore.listOpenRecent(5).shouldHaveSize(1)
         }
+
+        "closes open tickets when forum thread was deleted" {
+            val redis = InMemoryRedis()
+            IssueTicketStore.bind(redis)
+            IssueTicketStore.save(
+                IssueTicket(
+                    ticketId = "RB-00020",
+                    threadId = "thread-deleted",
+                    starterMessageId = null,
+                    reporter = "Grocer",
+                    title = "old bug",
+                    createdAt = 1L,
+                ),
+            )
+            IssueTicketStore.reconcileForumThreads(setOf("other-thread")) shouldBe 1
+            IssueTicketStore.findOpenByReporter("Grocer") shouldBe null
+            IssueTicketStore.find("RB-00020")?.status shouldBe IssueTicket.STATUS_CLOSED
+        }
     }
 })

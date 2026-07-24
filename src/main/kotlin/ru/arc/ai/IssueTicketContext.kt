@@ -1,5 +1,7 @@
 package ru.arc.ai
 
+import ru.arc.ai.tickets.TicketDialogStore
+import ru.arc.ai.tickets.PlayerWorldNames
 import ru.arc.velocity.Velocity
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -12,23 +14,11 @@ data class IssueTicketContext(
     val reportedAt: String,
     val triggerMessage: String?,
     val chatSnippet: String?,
+    val dialogSnippet: String?,
     val source: String = BOT_SOURCE,
 ) {
     companion object {
         const val BOT_SOURCE = "Пивопровод"
-
-        private val DISPLAY_NAMES =
-            mapOf(
-                "spawn" to "Спавн",
-                "classic" to "Спавн",
-                "survival" to "Survival",
-                "classic_survival" to "Survival",
-                "parkour" to "Parkour",
-                "discord" to "Discord",
-                "velocity" to "Velocity",
-                "proxy" to "Velocity",
-                "minecraft-server" to "Velocity",
-            )
 
         private val DATE_FMT =
             DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm (MSK)")
@@ -44,11 +34,7 @@ data class IssueTicketContext(
             return Velocity.playerListAnnouncer?.serverForUsername(playerName)
         }
 
-        fun displayServer(raw: String?): String {
-            if (raw.isNullOrBlank()) return "неизвестно"
-            val key = raw.trim().lowercase()
-            return DISPLAY_NAMES[key] ?: raw.trim()
-        }
+        fun displayServer(raw: String?): String = PlayerWorldNames.displayProxyOrWorld(raw)
 
         fun formatNow(): String =
             OffsetDateTime.now(ZoneId.of("Europe/Moscow")).format(DATE_FMT)
@@ -71,8 +57,14 @@ data class IssueTicketContext(
                     hint != null -> hint
                     else -> "неизвестно"
                 }
-            val display = displayServer(rawServer)
+            val display =
+                PlayerWorldNames.resolveDisplay(
+                    proxyOrHint = rawServer,
+                    messageText = assistant.lastTriggerMessage,
+                    llmServerHint = hint,
+                )
             val snippet = assistant.snapshotChatObservations(maxLines = 10)
+            val dialog = TicketDialogStore.snapshot(reporter, maxLines = 15)
             return IssueTicketContext(
                 reporter = reporter,
                 backendServer = rawServer,
@@ -80,14 +72,10 @@ data class IssueTicketContext(
                 reportedAt = formatNow(),
                 triggerMessage = assistant.lastTriggerMessage,
                 chatSnippet = snippet.takeIf { it.isNotBlank() },
+                dialogSnippet = dialog.takeIf { it.isNotBlank() },
             )
         }
     }
 
-    fun serverFieldValue(): String =
-        if (backendServer.equals(displayServer, ignoreCase = true)) {
-            displayServer
-        } else {
-            "$displayServer ($backendServer)"
-        }
+    fun serverFieldValue(): String = displayServer
 }

@@ -58,7 +58,23 @@ dependencies {
 
 tasks {
     test {
-        useJUnitPlatform()
+        useJUnitPlatform {
+            excludeTags("live")
+        }
+    }
+
+    register<Test>("liveTest") {
+        description = "Live OpenRouter integration (requires OPENROUTER_API_KEY)"
+        group = "verification"
+        testClassesDirs = sourceSets["test"].output.classesDirs
+        classpath = sourceSets["test"].runtimeClasspath
+        useJUnitPlatform {
+            includeTags("live")
+        }
+        onlyIf {
+            System.getenv("RUN_LIVE_ROUTER_TESTS") == "true" &&
+                System.getenv("OPENROUTER_API_KEY")?.isNotBlank() == true
+        }
     }
 
     shadowJar {

@@ -17,6 +17,7 @@ import ru.arc.AntibotModule
 import ru.arc.Arc
 import ru.arc.ai.Assistant
 import ru.arc.ai.AssistantModule
+import ru.arc.ops.ProxyOpsHttpModule
 import ru.arc.ai.tools.Tool
 import ru.arc.ai.tools.Tools
 import ru.arc.config.Config
@@ -110,6 +111,7 @@ class Velocity @Inject constructor(
             TelegramModule,
             AntibotModule,
             AssistantModule,
+            ProxyOpsHttpModule,
             // Runtime (90-99)
             ListenersModule,
             ProxyTasksModule,
@@ -187,6 +189,9 @@ class Velocity @Inject constructor(
 
         @JvmField
         var chatAssistant: Assistant? = null
+
+        @JvmField
+        var bugSurveyAssistant: Assistant? = null
 
         @JvmField
         var luckpermsHook: LuckpermsHook? = null

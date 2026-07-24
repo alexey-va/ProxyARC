@@ -51,7 +51,7 @@ class RouterContextBuilderTest : FreeSpec({
                 )
             val content = builder.build(message, meta).toUserContent()
             content shouldContain "player=grocer"
-            content shouldContain "server=survival"
+            content shouldContain "world=мир биомов"
             content shouldContain "recent_chat:"
             content shouldContain "metal » че как"
             content shouldContain "recent_routes:"

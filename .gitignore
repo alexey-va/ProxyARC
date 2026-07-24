@@ -40,3 +40,7 @@ build/
 ### Mac OS ###
 .DS_Store
 /ztarget/
+/bin/
+**/.venv/
+**/__pycache__/
+*.py[cod]

@@ -15,6 +15,12 @@ data class InboundMessage(
             Source.DISCORD -> true
         }
 
+    fun allowsChatRouting(meta: InboundMeta): Boolean =
+        allowsChatRouting() ||
+            meta.directedAtBot ||
+            meta.replyToBot ||
+            meta.continuationWithBot
+
     enum class Source {
         GAME,
         DISCORD,

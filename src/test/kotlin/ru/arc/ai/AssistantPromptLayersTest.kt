@@ -52,7 +52,7 @@ class AssistantPromptLayersTest : FreeSpec({
         static shouldNotContain "grocermc"
     }
 
-    "logCompletionUsage reports cache hits at info" {
+    "logCompletionUsage delegates to formatUsage at debug" {
         val log = mockk<Logger>(relaxed = true)
         val usage =
             com.openai.models.completions.CompletionUsage
@@ -68,13 +68,10 @@ class AssistantPromptLayersTest : FreeSpec({
                 ).build()
         AssistantPromptLayers.logCompletionUsage(log, "deepseek/deepseek-v4-flash", usage)
         verify {
-            log.info(
-                match<String> { it.contains("cache hit") },
+            log.debug(
+                match<String> { it.contains("LLM usage") },
                 "deepseek/deepseek-v4-flash",
-                800L,
-                1000L,
-                80L,
-                12L,
+                match<String> { it.contains("cached=800") },
             )
         }
     }

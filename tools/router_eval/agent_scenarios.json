@@ -1,0 +1,47 @@
+[
+  {
+    "id": "agent_menu_text_survey",
+    "player": "GrocerMC",
+    "message": "в меню написано скорен лох",
+    "ticket_id": "RB-00004",
+    "expect_hint_contains": ["updateissueticket", "RB-00004", "sendprivatemessage"],
+    "expect_tools": ["UpdateIssueTicket", "SendPrivateMessage"],
+    "note": "UI/menu bug during survey — ticket append + PM, no nudge skip"
+  },
+  {
+    "id": "agent_vague_open_ticket",
+    "player": "GrocerMC",
+    "message": "есть бага",
+    "ticket_id": "RB-00004",
+    "expect_hint_contains": ["sendprivatemessage"],
+    "expect_tools": ["SendPrivateMessage"],
+    "note": "Vague follow-up — PM question only"
+  },
+  {
+    "id": "agent_rtp_details",
+    "player": "GrocerMC",
+    "message": "rtp не работает в мире биомов /rtp",
+    "ticket_id": "RB-00004",
+    "expect_hint_contains": ["updateissueticket", "RB-00004"],
+    "expect_tools": ["UpdateIssueTicket", "SendPrivateMessage"],
+    "note": "New details — update ticket + PM"
+  },
+  {
+    "id": "agent_fixed_close",
+    "player": "Koxae",
+    "message": "а поняла, надо было блок в левую руку",
+    "ticket_id": "RB-00003",
+    "expect_hint_contains": ["updateissueticket"],
+    "expect_tools": ["UpdateIssueTicket", "SendPrivateMessage"],
+    "note": "Player resolved — close or update + PM"
+  },
+  {
+    "id": "agent_pure_joke",
+    "player": "GrocerMC",
+    "message": "го в войс пошутим",
+    "ticket_id": "RB-00004",
+    "expect_hint_contains": ["completebugs urvey"],
+    "expect_tools": ["CompleteBugSurvey"],
+    "note": "Pure joke without bug signals"
+  }
+]

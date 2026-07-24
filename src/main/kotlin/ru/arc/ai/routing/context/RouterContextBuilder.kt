@@ -5,6 +5,7 @@ import ru.arc.ai.routing.ingress.InboundMessage
 import ru.arc.ai.routing.ingress.InboundMeta
 import ru.arc.ai.routing.observe.ChatLog
 import ru.arc.ai.routing.router.RouterConfig
+import ru.arc.ai.routing.survey.BugSurveySessionStore
 import ru.arc.ai.tickets.IssueTicketStore
 
 class RouterContextBuilder(
@@ -26,6 +27,13 @@ class RouterContextBuilder(
                     emptyList()
                 },
             recentRoutes = routeHistory.snapshot(message.player, config.maxRouteHistory),
+            activeBugSurvey =
+                BugSurveySessionStore.resolveSession(
+                    player = message.player,
+                    message = message.displayText,
+                    meta = meta,
+                    globalInquiryWindowMs = 300_000L,
+                ),
         )
     }
 }

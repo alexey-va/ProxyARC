@@ -14,8 +14,10 @@ object Tools {
         addTool(DefaultTools.GetInventory::class.java)
         addTool(DefaultTools.CreateIssueTicket::class.java)
         addTool(DefaultTools.SendPrivateMessage::class.java)
+        addTool(DefaultTools.SendGlobalMessage::class.java)
         addTool(DefaultTools.UpdateIssueTicket::class.java)
         addTool(DefaultTools.ListIssueTickets::class.java)
+        addTool(DefaultTools.CompleteBugSurvey::class.java)
     }
 
     @JvmStatic

@@ -8,7 +8,7 @@ import ru.arc.ai.routing.pipeline.PipelineContext
 import ru.arc.ai.routing.router.RouteIntent
 
 /**
- * Routed scenario that runs the shared Skorin agent with a specific [AssistantRunMode].
+ * Routed scenario that runs the shared Скорен agent with a specific [AssistantRunMode].
  *
  * Subclass only when you need custom gates ([shouldDispatch]) or context lines ([extraHistoryLines]).
  */

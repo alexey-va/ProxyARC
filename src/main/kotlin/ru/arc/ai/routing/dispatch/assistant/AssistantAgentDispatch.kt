@@ -7,7 +7,7 @@ import ru.arc.ai.AssistantRunMode
 import ru.arc.ai.routing.pipeline.PipelineContext
 import ru.arc.velocity.Velocity
 
-/** Runs the shared Skorin LLM agent for a routed scenario. */
+/** Runs the shared Скорен LLM agent for a routed scenario. */
 class AssistantAgentDispatch(
     private val proxyServer: ProxyServer,
 ) {
@@ -17,7 +17,7 @@ class AssistantAgentDispatch(
         extraHistoryLines: List<Pair<String, String>> = emptyList(),
         deliverPublicReply: Boolean = false,
     ) {
-        val assistant = assistant() ?: return
+        val assistant = assistant(mode) ?: return
         val player = context.message.player
         val message = context.message.displayText
 
@@ -44,5 +44,9 @@ class AssistantAgentDispatch(
         }
     }
 
-    fun assistant(): Assistant? = Velocity.chatAssistant
+    fun assistant(mode: AssistantRunMode = AssistantRunMode.CHAT): Assistant? =
+        when (mode) {
+            AssistantRunMode.CHAT -> Velocity.chatAssistant
+            AssistantRunMode.BUG, AssistantRunMode.BUG_SURVEY -> Velocity.bugSurveyAssistant
+        }
 }

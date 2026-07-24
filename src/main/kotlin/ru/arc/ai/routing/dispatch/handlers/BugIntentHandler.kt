@@ -6,24 +6,44 @@ import ru.arc.ai.routing.dispatch.DispatchServices
 import ru.arc.ai.routing.dispatch.IntentHandler
 import ru.arc.ai.routing.dispatch.RouteDedup
 import ru.arc.ai.routing.dispatch.assistant.AssistantAgentDispatch
+import ru.arc.ai.routing.dispatch.assistant.BugSurveyAgentDispatch
 import ru.arc.ai.routing.pipeline.PipelineContext
 import ru.arc.ai.routing.router.RouteIntent
+import ru.arc.ai.routing.survey.BugSurveySessionStore
+import ru.arc.ai.routing.survey.BugSurveyStartPolicy
 import ru.arc.ai.tickets.IssueTicketStore
 
 class BugIntentHandler(
-    private val agent: AssistantAgentDispatch,
+    private val surveyDispatch: BugSurveyAgentDispatch,
+    private val legacyAgent: AssistantAgentDispatch,
 ) : IntentHandler {
     override val intent = RouteIntent.BUG
 
     private val log = LoggerFactory.getLogger(BugIntentHandler::class.java)
 
-    override fun dispatch(context: PipelineContext, services: DispatchServices) {
+    override fun dispatch(
+        context: PipelineContext,
+        services: DispatchServices,
+    ) {
         if (!services.assistantConfig.bool("bug.enabled", true)) return
-        if (agent.assistant() == null) return
 
         val player = context.message.player
         val message = context.message.displayText
-        val open = IssueTicketStore.findOpenByReporter(player)
+        val surveyEnabled = services.assistantConfig.bool("bug.survey.enabled", true)
+        val globalWindowSec =
+            services.assistantConfig.integer("bug.survey.global-inquiry-window-sec", 300).coerceIn(30, 900)
+        val globalWindowMs = globalWindowSec * 1000L
+
+        val investigation =
+            BugSurveySessionStore.resolveSession(
+                player = player,
+                message = message,
+                meta = context.meta,
+                globalInquiryWindowMs = globalWindowMs,
+            )
+        val open =
+            IssueTicketStore.findOpenByReporter(player)
+                ?: investigation?.ticketId?.let { IssueTicketStore.find(it)?.takeIf { t -> t.status == "open" } }
 
         val dedupKey =
             if (open != null) {
@@ -31,15 +51,42 @@ class BugIntentHandler(
             } else {
                 "bug:${player.lowercase()}:${message.lowercase().hashCode()}"
             }
-        if (RouteDedup.isDuplicate(dedupKey)) return
+        if (RouteDedup.isDuplicate(dedupKey)) {
+            log.debug("Route bug dedup skip {} «{}»", player, message)
+            return
+        }
+
+        val primary = investigation?.player ?: player
+        val witness = investigation != null && !investigation.isPrimary(player)
 
         log.info(
-            "Route bug {} «{}» ticket={}",
+            "Route bug {} «{}» ticket={} survey={} primary={} witness={}",
             player,
             message,
-            open?.ticketId ?: "new",
+            open?.ticketId ?: investigation?.ticketId ?: "new",
+            surveyEnabled,
+            primary,
+            witness,
         )
 
-        agent.enqueue(context, AssistantRunMode.BUG)
+        val useSurvey =
+            BugSurveyStartPolicy.shouldStartSurvey(
+                surveyEnabled = surveyEnabled,
+                player = player,
+                message = message,
+                openTicket = open,
+                investigation = investigation,
+            )
+
+        if (useSurvey) {
+            BugSurveySessionStore.openOrTouch(primary)
+            if (!player.equals(primary, ignoreCase = true)) {
+                BugSurveySessionStore.addParticipant(primary, player)
+            }
+            val session = BugSurveySessionStore.get(primary)!!
+            surveyDispatch.enqueue(context, session)
+        } else {
+            legacyAgent.enqueue(context, AssistantRunMode.BUG)
+        }
     }
 }

@@ -115,6 +115,40 @@ object IssueTicketStore {
         save(merged)
     }
 
+    /**
+     * Forum sync only merges existing threads; deleting a Discord thread does not clear Redis.
+     * Close open tickets whose thread no longer exists in the forum channel.
+     */
+    fun reconcileForumThreads(presentThreadIds: Set<String>): Int {
+        ensureLoaded()
+        val stale =
+            cache.values.filter { ticket ->
+                ticket.isOpen() &&
+                    ticket.threadId.isNotBlank() &&
+                    !presentThreadIds.contains(ticket.threadId)
+            }
+        stale.forEach { ticket ->
+            save(ticket.copy(status = IssueTicket.STATUS_CLOSED))
+            log.info(
+                "Closed ticket {} — forum thread {} no longer present",
+                ticket.ticketId,
+                ticket.threadId,
+            )
+        }
+        return stale.size
+    }
+
+    fun delete(ticketId: String): Boolean {
+        ensureLoaded()
+        val id = ticketId.trim()
+        if (id.isEmpty()) return false
+        val removed = cache.remove(id) != null
+        if (removed) {
+            redis?.saveMapEntries(STORAGE_KEY, id, null)?.get()
+        }
+        return removed
+    }
+
     private fun readCounter(): Int {
         val r = redis ?: return cache.size
         return runCatching {

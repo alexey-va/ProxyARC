@@ -1,0 +1,8 @@
+# ProxyARC ops HTTP template. Set token only in the protected runtime config.
+enabled: true
+bind-host: 127.0.0.1
+bind-port: 25825
+token: ""
+
+simulate-enabled: true
+logs-enabled: true

@@ -17,6 +17,20 @@ class AssistantRouter(
         return classifyWithModel(context, userContent, config.model).thenCompose { first ->
             if (first.parseOk) {
                 CompletableFuture.completedFuture(applyIntentPolicy(first))
+            } else if (first.isTransportFailure()) {
+                // An ambiguous continuation is the only normal path reaching the
+                // model after prefiltering. Do not immediately dispatch another
+                // request to the same unavailable provider.
+                CompletableFuture.completedFuture(
+                    RouteDecision(
+                        intent = RouteIntent.SKIP,
+                        confidence = 0.0,
+                        reason = "router_unavailable; ${first.reason}",
+                        raw = first.raw,
+                        model = first.model,
+                        parseOk = true,
+                    ),
+                )
             } else {
                 log.warn(
                     "Router parse failed player={} model={} reason={} — retry {}",
@@ -26,10 +40,29 @@ class AssistantRouter(
                     config.fallbackModel,
                 )
                 classifyWithModel(context, userContent, config.fallbackModel)
-                    .thenApply(::applyIntentPolicy)
+                    .thenApply { second ->
+                        if (second.parseOk) {
+                            applyIntentPolicy(second)
+                        } else {
+                            val heuristic =
+                                RouterHeuristicFallback.apply(context, second)
+                            if (heuristic.parseOk && config.logRouteInfo) {
+                                RouteLog.logClassified(
+                                    log,
+                                    context.message,
+                                    heuristic,
+                                    heuristic.model,
+                                )
+                            }
+                            applyIntentPolicy(heuristic)
+                        }
+                    }
             }
         }
     }
+
+    private fun RouteDecision.isTransportFailure(): Boolean =
+        reason.startsWith("llm_error:")
 
     private fun applyIntentPolicy(decision: RouteDecision): RouteDecision {
         if (config.isIntentEnabled(decision.intent)) return decision
@@ -45,7 +78,7 @@ class AssistantRouter(
         model: String,
     ): CompletableFuture<RouteDecision> =
         gateway
-            .complete(prompt.systemPrompt, userContent, model)
+            .complete(prompt.systemPrompt, userContent, model, context.message.player)
             .handle { raw, error ->
                 if (error != null) {
                     RouteLog.logLlmError(log, context.message.player, model, error)
