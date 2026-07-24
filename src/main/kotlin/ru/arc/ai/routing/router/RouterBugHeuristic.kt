@@ -79,10 +79,10 @@ object RouterBugHeuristic {
                 """(?:сбрасыва\w*|обнуля\w*|сбросил\w*|обнулило))""",
         )
     private val silentCommand =
-        Regex("""(?iuU)\b(?:молчит|ничего|ниче|ноль\s+реакции)\b""")
+        Regex("""(?iuU)\b(?:молчит|ничего|ниче|тишина|ноль\s+реакции)\b""")
     private val namedSilentCommand =
         Regex(
-            """(?iuU)\b/?(?:rtp|ртп)\b.{0,32}\b(?:молчит|ничего|ниче|ноль\s+реакции)\b""",
+            """(?iuU)\b/?(?:rtp|ртп)\b.{0,32}\b(?:молчит|ничего|ниче|тишина|ноль\s+реакции)\b""",
         )
 
     private val externalProblemSignals =

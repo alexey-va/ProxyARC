@@ -21,6 +21,7 @@ class RouterBugHeuristicTest : FreeSpec({
     "looksLikeBugReport requires breakage rather than a feature noun" - {
         RouterBugHeuristic.looksLikeBugReport("rtp не работает") shouldBe true
         RouterBugHeuristic.looksLikeBugReport("скорен у меня ртп молчит") shouldBe true
+        RouterBugHeuristic.looksLikeBugReport("скорен ртп жму и тишина ваще") shouldBe true
         RouterBugHeuristic.looksLikeBugReport("в меню написано скорен лох") shouldBe true
         RouterBugHeuristic.looksLikeBugReport("/ah sell съедает предмет") shouldBe true
         RouterBugHeuristic.looksLikeBugReport("vote ключ не приходит") shouldBe true
