@@ -3,6 +3,7 @@ package ru.arc.ai
 import com.velocitypowered.api.proxy.ProxyServer
 import org.slf4j.LoggerFactory
 import ru.arc.Utils
+import ru.arc.ai.llm.LogPreview
 import ru.arc.ai.routing.RoutingModule
 import ru.arc.config.ProxyConfigs
 import ru.arc.core.TickConstants
@@ -27,10 +28,10 @@ object AssistantChatBridge {
             log.info(
                 "Assistant chat post-filter skip for {} on \"{}\": reason={} raw=\"{}\" model=\"{}\"",
                 triggerPlayer,
-                triggerMessage,
+                LogPreview.of(triggerMessage, 160),
                 normalized.skipReason ?: "unknown",
-                rawReply,
-                rawModelContent ?: rawReply,
+                LogPreview.of(rawReply),
+                LogPreview.of(rawModelContent ?: rawReply),
             )
             return
         }

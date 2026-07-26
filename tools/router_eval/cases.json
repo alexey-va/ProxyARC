@@ -41,7 +41,7 @@
     "note": "шутка+баг — модель иногда видит реальный rtp"
   },
   {
-    "id": "skip_how_are_you_skorin_no_prefix",
+    "id": "skip_how_are_you_assistant_no_prefix",
     "input": {
       "player": "grocer",
       "message": "как дела скорен",
@@ -54,7 +54,7 @@
     "note": "без ! chat недоступен — иногда модель шлёт в bug"
   },
   {
-    "id": "skip_skorin_no_prefix_greeting",
+    "id": "skip_assistant_no_prefix_greeting",
     "input": {
       "player": "grocer",
       "message": "скорен ку",
@@ -65,7 +65,7 @@
     "expected": "skip"
   },
   {
-    "id": "chat_direct_skorin_prefix",
+    "id": "chat_direct_assistant_prefix",
     "input": {
       "player": "grocer",
       "message": "скорен ты тут",
@@ -85,7 +85,7 @@
     "expected": "chat"
   },
   {
-    "id": "chat_ku_skorin_prefix",
+    "id": "chat_ku_assistant_prefix",
     "input": {
       "player": "GrocerMC",
       "message": "ку скорен",
@@ -287,7 +287,7 @@
     "expected": "bug"
   },
   {
-    "id": "bug_skorin_with_open_ticket",
+    "id": "bug_assistant_with_open_ticket",
     "input": {
       "player": "GrocerMC",
       "message": "ку скорен",
@@ -299,7 +299,7 @@
     "expected": "chat"
   },
   {
-    "id": "bug_skorin_fixed_question",
+    "id": "bug_assistant_fixed_question",
     "input": {
       "player": "GrocerMC",
       "message": "скорен починили rtp?",
@@ -364,7 +364,7 @@
     "note": "vague bug report при open ticket → bug survey; агент должен PM, не пропускаю"
   },
   {
-    "id": "bug_skorin_and_bug_with_prefix",
+    "id": "bug_assistant_and_bug_with_prefix",
     "input": {
       "player": "grocer",
       "message": "скорен rtp не работает",

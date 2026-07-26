@@ -42,7 +42,7 @@ object IssueTicketFormat {
         val maxTopic = (100 - suffix.length).coerceAtLeast(20)
         topic = topic.take(maxTopic).trim()
         val withServer =
-            if (suffix.isNotEmpty() && !topicEndsWithWorld(topic, world!!)) {
+            if (world != null && suffix.isNotEmpty() && !topicEndsWithWorld(topic, world)) {
                 topic + suffix
             } else {
                 topic

@@ -3,7 +3,6 @@ package ru.arc.discord
 import net.dv8tion.jda.api.EmbedBuilder
 import net.dv8tion.jda.api.JDA
 import net.dv8tion.jda.api.JDABuilder
-import net.dv8tion.jda.api.entities.Message
 import net.dv8tion.jda.api.entities.MessageEmbed
 import net.dv8tion.jda.api.entities.channel.Channel
 import net.dv8tion.jda.api.entities.channel.concrete.ForumChannel
@@ -29,20 +28,15 @@ import ru.arc.config.Config
 import ru.arc.config.ProxyConfigs
 import java.awt.Color
 import java.time.OffsetDateTime
-import java.util.ArrayDeque
 import java.util.Arrays
-import java.util.Deque
 import java.util.concurrent.CompletableFuture
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
-import java.util.concurrent.ForkJoinPool
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
-class DiscordBot {
+class DiscordBot : AutoCloseable {
 
     private val log = LoggerFactory.getLogger(DiscordBot::class.java)
 
@@ -56,8 +50,15 @@ class DiscordBot {
     private var generalChannel: TextChannel? = null
     private var issueTicketsChannel: Channel? = null
     private val service: ScheduledExecutorService = Executors.newScheduledThreadPool(4)
-    private val deleteTasks: MutableMap<String, AtomicBoolean> = ConcurrentHashMap()
+    private val chatCleaner =
+        DiscordChatCleaner(
+            executor = service,
+            historyProvider = { channelId ->
+                (jda?.getGuildChannelById(channelId) as? TextChannel)?.iterableHistory
+            },
+        )
     private var discordListener: DiscordListener? = null
+    @Volatile
     private var isEnabled: Boolean = false
     @Volatile
     private var channelsReady: Boolean = false
@@ -79,69 +80,64 @@ class DiscordBot {
                 val token = config.string("token", "token")
                 if (token != "token") {
                     val builder = JDABuilder.createDefault(token)
+                    DiscordProxySettings.from(config).applyTo(builder)
                     builder.disableCache(CacheFlag.VOICE_STATE, CacheFlag.MEMBER_OVERRIDES)
-                    jda = builder
+                    val createdJda = builder
                         .enableIntents(Arrays.asList(*GatewayIntent.values()))
                         .build()
+                    jda = createdJda
+                    isEnabled = true
                     service.submit {
                         try {
-                            jda!!.awaitReady()
+                            createdJda.awaitReady()
                         } catch (e: InterruptedException) {
-                            throw RuntimeException(e)
+                            Thread.currentThread().interrupt()
+                            log.info("Discord bot initialization interrupted")
+                            return@submit
+                        } catch (e: RuntimeException) {
+                            if (isEnabled) {
+                                log.error("Discord bot failed while waiting for readiness", e)
+                            }
+                            return@submit
                         }
+                        if (!isEnabled || jda !== createdJda) return@submit
                         println("Discord bot is ready!")
-                        jda!!.textChannels.forEach { channel ->
+                        createdJda.textChannels.forEach { channel ->
                             println("${channel.name} ${channel.id}")
                         }
-                        jda!!.guilds.forEach { guild ->
+                        createdJda.guilds.forEach { guild ->
                             println("${guild.name} ${guild.id}")
                         }
-                        try {
-                            joinChannel = jda!!.getGuildChannelById(config.string("channels.join-messages", "none")) as TextChannel?
-                            println("Join: $joinChannel")
-                        } catch (e: Exception) {
-                            log.error("Join channel not found", e)
+                        val configuredJoinChannel =
+                            resolveTextChannel(createdJda, "channels.join-messages", "Join")
+                        val configuredPlayerListChannel =
+                            resolveTextChannel(createdJda, "channels.player-list", "Player list")
+                        val configuredAuctionChannel =
+                            resolveTextChannel(createdJda, "channels.auction", "Auction")
+                        val configuredChatChannel =
+                            resolveTextChannel(createdJda, "channels.chat", "Chat")
+                        val configuredGeneralChannel =
+                            resolveTextChannel(createdJda, "channels.general", "General")
+                        val configuredIssueTicketsChannel =
+                            resolveOptionalChannel(createdJda, "channels.issue-tickets", "Issue tickets")
+                        if (configuredChatChannel == null || configuredGeneralChannel == null) {
+                            log.error(
+                                "Discord bot is not ready: channels.chat and channels.general must reference text channels",
+                            )
+                            return@submit
                         }
-                        try {
-                            playerListChannel = jda!!.getGuildChannelById(config.string("channels.player-list", "none")) as TextChannel?
-                            println("Player list: $playerListChannel")
-                        } catch (e: Exception) {
-                            log.error("Player list channel not found", e)
-                        }
-                        try {
-                            auctionChannel = jda!!.getGuildChannelById(config.string("channels.auction", "none")) as TextChannel?
-                            println("Auction: $auctionChannel")
-                        } catch (e: Exception) {
-                            log.error("Auction channel not found", e)
-                        }
-                        try {
-                            chatChannel = jda!!.getGuildChannelById(config.string("channels.chat", "none")) as TextChannel?
-                            println("Chat: $chatChannel")
-                        } catch (e: Exception) {
-                            log.error("Chat channel not found", e)
-                        }
-                        try {
-                            generalChannel = jda!!.getGuildChannelById(config.string("channels.general", "none")) as TextChannel?
-                            println("General: $generalChannel")
-                        } catch (e: Exception) {
-                            log.error("General channel not found", e)
-                        }
-                        try {
-                            val issueId = config.string("channels.issue-tickets", "none")
-                            if (issueId != "none") {
-                                issueTicketsChannel = jda!!.getGuildChannelById(issueId)
-                                println("Issue tickets: $issueTicketsChannel")
-                            }
-                        } catch (e: Exception) {
-                            log.error("Issue tickets channel not found", e)
-                        }
-
-                        discordListener = DiscordListener(chatChannel!!, generalChannel!!)
-                        jda!!.addEventListener(discordListener)
-                        channelsReady = true
-                        ForumTicketSync.scheduleIfEnabled()
+                        val activated =
+                            activateChannels(
+                                createdJda = createdJda,
+                                configuredJoinChannel = configuredJoinChannel,
+                                configuredPlayerListChannel = configuredPlayerListChannel,
+                                configuredAuctionChannel = configuredAuctionChannel,
+                                configuredChatChannel = configuredChatChannel,
+                                configuredGeneralChannel = configuredGeneralChannel,
+                                configuredIssueTicketsChannel = configuredIssueTicketsChannel,
+                            )
+                        if (activated) ForumTicketSync.scheduleIfEnabled()
                     }
-                    isEnabled = true
                 } else {
                     println("Could not initialize discord bot")
                 }
@@ -154,7 +150,99 @@ class DiscordBot {
         instance = this
     }
 
+    private fun resolveTextChannel(jda: JDA, path: String, label: String): TextChannel? =
+        try {
+            (jda.getGuildChannelById(config.string(path, "none")) as? TextChannel).also {
+                println("$label: $it")
+            }
+        } catch (e: Exception) {
+            log.error("$label channel not found", e)
+            null
+        }
+
+    private fun resolveOptionalChannel(jda: JDA, path: String, label: String): Channel? =
+        try {
+            val id = config.string(path, "none")
+            if (id == "none") {
+                null
+            } else {
+                jda.getGuildChannelById(id).also { println("$label: $it") }
+            }
+        } catch (e: Exception) {
+            log.error("$label channel not found", e)
+            null
+        }
+
+    @Synchronized
+    private fun activateChannels(
+        createdJda: JDA,
+        configuredJoinChannel: TextChannel?,
+        configuredPlayerListChannel: TextChannel?,
+        configuredAuctionChannel: TextChannel?,
+        configuredChatChannel: TextChannel,
+        configuredGeneralChannel: TextChannel,
+        configuredIssueTicketsChannel: Channel?,
+    ): Boolean {
+        if (!isEnabled || jda !== createdJda) return false
+        joinChannel = configuredJoinChannel
+        playerListChannel = configuredPlayerListChannel
+        auctionChannel = configuredAuctionChannel
+        chatChannel = configuredChatChannel
+        generalChannel = configuredGeneralChannel
+        issueTicketsChannel = configuredIssueTicketsChannel
+        DiscordListener(configuredChatChannel, configuredGeneralChannel).also { listener ->
+            discordListener = listener
+            createdJda.addEventListener(listener)
+        }
+        channelsReady = true
+        return true
+    }
+
     fun scheduler(): ScheduledExecutorService = service
+
+    private fun requestForumSync() {
+        if (service.isShutdown) return
+        runCatching {
+            service.execute {
+                syncForumTickets().whenComplete { _, error ->
+                    if (error != null) {
+                        log.warn("Forum ticket sync failed", error)
+                    }
+                }
+            }
+        }.onFailure {
+            if (!service.isShutdown) {
+                log.warn("Failed to schedule forum ticket sync", it)
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        if (!isEnabled && service.isShutdown) return
+
+        isEnabled = false
+        channelsReady = false
+        ForumTicketSync.stop()
+        cancelPendingPlayerListRetries()
+        chatCleaner.close()
+
+        discordListener?.let { listener ->
+            runCatching { jda?.removeEventListener(listener) }
+        }
+        discordListener = null
+        runCatching { jda?.shutdownNow() }
+            .onFailure { log.warn("Failed to stop Discord JDA cleanly", it) }
+        jda = null
+        joinChannel = null
+        playerListChannel = null
+        auctionChannel = null
+        chatChannel = null
+        generalChannel = null
+        issueTicketsChannel = null
+        service.shutdownNow()
+        if (instance === this) instance = null
+    }
 
     fun syncForumTickets(): CompletableFuture<Int> {
         if (!isReady()) {
@@ -242,13 +330,23 @@ class DiscordBot {
         }
 
         val embed: MessageEmbed = embedBuilder.setTimestamp(OffsetDateTime.now()).build()
-        val messageHistory: List<Message> = auctionChannel!!.history.retrievePast(1).complete()
-
-        val latestId = auctionChannel!!.latestMessageId
-        if (messageHistory.isEmpty() || messageHistory[0].id != latestId) {
-            auctionChannel!!.sendMessageEmbeds(embed).queue()
+        val channel = auctionChannel ?: return
+        val latestId = channel.latestMessageId
+        if (latestId == "0") {
+            channel.sendMessageEmbeds(embed).queue(
+                {},
+                { error -> log.warn("Failed to publish auction list", error) },
+            )
         } else {
-            auctionChannel!!.editMessageEmbedsById(latestId, embed).queue()
+            channel.editMessageEmbedsById(latestId, embed).queue(
+                {},
+                {
+                    channel.sendMessageEmbeds(embed).queue(
+                        {},
+                        { error -> log.warn("Failed to publish auction list", error) },
+                    )
+                },
+            )
         }
     }
 
@@ -264,39 +362,11 @@ class DiscordBot {
 
     fun clearChat(id: String) {
         if (!isEnabled) return
-        if (deleteTasks.containsKey(id)) {
-            deleteTasks[id]!!.set(false)
-        }
-        deleteTasks[id] = AtomicBoolean(true)
-        ForkJoinPool.commonPool().submit {
-            val channel: Channel? = jda!!.getGuildChannelById(id)
-            if (channel is TextChannel) {
-                val deque: Deque<Message> = ArrayDeque()
-                for (message in channel.iterableHistory) {
-                    if (!deleteTasks.containsKey(id) || !deleteTasks[id]!!.get()) {
-                        println("Interrupted clear chat task")
-                        return@submit
-                    }
-                    deque.add(message)
-                    if (deque.size >= 5) {
-                        deque.pollFirst().delete().queue()
-                        try {
-                            Thread.sleep(5000)
-                        } catch (e: InterruptedException) {
-                            println("Interrupted clear chat task")
-                            throw RuntimeException(e)
-                        }
-                    }
-                }
-            }
-        }
+        chatCleaner.start(id)
     }
 
     fun stopClearTask(id: String) {
-        if (deleteTasks.containsKey(id)) {
-            println("Stopping clear task for $id")
-            deleteTasks[id]!!.set(false)
-        }
+        chatCleaner.stop(id)
     }
 
     fun refreshPlayerListFromProxy() {
@@ -387,14 +457,22 @@ class DiscordBot {
         val delayMs = playerListRetryDelayMs(error, attempt)
         log.debug("Player list update retry in {}ms (attempt {})", delayMs, attempt + 2)
         val generation = playerListRetryGeneration.get()
-        playerListRetryFuture = service.schedule(
-            {
-                if (generation != playerListRetryGeneration.get()) return@schedule
-                retryPlayerListPublish(signature, attempt + 1)
-            },
-            delayMs,
-            TimeUnit.MILLISECONDS,
-        )
+        playerListRetryFuture =
+            runCatching {
+                service.schedule(
+                    {
+                        if (generation != playerListRetryGeneration.get()) return@schedule
+                        retryPlayerListPublish(signature, attempt + 1)
+                    },
+                    delayMs,
+                    TimeUnit.MILLISECONDS,
+                )
+            }.getOrElse {
+                if (!service.isShutdown) {
+                    log.warn("Failed to schedule player list retry", it)
+                }
+                null
+            }
     }
 
     private fun recordPlayerListRateLimit(error: Throwable) {
@@ -415,16 +493,21 @@ class DiscordBot {
 
     fun sendChatMessage(message: String) {
         if (!isEnabled) return
-        if (chatChannel == null) {
+        val channel = chatChannel
+        if (channel == null) {
             println("Chat channel is null! Skipping")
             return
         }
-        chatChannel!!.sendMessage(message).queue()
+        channel.sendMessage(message).queue(
+            {},
+            { error -> log.warn("Failed to send Discord chat message", error) },
+        )
     }
 
     fun sendJoinEmbed(playerName: String, joinType: JoinType, override: String?) {
         if (!isEnabled) return
-        if (joinChannel == null) {
+        val channel = joinChannel
+        if (channel == null) {
             println("Join channel is null! Skipping")
             return
         }
@@ -441,16 +524,23 @@ class DiscordBot {
             .setAuthor(coloredTitle.title, url, icon)
             .setTimestamp(OffsetDateTime.now())
             .build()
-        joinChannel!!.sendMessageEmbeds(embed).queue()
+        channel.sendMessageEmbeds(embed).queue(
+            {},
+            { error -> log.warn("Failed to send Discord join message", error) },
+        )
     }
 
     fun sendGeneralMessage(message: String) {
         if (!isEnabled) return
-        if (generalChannel == null) {
+        val channel = generalChannel
+        if (channel == null) {
             println("General channel is null! Skipping")
             return
         }
-        generalChannel!!.sendMessage(message).queue()
+        channel.sendMessage(message).queue(
+            {},
+            { error -> log.warn("Failed to send Discord general message", error) },
+        )
     }
 
     fun createIssueTicket(
@@ -521,7 +611,7 @@ class DiscordBot {
                             summary = description.take(300),
                             server = context.displayServer,
                         )
-                        service.submit { syncForumTickets() }
+                        requestForumSync()
                         future.complete(
                             mapOf(
                                 "status" to "created",
@@ -550,7 +640,7 @@ class DiscordBot {
                             summary = description.take(300),
                             server = context.displayServer,
                         )
-                        service.submit { syncForumTickets() }
+                        requestForumSync()
                         future.complete(
                             mapOf(
                                 "status" to "created",
@@ -674,7 +764,7 @@ class DiscordBot {
                                 summary = updatedSummary ?: ticket.summary,
                             )
                         IssueTicketStore.save(updated)
-                        service.submit { syncForumTickets() }
+                        requestForumSync()
                         val result =
                             mapOf(
                                 "status" to "updated",
@@ -842,7 +932,6 @@ class DiscordBot {
             heartbeatMs: Long = PLAYER_LIST_HEARTBEAT_MS,
         ): Boolean {
             if (signature != lastPublished) return true
-            if (lastPublished == null) return true
             return nowMs - lastSuccessfulAtMs >= heartbeatMs
         }
     }

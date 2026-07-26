@@ -4,31 +4,43 @@ import org.slf4j.LoggerFactory
 import org.telegram.telegrambots.bots.TelegramLongPollingBot
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage
 import org.telegram.telegrambots.meta.api.objects.Update
+import ru.arc.core.TaskScheduler
+import ru.arc.core.Tasks
 import ru.arc.velocity.Velocity
 import ru.arc.Utils.mm
 import ru.arc.Utils.plain
 import ru.arc.config.Config
 import ru.arc.config.ProxyConfigs
 import ru.arc.discord.DiscordBot
+import java.util.concurrent.atomic.AtomicBoolean
 
-class TelegramBot : TelegramLongPollingBot(config.string("token", "none")) {
+open class TelegramBot(
+    token: String = config.string("token", "none"),
+    private val scheduler: TaskScheduler = Tasks.scheduler,
+    requestExecutor: ((SendMessage) -> Unit)? = null,
+) : TelegramLongPollingBot(token),
+    AutoCloseable {
+    private val closed = AtomicBoolean(false)
+    private val requestExecutor: (SendMessage) -> Unit = requestExecutor ?: { execute(it) }
+
     override fun onUpdateReceived(update: Update) {
         log.info("onUpdateReceived {}", update)
-        if (update.message.from.isBot) return
-        if (update.message == null) return
-        if (update.message.chatId == null) return
+        val incoming = update.message ?: return
+        val author = incoming.from ?: return
+        if (author.isBot) return
+        val text = incoming.text ?: return
 
         log.info(
             "Telegram message: {} in {} (TID: {})",
-            update.message.text,
-            update.message.chatId,
-            update.message.messageThreadId,
+            text,
+            incoming.chatId,
+            incoming.messageThreadId,
         )
 
-        val threadId = update.message.messageThreadId
-        val sender = update.message.from.userName
-        var message = update.message.text
-        val chatId = update.message.chatId
+        val threadId = incoming.messageThreadId
+        val sender = author.userName ?: author.firstName
+        var message = text
+        val chatId = incoming.chatId
 
         if (chatId != config.longValue("chat-id", 0)) return
         if (threadId != null && threadId == config.integer("topics.chat", 0)) {
@@ -62,11 +74,7 @@ class TelegramBot : TelegramLongPollingBot(config.string("token", "none")) {
         sendMessage.chatId = config.longValue("chat-id", 0).toString()
         sendMessage.text = message
         sendMessage.messageThreadId = config.integer("topics.chat", 0)
-        try {
-            execute(sendMessage)
-        } catch (e: Exception) {
-            log.error("Failed to send message to telegram", e)
-        }
+        enqueue(sendMessage)
     }
 
     fun sendGeneralMessage(message: String) {
@@ -74,11 +82,7 @@ class TelegramBot : TelegramLongPollingBot(config.string("token", "none")) {
         sendMessage.chatId = config.longValue("chat-id", 0).toString()
         sendMessage.text = message
         sendMessage.messageThreadId = config.integer("topics.general", -1)
-        try {
-            execute(sendMessage)
-        } catch (e: Exception) {
-            log.error("Failed to send message to telegram", e)
-        }
+        enqueue(sendMessage)
     }
 
     override fun getBotUsername(): String = "RusCrafting"
@@ -101,6 +105,22 @@ class TelegramBot : TelegramLongPollingBot(config.string("token", "none")) {
                 sendChatMessage(plain(message.replace("%player_name%", username)))
             }
         }
+    }
+
+    internal fun enqueue(message: SendMessage) {
+        if (closed.get()) return
+        scheduler.runAsync {
+            if (closed.get()) return@runAsync
+            try {
+                requestExecutor(message)
+            } catch (e: Exception) {
+                log.error("Failed to send message to Telegram", e)
+            }
+        }
+    }
+
+    override fun close() {
+        closed.set(true)
     }
 
     companion object {

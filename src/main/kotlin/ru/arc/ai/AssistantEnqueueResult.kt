@@ -1,5 +1,7 @@
 package ru.arc.ai
 
+import ru.arc.ai.llm.LogPreview
+
 /**
  * Result of a chat assistant enqueue / LLM call.
  * Always carries [skipReason] when [reply] is null.
@@ -22,8 +24,8 @@ data class AssistantEnqueueResult(
                 "Assistant [{}] reply to {}: raw=\"{}\" delivered=\"{}\"",
                 tag,
                 triggerPlayer ?: "?",
-                rawModelContent ?: reply,
-                reply,
+                LogPreview.of(rawModelContent ?: reply),
+                LogPreview.of(reply),
             )
             return
         }
@@ -31,11 +33,11 @@ data class AssistantEnqueueResult(
             "Assistant [{}] skip for {} on \"{}\": reason={} ({}) raw=\"{}\"{}",
             tag,
             triggerPlayer ?: "?",
-            triggerMessage,
+            LogPreview.of(triggerMessage, 160),
             skipReason?.code ?: "unknown",
             skipReason?.description ?: "unknown",
-            rawModelContent,
-            detail?.let { " detail=$it" }.orEmpty(),
+            LogPreview.of(rawModelContent),
+            detail?.let { " detail=${LogPreview.of(it, 160)}" }.orEmpty(),
         )
     }
 

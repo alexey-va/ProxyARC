@@ -30,6 +30,7 @@ class BugSurveyAgentDispatch {
             triggerMessage = message,
             mode = AssistantRunMode.BUG_SURVEY,
             triggerServer = context.message.server,
+            source = context.message.source.wireName(),
         )
     }
 }

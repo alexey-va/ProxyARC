@@ -53,11 +53,12 @@ class MessagePipeline(
                 RouteIntent.BUG -> Velocity.bugSurveyAssistant
                 RouteIntent.SKIP -> null
             } ?: return "no_active_agent"
-        val future = assistant.currentRequest ?: return "no_active_agent"
-        if (future.isDone) return "completed:0"
         return try {
-            future.get(timeoutSec, TimeUnit.SECONDS)
-            "completed:1"
+            when (assistant.awaitCurrentRequest(timeoutSec)) {
+                null -> "no_active_agent"
+                false -> "completed:0"
+                true -> "completed:1"
+            }
         } catch (e: Exception) {
             "timeout:${e.message?.take(40)}"
         }

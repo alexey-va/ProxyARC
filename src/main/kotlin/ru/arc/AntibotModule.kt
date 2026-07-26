@@ -10,7 +10,7 @@ object AntibotModule : PluginModule {
     override val priority = 80
 
     override fun init() {
-        val folder = Velocity.dataFolder!!
+        val folder = Velocity.requireDataFolder()
         val firstJoin = Velocity.firstJoinData ?: return
         Velocity.antibot = Antibot(folder, firstJoin)
     }

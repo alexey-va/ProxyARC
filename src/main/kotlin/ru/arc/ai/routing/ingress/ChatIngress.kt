@@ -41,7 +41,7 @@ object ChatIngress {
 
     /**
      * Test/dev entry: run full router pipeline without in-game chat event.
-     * Used by ProxyARC ops HTTP (`POST /ops/skorin/simulate`).
+     * Used by ProxyARC ops HTTP (`POST /ops/assistant/simulate`).
      */
     fun simulateGameChat(
         player: String,
@@ -52,21 +52,21 @@ object ChatIngress {
         continuationWithBot: Boolean = false,
         waitSeconds: Int = 45,
         previewOnly: Boolean = false,
-    ): SkorinSimulateResult {
+    ): AssistantSimulateResult {
         val pipeline = RoutingModule.pipeline
-            ?: return SkorinSimulateResult.error(player, message, "pipeline not ready")
+            ?: return AssistantSimulateResult.error(player, message, "pipeline not ready")
 
         RoutingModule.sweepSurveyTimeouts()
 
         val trimmed = message.trim()
         if (trimmed.isEmpty()) {
-            return SkorinSimulateResult.error(player, message, "message is blank")
+            return AssistantSimulateResult.error(player, message, "message is blank")
         }
 
         val raw = rawText?.trim()?.takeIf { it.isNotEmpty() } ?: trimmed
         val displayText = if (raw.startsWith("!")) raw.substring(1) else raw
         if (displayText.isBlank()) {
-            return SkorinSimulateResult.error(player, message, "display text is blank")
+            return AssistantSimulateResult.error(player, message, "display text is blank")
         }
 
         val inbound =
@@ -76,7 +76,7 @@ object ChatIngress {
                 displayText = displayText,
                 timestampMs = System.currentTimeMillis(),
                 server = server?.trim()?.takeIf { it.isNotEmpty() },
-                source = InboundMessage.Source.GAME,
+                source = InboundMessage.Source.SIMULATION,
             )
         val meta =
             MetaBuilder.buildSimulation(
@@ -92,7 +92,7 @@ object ChatIngress {
         if (previewOnly) {
             val decision = pipeline.preview(PipelineContext(message = inbound, meta = meta))
             return if (decision == null) {
-                SkorinSimulateResult(
+                AssistantSimulateResult(
                     player = player,
                     message = displayText,
                     intent = "llm_required",
@@ -102,7 +102,7 @@ object ChatIngress {
                     agentWait = "preview:not_dispatched",
                 )
             } else {
-                SkorinSimulateResult(
+                AssistantSimulateResult(
                     player = player,
                     message = displayText,
                     intent = decision.intent.wireName(),
@@ -121,15 +121,15 @@ object ChatIngress {
                     waitSeconds.toLong().coerceIn(5L, 90L),
                 )
             } catch (e: Exception) {
-                return SkorinSimulateResult.error(player, message, "pipeline: ${e.message}")
+                return AssistantSimulateResult.error(player, message, "pipeline: ${e.message}")
             }
 
         val decision = routed.decision
-            ?: return SkorinSimulateResult.error(player, message, "no route decision")
+            ?: return AssistantSimulateResult.error(player, message, "no route decision")
 
         val agentWaitSec = (waitSeconds.toLong() * 2).coerceIn(15L, 120L)
         val agentWait = pipeline.awaitAgents(decision.intent, agentWaitSec)
-        return SkorinSimulateResult(
+        return AssistantSimulateResult(
             player = player,
             message = displayText,
             intent = decision.intent.wireName(),

@@ -11,6 +11,7 @@ import ru.arc.ai.Defaults.DEFAULT_SYSTEM
 import ru.arc.ai.memory.AssistantHistoryCompactor
 import ru.arc.ai.memory.AssistantMemoryStore
 import ru.arc.ai.llm.LlmRequestLogger
+import ru.arc.ai.llm.LogPreview
 import ru.arc.ai.llm.OpenRouterLlmClient
 import ru.arc.ai.routing.router.RouterBugHeuristic
 import ru.arc.ai.routing.survey.BugSurveyLifecycle
@@ -26,17 +27,32 @@ import ru.arc.config.Config
 import ru.arc.velocity.Velocity
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.ArrayDeque
 import java.util.Date
 import java.util.Deque
+import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentLinkedDeque
+import java.util.concurrent.Executor
+import java.util.concurrent.ForkJoinPool
+import java.util.concurrent.TimeUnit
 
-class Assistant(
+class Assistant internal constructor(
     private val config: Config,
     private val type: String,
     private val llmClient: OpenRouterLlmClient,
-    val memoryStore: AssistantMemoryStore = AssistantMemoryStore(null),
-) {
+    val memoryStore: AssistantMemoryStore,
+    private val requestExecutor: Executor,
+    private val requestLauncher: AssistantRequestLauncher?,
+) : AutoCloseable {
+    constructor(
+        config: Config,
+        type: String,
+        llmClient: OpenRouterLlmClient,
+        memoryStore: AssistantMemoryStore = AssistantMemoryStore(null),
+        requestExecutor: Executor = ForkJoinPool.commonPool(),
+    ) : this(config, type, llmClient, memoryStore, requestExecutor, null)
+
     private val log = LoggerFactory.getLogger(Assistant::class.java)
 
     private var prompt: String = DEFAULT_SYSTEM
@@ -45,7 +61,8 @@ class Assistant(
     private val history: Deque<ChatCompletionMessageParam> = ConcurrentLinkedDeque()
     private val historyLabels: Deque<String> = ConcurrentLinkedDeque()
     private val chatObservations: Deque<String> = ConcurrentLinkedDeque()
-    var currentRequest: CompletableFuture<AssistantEnqueueResult>? = null
+    private var currentRequest: CompletableFuture<AssistantEnqueueResult>? = null
+    private var currentJob: EnqueueJob? = null
     var lastTriggerPlayer: String? = null
         private set
     var lastTriggerMessage: String? = null
@@ -58,12 +75,16 @@ class Assistant(
         val triggerMessage: String?,
         val mode: AssistantRunMode,
         val triggerServer: String?,
+        val source: String,
+        val requestId: String = UUID.randomUUID().toString(),
         val enqueuedAtMs: Long = System.currentTimeMillis(),
         val result: CompletableFuture<AssistantEnqueueResult> = CompletableFuture(),
     )
 
-    private val pendingJobs = ConcurrentLinkedDeque<EnqueueJob>()
+    private val pendingJobs = ArrayDeque<EnqueueJob>()
     private val processLock = Any()
+    @Volatile
+    private var closed = false
 
     private val client: OpenAIClient?
         get() = llmClient.client
@@ -71,20 +92,47 @@ class Assistant(
     init {
         loadPrompt()
         loadBugPrompt()
-        assistants.add(this)
     }
 
     fun reload() {
+        resetRequests("reloaded")
         loadPrompt()
         loadBugPrompt()
         history.clear()
         historyLabels.clear()
         TicketDialogStore.clearAll()
         chatObservations.clear()
-        currentRequest = null
-        pendingJobs.clear()
         PlayerPmCooldown.clear()
         leftConversationUntil = 0
+    }
+
+    override fun close() {
+        synchronized(processLock) {
+            if (closed) return
+            closed = true
+        }
+        resetRequests("closed")
+        history.clear()
+        historyLabels.clear()
+        chatObservations.clear()
+    }
+
+    private fun resetRequests(detail: String) {
+        val request: CompletableFuture<AssistantEnqueueResult>?
+        val jobs = mutableListOf<EnqueueJob>()
+        synchronized(processLock) {
+            request = currentRequest
+            currentRequest = null
+            currentJob?.let(jobs::add)
+            currentJob = null
+            while (true) {
+                jobs.add(pendingJobs.pollFirst() ?: break)
+            }
+        }
+        request?.cancel(true)
+        jobs.distinct().forEach { job ->
+            completeQueuedSkip(job, detail)
+        }
     }
 
     fun snapshotChatObservations(maxLines: Int = 10): String {
@@ -94,6 +142,21 @@ class Assistant(
     }
 
     fun observationLines(): List<String> = chatObservations.toList()
+
+    internal fun awaitCurrentRequest(timeoutSec: Long): Boolean? {
+        val request =
+            synchronized(processLock) {
+                currentRequest
+            } ?: return null
+        if (request.isDone) return false
+        request.get(timeoutSec, TimeUnit.SECONDS)
+        return true
+    }
+
+    private fun isCurrentRequest(requestId: String): Boolean =
+        synchronized(processLock) {
+            currentJob?.requestId == requestId
+        }
 
     fun recordTicketDialog(line: String) {
         val player = lastTriggerPlayer?.trim().orEmpty()
@@ -239,23 +302,33 @@ class Assistant(
         triggerMessage: String? = null,
         mode: AssistantRunMode = AssistantRunMode.CHAT,
         triggerServer: String? = null,
+        source: String = "unknown",
     ): CompletableFuture<AssistantEnqueueResult> {
-        if (!isModeEnabled(mode)) {
-            return completedSkip(SkipReason.DISABLED, triggerPlayer, triggerMessage)
+        if (closed) {
+            return completedSkip(
+                SkipReason.DISABLED,
+                triggerPlayer,
+                triggerMessage,
+                mode,
+                source,
+                detail = "assistant_closed",
+            )
         }
-        if (!llmClient.enabled || client == null) {
-            return completedSkip(SkipReason.LLM_NOT_READY, triggerPlayer, triggerMessage)
+        if (!isModeEnabled(mode)) {
+            return completedSkip(SkipReason.DISABLED, triggerPlayer, triggerMessage, mode, source)
+        }
+        if (requestLauncher == null && (!llmClient.enabled || client == null)) {
+            return completedSkip(SkipReason.LLM_NOT_READY, triggerPlayer, triggerMessage, mode, source)
         }
         if (System.currentTimeMillis() < leftConversationUntil) {
             return completedSkip(
                 SkipReason.AWAY,
                 triggerPlayer,
                 triggerMessage,
+                mode,
+                source,
                 detail = "until ${Date(leftConversationUntil)}",
             )
-        }
-        if (currentRequest != null && currentRequest!!.isDone) {
-            currentRequest = null
         }
         val job =
             EnqueueJob(
@@ -263,9 +336,21 @@ class Assistant(
                 triggerMessage = triggerMessage,
                 mode = mode,
                 triggerServer = triggerServer?.trim()?.takeIf { it.isNotEmpty() },
+                source = normalizeSource(source),
             )
         synchronized(processLock) {
-            if (currentRequest != null && !currentRequest!!.isDone) {
+            if (closed) {
+                return completedSkip(
+                    SkipReason.DISABLED,
+                    triggerPlayer,
+                    triggerMessage,
+                    mode,
+                    job.source,
+                    detail = "assistant_closed",
+                    requestId = job.requestId,
+                )
+            }
+            if (currentRequest != null) {
                 supersedePendingChatJobs(job)
                 val section = mode.configSection()
                 val defaultMaxPending = if (mode == AssistantRunMode.CHAT) 2 else 4
@@ -276,13 +361,16 @@ class Assistant(
                         type,
                         maxPending,
                         triggerPlayer ?: "?",
-                        triggerMessage,
+                        LogPreview.of(triggerMessage, 160),
                     )
                     return completedSkip(
                         SkipReason.BUSY,
                         triggerPlayer,
                         triggerMessage,
+                        mode,
+                        job.source,
                         detail = "queue_full",
+                        requestId = job.requestId,
                     )
                 }
                 pendingJobs.addLast(job)
@@ -290,7 +378,7 @@ class Assistant(
                     "Assistant [{}] queued for {} on \"{}\": pending={}",
                     type,
                     triggerPlayer ?: "?",
-                    triggerMessage,
+                    LogPreview.of(triggerMessage, 160),
                     pendingJobs.size,
                 )
                 return job.result
@@ -302,9 +390,37 @@ class Assistant(
 
     private fun launchJob(job: EnqueueJob) {
         prepareJobTrigger(job)
-        currentRequest = sendRequest(0, job.triggerPlayer, job.triggerMessage, job.mode, ToolChainState())
-        currentRequest!!.whenComplete { result, error ->
+        val queueWaitMs = (System.currentTimeMillis() - job.enqueuedAtMs).coerceAtLeast(0)
+        currentJob = job
+        val request =
+            try {
+                requestLauncher?.launch(job.triggerPlayer, job.triggerMessage, job.mode)
+                    ?: sendRequest(
+                        depth = 0,
+                        triggerPlayer = job.triggerPlayer,
+                        triggerMessage = job.triggerMessage,
+                        mode = job.mode,
+                        chainState = ToolChainState(),
+                        requestId = job.requestId,
+                        source = job.source,
+                        queueWaitMs = queueWaitMs,
+                    )
+            } catch (e: Exception) {
+                CompletableFuture.completedFuture(
+                    AssistantEnqueueResult.skip(
+                        reason = SkipReason.LLM_ERROR,
+                        triggerPlayer = job.triggerPlayer,
+                        triggerMessage = job.triggerMessage,
+                        detail = e.message,
+                    ),
+                )
+            }
+        currentRequest = request
+        request.whenComplete { result, error ->
             synchronized(processLock) {
+                if (currentRequest !== request || currentJob !== job) {
+                    return@synchronized
+                }
                 val final =
                     when {
                         error != null ->
@@ -323,8 +439,10 @@ class Assistant(
                                 detail = "null_result",
                             )
                     }
+                logOutcome(job.requestId, job.mode, job.source, job.triggerPlayer, final, queueWaitMs)
                 job.result.complete(final)
                 currentRequest = null
+                currentJob = null
                 launchNextPending()
             }
         }
@@ -383,6 +501,14 @@ class Assistant(
                 detail = detail,
             )
         result.logSummary(log, type, job.mode)
+        logOutcome(
+            requestId = job.requestId,
+            mode = job.mode,
+            source = job.source,
+            player = job.triggerPlayer,
+            result = result,
+            queueWaitMs = (System.currentTimeMillis() - job.enqueuedAtMs).coerceAtLeast(0),
+        )
         job.result.complete(result)
     }
 
@@ -428,8 +554,11 @@ class Assistant(
         reason: SkipReason,
         triggerPlayer: String?,
         triggerMessage: String?,
+        mode: AssistantRunMode,
+        source: String,
         raw: String? = null,
         detail: String? = null,
+        requestId: String = UUID.randomUUID().toString(),
     ): CompletableFuture<AssistantEnqueueResult> {
         val result =
             AssistantEnqueueResult.skip(
@@ -439,8 +568,33 @@ class Assistant(
                 triggerMessage = triggerMessage,
                 detail = detail,
             )
-        result.logSummary(log, type)
+        result.logSummary(log, type, mode)
+        logOutcome(requestId, mode, normalizeSource(source), triggerPlayer, result, 0)
         return CompletableFuture.completedFuture(result)
+    }
+
+    private fun normalizeSource(source: String): String =
+        source.trim().lowercase().takeIf { it.matches(Regex("[a-z0-9_-]{1,24}")) } ?: "unknown"
+
+    private fun logOutcome(
+        requestId: String,
+        mode: AssistantRunMode,
+        source: String,
+        player: String?,
+        result: AssistantEnqueueResult,
+        queueWaitMs: Long,
+    ) {
+        log.info(
+            "Assistant outcome requestId={} agent={} mode={} source={} player={} outcome={} skipReason={} queueWaitMs={}",
+            requestId,
+            type,
+            mode.name.lowercase(),
+            source,
+            player ?: "?",
+            if (result.hasReply) "reply" else "skip",
+            result.skipReason?.code ?: "none",
+            queueWaitMs,
+        )
     }
 
     private fun sendRequest(
@@ -449,6 +603,9 @@ class Assistant(
         triggerMessage: String?,
         mode: AssistantRunMode,
         chainState: ToolChainState,
+        requestId: String,
+        source: String,
+        queueWaitMs: Long,
         toolsInChain: Boolean = false,
     ): CompletableFuture<AssistantEnqueueResult> {
         val runModel = model(mode)
@@ -488,37 +645,51 @@ class Assistant(
         }
         val params =
             builder
-                .maxTokens(maxTokens(mode))
+                .maxCompletionTokens(maxTokens(mode))
                 .build()
 
         val contextLayers = countContextLayers(mode, triggerPlayer, triggerMessage)
         LlmRequestLogger.logAssistantRequestStart(
             log = log,
+            requestId = requestId,
             agent = type,
             mode = mode.name.lowercase(),
+            source = source,
             depth = depth,
             player = triggerPlayer,
             triggerMessage = triggerMessage,
+            queueWaitMs = if (depth == 0) queueWaitMs else 0,
             contextLayers = contextLayers,
             historyMessages = history.size,
             toolSchemas = toolClasses.size,
             model = runModel,
         )
 
-        return CompletableFuture.supplyAsync {
+        return CompletableFuture.supplyAsync({
             try {
                 val startedNs = System.nanoTime()
-                val response = client!!.chat().completions().create(params)
+                val activeClient = checkNotNull(client) { "LLM client became unavailable" }
+                val response = activeClient.chat().completions().create(params)
                 val latencyMs = (System.nanoTime() - startedNs) / 1_000_000
                 val choice = response.choices().first()
                 val message = choice.message()
                 val content = message.content().orElse("")
                 val toolCalls = message.toolCalls().orElse(emptyList())
-                val finishReason = choice.finishReason()?.toString()?.lowercase().orEmpty()
+                val finishReason = choice.finishReason().toString().lowercase()
+                if (!isCurrentRequest(requestId)) {
+                    return@supplyAsync AssistantEnqueueResult.skip(
+                        reason = SkipReason.BUSY,
+                        triggerPlayer = triggerPlayer,
+                        triggerMessage = triggerMessage,
+                        detail = "stale_request",
+                    )
+                }
                 LlmRequestLogger.logAssistantRequestComplete(
                     log = log,
+                    requestId = requestId,
                     agent = type,
                     mode = mode.name.lowercase(),
+                    source = source,
                     depth = depth,
                     player = triggerPlayer,
                     model = runModel,
@@ -532,14 +703,22 @@ class Assistant(
                         mode.name.lowercase(),
                         runModel,
                         triggerPlayer ?: "?",
-                        choice.finishReason()?.toString() ?: "null",
+                        choice.finishReason().toString(),
                     )
                 }
                 history.addLast(ChatCompletionMessageParam.ofAssistant(message.toParam()))
                 historyLabels.addLast("бот: ${message.content().orElse("")}")
                 val toolsThisRound = toolCalls.isNotEmpty()
                 val toolsInChainTotal = toolsInChain || toolsThisRound
-                toolCalls.forEach { toolCall ->
+                for (toolCall in toolCalls) {
+                    if (!isCurrentRequest(requestId)) {
+                        return@supplyAsync AssistantEnqueueResult.skip(
+                            reason = SkipReason.BUSY,
+                            triggerPlayer = triggerPlayer,
+                            triggerMessage = triggerMessage,
+                            detail = "stale_request",
+                        )
+                    }
                     val result = executeTool(toolCall, mode, chainState)
                     history.addLast(
                         ChatCompletionMessageParam.ofTool(
@@ -573,6 +752,9 @@ class Assistant(
                             triggerMessage,
                             mode,
                             chainState,
+                            requestId,
+                            source,
+                            queueWaitMs,
                             toolsInChainTotal,
                         ).join()
                     }
@@ -586,14 +768,23 @@ class Assistant(
                     mode = mode,
                     chainState = chainState,
                     finishReason = finishReason,
+                    requestId = requestId,
+                    source = source,
+                    queueWaitMs = queueWaitMs,
                 )
             } catch (e: Exception) {
                 log.error(
-                    "Assistant [{}] LLM error for {} on \"{}\": {}",
+                    "LLM error requestId={} agent={} mode={} source={} depth={} player={} model={} outcome=error errorType={} message={} trigger=\"{}\"",
+                    requestId,
                     type,
+                    mode.name.lowercase(),
+                    source,
+                    depth,
                     triggerPlayer ?: "?",
-                    triggerMessage,
-                    e.message,
+                    runModel,
+                    e.javaClass.simpleName,
+                    LogPreview.of(e.message, 160),
+                    LogPreview.of(triggerMessage, 160),
                     e,
                 )
                 recoverBugAgentFailure(
@@ -609,7 +800,7 @@ class Assistant(
                     detail = e.message,
                 ).also { it.logSummary(log, type, mode) }
             }
-        }
+        }, requestExecutor)
     }
 
     private fun recoverBugAgentFailure(
@@ -660,6 +851,9 @@ class Assistant(
         mode: AssistantRunMode,
         chainState: ToolChainState,
         finishReason: String = "",
+        requestId: String,
+        source: String,
+        queueWaitMs: Long,
     ): AssistantEnqueueResult {
         if (
             BugSurveyLifecycle.shouldResolveWithoutTools(
@@ -704,7 +898,17 @@ class Assistant(
                         .build(),
                 ),
             )
-            return sendRequest(depth + 1, triggerPlayer, triggerMessage, mode, chainState, false).join()
+            return sendRequest(
+                depth + 1,
+                triggerPlayer,
+                triggerMessage,
+                mode,
+                chainState,
+                requestId,
+                source,
+                queueWaitMs,
+                false,
+            ).join()
         }
         if (shouldNudgeBugAgent(result, mode, toolsInChainTotal, depth, triggerMessage)) {
             log.info(
@@ -724,7 +928,17 @@ class Assistant(
                         .build(),
                 ),
             )
-            return sendRequest(depth + 1, triggerPlayer, triggerMessage, mode, chainState, false).join()
+            return sendRequest(
+                depth + 1,
+                triggerPlayer,
+                triggerMessage,
+                mode,
+                chainState,
+                requestId,
+                source,
+                queueWaitMs,
+                false,
+            ).join()
         }
         if (shouldSurveyDetailFallback(result, mode, toolsInChainTotal, triggerPlayer, triggerMessage)) {
             return bugSurveyDetailFallback(triggerPlayer, triggerMessage, mode)
@@ -1259,8 +1473,12 @@ class Assistant(
         }
     }
 
-    companion object {
-        @JvmField
-        val assistants: MutableList<Assistant> = ArrayList()
-    }
+}
+
+internal fun interface AssistantRequestLauncher {
+    fun launch(
+        triggerPlayer: String?,
+        triggerMessage: String?,
+        mode: AssistantRunMode,
+    ): CompletableFuture<AssistantEnqueueResult>
 }

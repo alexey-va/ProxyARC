@@ -11,28 +11,42 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
-class ProxyOpsHttpServer {
+class ProxyOpsHttpServer(
+    private val executorFactory: () -> ExecutorService = {
+        Executors.newFixedThreadPool(2) { runnable ->
+            Thread(runnable, "proxyarc-ops-http").apply { isDaemon = true }
+        }
+    },
+    private val configProvider: () -> ProxyOpsHttpConfig = ProxyOpsHttpConfig::current,
+) {
     private val log = LoggerFactory.getLogger(ProxyOpsHttpServer::class.java)
     private val mapper = ObjectMapper()
     private var httpServer: HttpServer? = null
+    private var executor: ExecutorService? = null
 
     val actualPort: Int
-        get() = httpServer?.address?.port ?: ProxyOpsHttpConfig.current().bindPort
+        get() = httpServer?.address?.port ?: configProvider().bindPort
 
     fun start() {
         stop()
-        val cfg = ProxyOpsHttpConfig.current()
+        val cfg = configProvider()
         if (!cfg.enabled) return
 
         val server = HttpServer.create(InetSocketAddress(cfg.bindHost, cfg.bindPort), 0)
         server.createContext("/ops") { exchange -> handle(exchange) }
-        server.executor =
-            Executors.newFixedThreadPool(2) { r ->
-                Thread(r, "proxyarc-ops-http").apply { isDaemon = true }
-            }
-        server.start()
+        val newExecutor = executorFactory()
+        server.executor = newExecutor
+        try {
+            server.start()
+        } catch (e: Exception) {
+            newExecutor.shutdownNow()
+            server.stop(0)
+            throw e
+        }
+        executor = newExecutor
         httpServer = server
         log.info("ProxyARC ops HTTP on {}:{}", cfg.bindHost, actualPort)
         if (cfg.token.isBlank() || cfg.token.startsWith("CHANGE_ME")) {
@@ -43,6 +57,8 @@ class ProxyOpsHttpServer {
     fun stop() {
         httpServer?.stop(0)
         httpServer = null
+        executor?.shutdownNow()
+        executor = null
     }
 
     private fun handle(exchange: HttpExchange) {
@@ -51,7 +67,7 @@ class ProxyOpsHttpServer {
                 respond(exchange, 204, "")
                 return
             }
-            val cfg = ProxyOpsHttpConfig.current()
+            val cfg = configProvider()
             val headers = exchange.requestHeaders.mapValues { it.value.firstOrNull().orEmpty() }
             if (!ProxyOpsAuth.isAuthorized(headers, cfg.token)) {
                 respond(exchange, 401, ProxyOpsJson.error("Unauthorized"))
@@ -76,13 +92,13 @@ class ProxyOpsHttpServer {
         when {
             path.isEmpty() && method == "GET" ->
                 respond(exchange, 200, ProxyOpsJson.ok("routes" to routes(cfg)))
-            path == "skorin/status" && method == "GET" ->
+            path == "assistant/status" && method == "GET" ->
                 respond(exchange, 200, statusJson())
-            path == "skorin/simulate" && method == "POST" ->
+            path == "assistant/simulate" && method == "POST" ->
                 simulate(exchange, cfg, previewOnly = false)
-            path == "skorin/preview" && method == "POST" ->
+            path == "assistant/preview" && method == "POST" ->
                 simulate(exchange, cfg, previewOnly = true)
-            path == "skorin/logs" && method == "GET" ->
+            path == "assistant/logs" && method == "GET" ->
                 logs(exchange, cfg)
             else -> respond(exchange, 404, ProxyOpsJson.error("Not found: /ops/$path"))
         }
@@ -156,13 +172,14 @@ class ProxyOpsHttpServer {
         maxLines: Int,
     ): String {
         val regex = Regex(pattern, RegexOption.IGNORE_CASE)
-        return Files
-            .lines(logPath)
-            .filter { regex.containsMatchIn(it) }
-            .toList()
-            .takeLast(maxLines)
-            .joinToString("\n")
-            .ifBlank { "(no matches)" }
+        return Files.lines(logPath).use { lines ->
+            lines
+                .filter { regex.containsMatchIn(it) }
+                .toList()
+                .takeLast(maxLines)
+                .joinToString("\n")
+                .ifBlank { "(no matches)" }
+        }
     }
 
     private fun statusJson(): String {
@@ -178,10 +195,10 @@ class ProxyOpsHttpServer {
     private fun routes(cfg: ProxyOpsHttpConfig): List<String> =
         buildList {
             add("GET /ops/")
-            add("GET /ops/skorin/status")
-            if (cfg.simulateEnabled) add("POST /ops/skorin/simulate")
-            if (cfg.simulateEnabled) add("POST /ops/skorin/preview")
-            if (cfg.logsEnabled) add("GET /ops/skorin/logs?pattern=&lines=")
+            add("GET /ops/assistant/status")
+            if (cfg.simulateEnabled) add("POST /ops/assistant/simulate")
+            if (cfg.simulateEnabled) add("POST /ops/assistant/preview")
+            if (cfg.logsEnabled) add("GET /ops/assistant/logs?pattern=&lines=")
         }
 
     private fun readBody(exchange: HttpExchange): String {

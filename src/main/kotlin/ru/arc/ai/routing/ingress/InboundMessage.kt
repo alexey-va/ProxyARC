@@ -11,7 +11,7 @@ data class InboundMessage(
     /** In-game chat with assistant only when message used global `!` prefix. */
     fun allowsChatRouting(): Boolean =
         when (source) {
-            Source.GAME -> rawText.startsWith("!")
+            Source.GAME, Source.SIMULATION -> rawText.startsWith("!")
             Source.DISCORD -> true
         }
 
@@ -24,5 +24,9 @@ data class InboundMessage(
     enum class Source {
         GAME,
         DISCORD,
+        SIMULATION,
+        ;
+
+        fun wireName(): String = name.lowercase()
     }
 }

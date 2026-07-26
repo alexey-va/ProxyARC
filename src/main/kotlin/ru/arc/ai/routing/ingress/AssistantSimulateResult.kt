@@ -1,6 +1,6 @@
 package ru.arc.ai.routing.ingress
 
-data class SkorinSimulateResult(
+data class AssistantSimulateResult(
     val player: String,
     val message: String,
     val intent: String,
@@ -25,8 +25,8 @@ data class SkorinSimulateResult(
             player: String,
             message: String,
             detail: String,
-        ): SkorinSimulateResult =
-            SkorinSimulateResult(
+        ): AssistantSimulateResult =
+            AssistantSimulateResult(
                 player = player,
                 message = message,
                 intent = "error",

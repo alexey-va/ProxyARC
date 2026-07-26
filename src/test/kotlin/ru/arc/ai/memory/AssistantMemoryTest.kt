@@ -1,6 +1,8 @@
 package ru.arc.ai.memory
 
+import com.google.gson.Gson
 import io.kotest.core.spec.style.FreeSpec
+import io.kotest.assertions.throwables.shouldThrowAny
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
@@ -45,6 +47,52 @@ class AssistantMemoryStoreTest : FreeSpec({
         store.findByIdPrefix(saved.id.take(8))?.fact shouldBe "one"
         store.findByIdPrefix(saved.id)?.fact shouldBe "one"
         store.findByIdPrefix("missing") shouldBe null
+    }
+
+    "failed persistence does not publish a fact into the cache" {
+        val redis = InMemoryRedis()
+        val store = AssistantMemoryStore(redis, "test.failed.fact")
+        redis.failOnSave = true
+
+        shouldThrowAny { store.remember("steve", "не сохранится", 0.8) }
+
+        store.list() shouldHaveSize 0
+    }
+
+    "failed deletion keeps the fact in the cache" {
+        val redis = InMemoryRedis()
+        val store = AssistantMemoryStore(redis, "test.failed.delete")
+        val fact = store.remember("steve", "останется", 0.8)
+        redis.failOnSave = true
+
+        shouldThrowAny { store.forget(factId = fact.id) }
+
+        store.findByIdPrefix(fact.id) shouldBe fact
+    }
+
+    "retries loading after a transient Redis failure" {
+        val redis = InMemoryRedis()
+        redis.failOnLoad = true
+        val store = AssistantMemoryStore(redis, "test.retry.load")
+        store.ensureLoaded()
+        val fact = AssistantFact(subject = "steve", fact = "загрузился позже", confidence = 0.9)
+        redis.setHash("test.retry.load", mapOf(fact.id to Gson().toJson(fact)))
+        redis.failOnLoad = false
+
+        store.findByIdPrefix(fact.id) shouldBe fact
+    }
+
+    "skips null JSON without blocking valid facts" {
+        val redis = InMemoryRedis()
+        val fact = AssistantFact(subject = "steve", fact = "валидный факт", confidence = 0.9)
+        redis.setHash(
+            "test.null.fact",
+            mapOf("broken" to "null", fact.id to Gson().toJson(fact)),
+        )
+
+        val store = AssistantMemoryStore(redis, "test.null.fact")
+
+        store.findByIdPrefix(fact.id) shouldBe fact
     }
 })
 

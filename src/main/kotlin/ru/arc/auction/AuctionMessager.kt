@@ -2,16 +2,21 @@ package ru.arc.auction
 
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import org.slf4j.LoggerFactory
 import ru.arc.discord.DiscordBot
-import ru.arc.xserver.ChannelListener
+import ru.arc.velocity.Velocity
+import ru.arc.redis.ChannelListener
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 class AuctionMessager(
     @JvmField val channelPartial: String,
     @JvmField val channelAll: String,
-    @JvmField val discordBot: DiscordBot?,
+    private val discordBotProvider: () -> DiscordBot? = { Velocity.discordBot },
 ) : ChannelListener {
+
+    private val log = LoggerFactory.getLogger(AuctionMessager::class.java)
+    private val gson = Gson()
 
     @JvmField
     val map: MutableMap<UUID, AuctionItemDto> = ConcurrentHashMap()
@@ -21,9 +26,13 @@ class AuctionMessager(
             map.clear()
         }
 
-        val gson = Gson()
         val listType = object : TypeToken<List<AuctionItemDto>>() {}.type
-        val auctionItemDtos: List<AuctionItemDto> = gson.fromJson(message, listType)
+        val auctionItemDtos =
+            runCatching { gson.fromJson<List<AuctionItemDto>>(message, listType) }
+                .getOrElse { error ->
+                    log.warn("Ignoring malformed auction update from {}", originServer, error)
+                    return
+                } ?: emptyList()
 
         for (auctionItemDto in auctionItemDtos) {
             try {
@@ -33,18 +42,18 @@ class AuctionMessager(
                     map.remove(UUID.fromString(auctionItemDto.uuid))
                 }
             } catch (e: Exception) {
-                println("Error: $auctionItemDto")
-                e.printStackTrace()
+                log.warn("Ignoring invalid auction item from {}: {}", originServer, auctionItemDto, e)
             }
         }
 
         val dtos = map.values
             .sortedBy { it.priority }
 
+        val discordBot = discordBotProvider()
         if (discordBot != null) {
             discordBot.updateAuctionItems(dtos)
         } else {
-            println("Discord bot is null!")
+            log.debug("Skipping auction Discord update because the bot is not ready")
         }
     }
 }

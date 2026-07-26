@@ -1,14 +1,12 @@
 package ru.arc.xserver
 
 import com.google.gson.Gson
-import ru.arc.config.Config
+import ru.arc.redis.RedisOperations
 import java.util.UUID
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 
 class PlayerListAnnouncer(
-    private val config: Config,
-    private val redisManager: RedisManager,
+    private val redisManager: RedisOperations,
     private val channel: String,
 ) {
     private val gson = Gson()
@@ -22,6 +20,7 @@ class PlayerListAnnouncer(
         val data = map[uuid]
         if (data != null) {
             data.server = server
+            data.username = username
         } else {
             addPlayer(uuid, username, server)
         }
@@ -36,8 +35,8 @@ class PlayerListAnnouncer(
     }
 
     fun announce() {
-        CompletableFuture.supplyAsync { gson.toJson(map.values) }
-            .thenAccept { json -> redisManager.publish(channel, json) }
+        val snapshot = map.values.map(PlayerData::copy)
+        redisManager.publish(channel, gson.toJson(snapshot))
     }
 
     fun serverForUsername(username: String): String? =

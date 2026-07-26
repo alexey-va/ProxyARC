@@ -2,10 +2,9 @@ package ru.arc.core.modules
 
 import ru.arc.FirstJoinData
 import ru.arc.core.PluginModule
+import ru.arc.core.ScheduledTask
+import ru.arc.core.Tasks
 import ru.arc.velocity.Velocity
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
 
 // ==================== Priority 50-59: Persistence ====================
 
@@ -14,8 +13,9 @@ object FirstJoinModule : PluginModule {
     override val priority = 50
 
     override fun init() {
-        Velocity.firstJoinData = FirstJoinData()
-        Velocity.firstJoinData!!.load()
+        val data = FirstJoinData()
+        data.load()
+        Velocity.firstJoinData = data
     }
 
     override fun reload() {}
@@ -30,18 +30,14 @@ object SaveModule : PluginModule {
     override val name = "Save"
     override val priority = 55
 
-    private var saveService = Executors.newScheduledThreadPool(1)
-    private var saveTask: ScheduledFuture<*>? = null
+    private var saveTask: ScheduledTask? = null
 
     override fun init() {
-        saveTask?.cancel(false)
+        saveTask?.cancel()
         saveTask =
-            saveService.scheduleAtFixedRate(
-                { Velocity.firstJoinData?.save() },
-                60,
-                60,
-                TimeUnit.SECONDS,
-            )
+            Tasks.scheduler.runTimerAsync(1200L, 1200L) {
+                Velocity.firstJoinData?.save()
+            }
     }
 
     override fun reload() {
@@ -49,9 +45,8 @@ object SaveModule : PluginModule {
     }
 
     override fun shutdown() {
-        saveTask?.cancel(false)
+        saveTask?.cancel()
         saveTask = null
         Velocity.firstJoinData?.save()
-        saveService.shutdown()
     }
 }

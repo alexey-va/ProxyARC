@@ -16,15 +16,15 @@ object ListenersModule : PluginModule {
     override val priority = 90
 
     override fun init() {
-        val plugin = Velocity.plugin!!
-        val server = Velocity.proxyServer!!
+        val plugin = Velocity.requirePlugin()
+        val server = Velocity.requireProxyServer()
         server.eventManager.register(
             plugin,
             JoinListener(server, ProxyConfigs.module("join_config.yml")),
         )
         server.eventManager.register(
             plugin,
-            ChatListener(server, ProxyConfigs.main()),
+            ChatListener(server),
         )
     }
 
@@ -43,7 +43,8 @@ object ProxyTasksModule : PluginModule {
     private val counter = AtomicInteger(0)
 
     override fun init() {
-        val plugin = Velocity.plugin!!
+        val plugin = Velocity.requirePlugin()
+        val server = Velocity.requireProxyServer()
         playerListTask =
             repeating(0, 1200) {
                 Velocity.discordBot?.updatePlayerList(plugin.onlinePlayerNames())
@@ -53,7 +54,7 @@ object ProxyTasksModule : PluginModule {
             repeating(0, 20) {
                 Velocity.playerListAnnouncer?.announce()
                 if (counter.incrementAndGet() % 120 == 0) {
-                    val players = Velocity.proxyServer!!.allPlayers
+                    val players = server.allPlayers
                     Velocity.playerListAnnouncer?.removeAllPlayers()
                     players.forEach { player ->
                         Velocity.playerListAnnouncer?.addPlayer(

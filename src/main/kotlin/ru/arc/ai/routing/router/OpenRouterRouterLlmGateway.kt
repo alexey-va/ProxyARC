@@ -4,6 +4,7 @@ import com.openai.models.chat.completions.ChatCompletionCreateParams
 import org.slf4j.LoggerFactory
 import ru.arc.ai.llm.LlmRequestLogger
 import ru.arc.ai.llm.OpenRouterLlmClient
+import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 
@@ -31,8 +32,10 @@ class OpenRouterRouterLlmGateway(
             return CompletableFuture.failedFuture(IllegalStateException(msg))
         }
 
+        val requestId = UUID.randomUUID().toString()
         LlmRequestLogger.logRouterRequestStart(
             log = log,
+            requestId = requestId,
             model = model,
             player = player,
             message = extractMessagePreview(userContent),
@@ -48,13 +51,14 @@ class OpenRouterRouterLlmGateway(
                             .addUserMessage(userContent)
                             .model(model)
                             .temperature(config.temperature)
-                            .maxTokens(config.maxTokens.toLong())
+                            .maxCompletionTokens(config.maxTokens.toLong())
                             .build()
                     val startedNs = System.nanoTime()
                     val response = client.chat().completions().create(params)
                     val latencyMs = (System.nanoTime() - startedNs) / 1_000_000
                     LlmRequestLogger.logRouterRequestComplete(
                         log = log,
+                        requestId = requestId,
                         model = model,
                         player = player,
                         latencyMs = latencyMs,
@@ -66,15 +70,17 @@ class OpenRouterRouterLlmGateway(
                         log.warn(
                             "Router gateway empty content model={} finish_reason={}",
                             model,
-                            choice.finishReason()?.toString() ?: "null",
+                            choice.finishReason().toString(),
                         )
                     }
                     content
                 } catch (e: Exception) {
                     log.warn(
-                        "Router gateway HTTP error model={}: {}",
+                        "LLM error requestId={} agent=router mode=route source=unknown depth=0 model={} outcome=error errorType={} message={}",
+                        requestId,
                         model,
-                        RouteLog.describeError(e),
+                        e.javaClass.simpleName,
+                        ru.arc.ai.llm.LogPreview.of(RouteLog.describeError(e), 160),
                         e,
                     )
                     throw e

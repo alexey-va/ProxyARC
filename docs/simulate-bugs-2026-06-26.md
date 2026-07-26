@@ -1,6 +1,6 @@
 # Simulate bugs — complex scenarios (2026-06-26)
 
-Прогон: 5 сценариев **по очереди** через `POST /ops/skorin/simulate` на Velocity после deploy `08a303a9`.
+Прогон: 5 сценариев **по очереди** через `POST /ops/assistant/simulate` на Velocity после deploy `08a303a9`.
 
 ## Сценарии
 

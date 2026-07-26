@@ -119,7 +119,7 @@ def live_simulate(host: str, token: str, player: str = "SimTestPlayer") -> None:
             ensure_ascii=False,
         ).encode()
         req = urllib.request.Request(
-            f"http://127.0.0.1:25825/ops/skorin/simulate",
+            f"http://127.0.0.1:25825/ops/assistant/simulate",
             data=body,
             headers={
                 "Authorization": f"Bearer {token}",
@@ -130,7 +130,7 @@ def live_simulate(host: str, token: str, player: str = "SimTestPlayer") -> None:
         t0 = time.time()
         try:
             proc = subprocess.run(
-                ["ssh", host, f"curl -sS -m 90 -H 'Authorization: Bearer {token}' -H 'Content-Type: application/json' -d @-", "http://127.0.0.1:25825/ops/skorin/simulate"],
+                ["ssh", host, f"curl -sS -m 90 -H 'Authorization: Bearer {token}' -H 'Content-Type: application/json' -d @-", "http://127.0.0.1:25825/ops/assistant/simulate"],
                 input=body,
                 capture_output=True,
                 timeout=100,

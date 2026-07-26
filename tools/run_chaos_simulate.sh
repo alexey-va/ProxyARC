@@ -20,7 +20,7 @@ sim() {
   local t0
   t0=$(date +%s)
   local out
-  out=$(ssh "$HOST" "curl -sS -m 120 -H 'Authorization: Bearer $TOKEN' -H 'Content-Type: application/json' -d '$body' http://127.0.0.1:25825/ops/skorin/simulate")
+  out=$(ssh "$HOST" "curl -sS -m 120 -H 'Authorization: Bearer $TOKEN' -H 'Content-Type: application/json' -d '$body' http://127.0.0.1:25825/ops/assistant/simulate")
   local dt=$(($(date +%s) - t0))
   echo "TIME: ${dt}s" | tee -a "$LOG"
   echo "$out" | python3 -m json.tool 2>/dev/null | tee -a "$LOG" || echo "$out" | tee -a "$LOG"

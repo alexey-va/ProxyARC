@@ -21,6 +21,7 @@ object DiscordModule : PluginModule {
     }
 
     override fun shutdown() {
+        Velocity.discordBot?.close()
         Velocity.discordBot = null
     }
 

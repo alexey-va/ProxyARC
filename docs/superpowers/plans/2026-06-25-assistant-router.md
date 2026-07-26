@@ -2,7 +2,7 @@
 
 **Status:** Done (live dispatch). Shadow phase and legacy paths removed.
 
-See current architecture: `docs/superpowers/specs/2026-06-25-skorin-router-design.md`
+See current architecture: `docs/superpowers/specs/2026-06-25-assistant-router-design.md`
 
 ## Completed
 

@@ -1,7 +1,7 @@
 # Simulate — новые сценарии (round 2, 2026-06-26)
 
 Deploy: ProxyARC JAR `b9a31212…` на Velocity.
-Прогон: 5 **новых** сценариев последовательно через `POST /ops/skorin/simulate`.
+Прогон: 5 **новых** сценариев последовательно через `POST /ops/assistant/simulate`.
 
 ## Сценарии
 

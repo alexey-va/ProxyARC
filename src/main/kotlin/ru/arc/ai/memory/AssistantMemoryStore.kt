@@ -2,7 +2,7 @@ package ru.arc.ai.memory
 
 import com.google.gson.Gson
 import org.slf4j.LoggerFactory
-import ru.arc.xserver.RedisOperations
+import ru.arc.redis.RedisOperations
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -17,6 +17,7 @@ class AssistantMemoryStore(
     private val cache = ConcurrentHashMap<String, AssistantFact>()
     private val loaded = java.util.concurrent.atomic.AtomicBoolean(false)
 
+    @Synchronized
     fun ensureLoaded() {
         if (loaded.get() || redis == null) {
             loaded.set(true)
@@ -27,17 +28,20 @@ class AssistantMemoryStore(
             cache.clear()
             for ((id, json) in map) {
                 if (json.isNullOrBlank()) continue
-                runCatching { gson.fromJson(json, AssistantFact::class.java) }
+                runCatching {
+                    val fact: AssistantFact? = gson.fromJson(json, AssistantFact::class.java)
+                    requireNotNull(fact) { "fact JSON is null" }
+                }
                     .onSuccess { cache[id] = it }
                     .onFailure { log.warn("Skip corrupt fact {}: {}", id, it.message) }
             }
             loaded.set(true)
         } catch (e: Exception) {
             log.warn("Failed to load assistant facts from Redis: {}", e.message)
-            loaded.set(true)
         }
     }
 
+    @Synchronized
     fun remember(
         subject: String?,
         fact: String,
@@ -52,11 +56,12 @@ class AssistantMemoryStore(
                 confidence = confidence.coerceIn(0.0, 1.0),
                 source = source,
             )
-        cache[normalized.id] = normalized
         persist(normalized)
+        cache[normalized.id] = normalized
         return normalized
     }
 
+    @Synchronized
     fun forget(
         factId: String? = null,
         subject: String? = null,
@@ -78,8 +83,8 @@ class AssistantMemoryStore(
                 }
             }.map { it.id }
         ids.forEach { id ->
-            cache.remove(id)
             redis?.saveMapEntries(storageKey, id, null)?.get()
+            cache.remove(id)
         }
         return ids.size
     }

@@ -26,6 +26,8 @@ dependencies {
     implementation("ru.arc:arc-core-redis:1.0-SNAPSHOT")
     implementation("ru.arc:arc-core-velocity:1.0-SNAPSHOT")
     implementation("ru.arc:arc-core-ai:1.0-SNAPSHOT")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.10.2")
 
     compileOnly("com.velocitypowered:velocity-api:3.3.0-SNAPSHOT")
     testImplementation("com.velocitypowered:velocity-api:3.3.0-SNAPSHOT")
@@ -55,6 +57,20 @@ dependencies {
     testImplementation("io.mockk:mockk:1.14.7")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
+
+val runtimeClasspathConfiguration = configurations.named("runtimeClasspath")
+val loggingModuleResources =
+    zipTree(
+        runtimeClasspathConfiguration.map { configuration ->
+            configuration.files.first { it.name.startsWith("arc-core-logging") }
+        },
+    )
+val redisModuleResources =
+    zipTree(
+        runtimeClasspathConfiguration.map { configuration ->
+            configuration.files.first { it.name.startsWith("arc-core-redis") }
+        },
+    )
 
 tasks {
     test {
@@ -90,22 +106,10 @@ tasks {
 
         exclude("META-INF/DEPENDENCIES", "META-INF/LICENSE", "META-INF/NOTICE")
 
-        from({
-            val loggingJar =
-                project.configurations.getByName("runtimeClasspath").files.first {
-                    it.name.startsWith("arc-core-logging")
-                }
-            zipTree(loggingJar)
-        }) {
+        from(loggingModuleResources) {
             include("modules/logging.yml")
         }
-        from({
-            val redisJar =
-                project.configurations.getByName("runtimeClasspath").files.first {
-                    it.name.startsWith("arc-core-redis")
-                }
-            zipTree(redisJar)
-        }) {
+        from(redisModuleResources) {
             include("modules/redis.yml")
         }
     }

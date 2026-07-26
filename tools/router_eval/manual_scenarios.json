@@ -19,7 +19,7 @@
     "expected": "bug"
   },
   {
-    "id": "manual_skorin_open_ticket_chat",
+    "id": "manual_assistant_open_ticket_chat",
     "title": "Скорен в чат при открытом тикете",
     "steps_in_game": [
       "Открыт тикет RB-00001",

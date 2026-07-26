@@ -79,11 +79,10 @@ class BugIntentHandler(
             )
 
         if (useSurvey) {
-            BugSurveySessionStore.openOrTouch(primary)
+            val session = BugSurveySessionStore.openOrTouch(primary)
             if (!player.equals(primary, ignoreCase = true)) {
                 BugSurveySessionStore.addParticipant(primary, player)
             }
-            val session = BugSurveySessionStore.get(primary)!!
             surveyDispatch.enqueue(context, session)
         } else {
             legacyAgent.enqueue(context, AssistantRunMode.BUG)

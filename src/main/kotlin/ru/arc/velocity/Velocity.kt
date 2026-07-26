@@ -44,11 +44,9 @@ import ru.arc.hooks.LiteBansHook
 import ru.arc.hooks.LuckpermsHook
 import ru.arc.telegram.TelegramBot
 import ru.arc.telegram.TelegramModule
-import ru.arc.xserver.JoinMessages
 import ru.arc.xserver.NetworkRegistry
 import ru.arc.xserver.PlayerListAnnouncer
-import ru.arc.xserver.RedisManager
-import ru.arc.xserver.repos.RedisRepo
+import ru.arc.redis.RedisManager
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -58,38 +56,38 @@ import java.util.concurrent.atomic.AtomicBoolean
     version = "1.0",
 )
 class Velocity @Inject constructor(
-    server: ProxyServer,
-    logger: Logger,
-    @DataDirectory dataFolder: Path,
+    private val server: ProxyServer,
+    private val pluginLogger: Logger,
+    @param:DataDirectory private val pluginDataFolder: Path,
 ) : Arc {
     init {
-        plugin = this
-        proxyServer = server
-        Velocity.logger = logger
-        Velocity.dataFolder = dataFolder
+        installRuntimeReferences()
     }
 
     @Subscribe
     fun onProxyInit(@Suppress("UNUSED_PARAMETER") event: ProxyInitializeEvent) {
-        logger!!.info("Initializing ProxyARC")
-        VelocityArcRuntime.installScheduling(proxyServer!!, this)
+        installRuntimeReferences()
+        isShuttingDown.set(false)
+        pluginLogger.info("Initializing ProxyARC")
+        VelocityArcRuntime.installScheduling(server, this)
         VelocityArcRuntime.installModuleLifecycleReporting(
-            consoleLog = { line -> logger!!.info(stripMiniMessage(line)) },
-            logError = { msg, t -> logger!!.error(msg, t) },
+            consoleLog = { line -> pluginLogger.info(stripMiniMessage(line)) },
+            logError = { msg, t -> pluginLogger.error(msg, t) },
         )
         registerModules()
         ModuleRegistry.initAll()
+        redisManager?.init()
         registerCommands()
         Tools.addTool(GetOnlinePlayers::class.java)
     }
 
     @JsonClassDescription("Get list of online players")
     data class GetOnlinePlayers(
-        @JsonPropertyDescription("Stub field to differentiate tools")
+        @param:JsonPropertyDescription("Stub field to differentiate tools")
         var stub: Boolean? = null,
     ) : Tool {
         override fun execute(assistant: Assistant?): Any? =
-            proxyServer!!.allPlayers.map { it.username }
+            requireProxyServer().allPlayers.map { it.username }
     }
 
     private fun registerModules() {
@@ -119,7 +117,13 @@ class Velocity @Inject constructor(
     }
 
     private fun registerCommands() {
-        proxyServer!!.commandManager.register("proxyarc", ProxyARCCommand())
+        val commandManager = checkNotNull(proxyServer).commandManager
+        val metadata =
+            commandManager
+                .metaBuilder("proxyarc")
+                .plugin(this)
+                .build()
+        commandManager.register(metadata, ProxyARCCommand())
     }
 
     @Subscribe
@@ -131,15 +135,27 @@ class Velocity @Inject constructor(
     fun onProxyStop(@Suppress("UNUSED_PARAMETER") event: ProxyShutdownEvent) {
         isShuttingDown.set(true)
         ModuleRegistry.shutdownAll()
-        Tasks.scheduler.cancelAll()
+        Tasks.reset()
+        plugin = null
+        proxyServer = null
+        logger = null
+        dataFolder = null
+        config = null
     }
 
     override fun sendMessageToAll(component: Component) {
-        proxyServer!!.allPlayers.forEach { it.sendMessage(component) }
+        server.allPlayers.forEach { it.sendMessage(component) }
     }
 
     override fun onlinePlayerNames(): Collection<String> =
-        proxyServer!!.allPlayers.map { it.username }
+        server.allPlayers.map { it.username }
+
+    private fun installRuntimeReferences() {
+        plugin = this
+        proxyServer = server
+        logger = pluginLogger
+        dataFolder = pluginDataFolder
+    }
 
     companion object {
         @JvmField
@@ -199,8 +215,14 @@ class Velocity @Inject constructor(
         @JvmField
         var liteBansHook: LiteBansHook? = null
 
-        @JvmField
-        var joinMessagesRedisRepo: RedisRepo<JoinMessages>? = null
+        internal fun requirePlugin(): Velocity =
+            checkNotNull(plugin) { "ProxyARC plugin instance is not initialized" }
+
+        internal fun requireProxyServer(): ProxyServer =
+            checkNotNull(proxyServer) { "ProxyARC server is not initialized" }
+
+        internal fun requireDataFolder(): Path =
+            checkNotNull(dataFolder) { "ProxyARC data folder is not initialized" }
 
         private fun stripMiniMessage(line: String): String = line.replace(Regex("</?[^>]+>"), "")
     }

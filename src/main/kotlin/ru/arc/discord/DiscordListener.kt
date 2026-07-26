@@ -47,7 +47,7 @@ class DiscordListener(
         val message = format
             .replace("%player_name%", playerName)
             .replace("%message%", messageText)
-        Velocity.plugin!!.sendMessageToAll(mm(message))
+        Velocity.plugin?.sendMessageToAll(mm(message))
     }
 
     private fun relayToTelegram(playerName: String, messageText: String) {

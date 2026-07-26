@@ -1,33 +1,66 @@
 package ru.arc.xserver
 
+import ru.arc.redis.RedisOperations
 import ru.arc.ai.config.LlmModuleConfig
 import ru.arc.ai.llm.OpenRouterLlmClient
 import ru.arc.ai.tools.PlayerServerResolver
 import ru.arc.ai.tools.ToolRpcClient
 import ru.arc.auction.AuctionMessager
-import ru.arc.discord.DiscordBot
 import ru.arc.velocity.Velocity
 
 class NetworkRegistry(
-    private val redisManager: RedisManager,
-) {
+    private val redis: RedisOperations,
+) : AutoCloseable {
+    private var auctionMessager: AuctionMessager? = null
+    private var toolRpcClient: ToolRpcClient? = null
+
+    @Synchronized
     fun init() {
-        val auctionMessager = AuctionMessager("arc.auction_items", "arc.auction_items_all", DiscordBot.instance)
-        redisManager.registerChannelUnique(auctionMessager.channelPartial, auctionMessager)
-        redisManager.registerChannelUnique(auctionMessager.channelAll, auctionMessager)
+        close()
+        try {
+            val auction = AuctionMessager("arc.auction_items", "arc.auction_items_all")
+            auctionMessager = auction
+            redis.registerChannelUnique(auction.channelPartial, auction)
+            redis.registerChannelUnique(auction.channelAll, auction)
 
-        val dataPath = Velocity.dataFolder ?: return
-        val llmConfig = LlmModuleConfig.load(dataPath)
-        Velocity.llmClient = OpenRouterLlmClient.create(llmConfig)
+            val dataPath = Velocity.dataFolder ?: return
+            val llmConfig = LlmModuleConfig.load(dataPath)
+            Velocity.llmClient = OpenRouterLlmClient.create(llmConfig)
 
-        val resolver =
-            PlayerServerResolver { playerName ->
-                Velocity.playerListAnnouncer?.serverForUsername(playerName)
+            val resolver =
+                PlayerServerResolver { playerName ->
+                    Velocity.playerListAnnouncer?.serverForUsername(playerName)
+                }
+            val rpc = ToolRpcClient(redis, llmConfig, resolver, expectedResponses = 2)
+            try {
+                rpc.start()
+            } catch (error: Exception) {
+                rpc.close()
+                throw error
             }
-        val toolRpcClient = ToolRpcClient(redisManager, llmConfig, resolver, expectedResponses = 2)
-        toolRpcClient.start()
-        ToolRpcClient.instance = toolRpcClient
+            toolRpcClient = rpc
+            ToolRpcClient.instance = rpc
+        } catch (error: Exception) {
+            close()
+            throw error
+        }
+    }
 
-        redisManager.init()
+    @Synchronized
+    override fun close() {
+        auctionMessager?.let { auction ->
+            redis.unregisterChannel(auction.channelPartial, auction)
+            redis.unregisterChannel(auction.channelAll, auction)
+        }
+        auctionMessager = null
+
+        toolRpcClient?.let { rpc ->
+            rpc.close()
+            if (ToolRpcClient.instance === rpc) {
+                ToolRpcClient.instance = null
+            }
+        }
+        toolRpcClient = null
+        Velocity.llmClient = null
     }
 }

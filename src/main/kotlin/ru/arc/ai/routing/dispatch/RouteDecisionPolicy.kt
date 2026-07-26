@@ -127,7 +127,7 @@ object RouteDecisionPolicy {
                 } else {
                     decision
                 }
-            else -> decision
+            RouteIntent.BUG -> decision
         }
     }
 }

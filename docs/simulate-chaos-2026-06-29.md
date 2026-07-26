@@ -1,7 +1,7 @@
 # Simulate — chaos multi-player (2026-06-29)
 
 Deploy: ProxyARC на Velocity (после title-dedup + world names).
-Скрипт: `tools/run_chaos_simulate.sh` → `POST /ops/skorin/simulate`.
+Скрипт: `tools/run_chaos_simulate.sh` → `POST /ops/assistant/simulate`.
 Прогон: **35 шагов**, ~**9 мин** wall time. Лог: `/tmp/chaos-sim-1782765635.log`, JSONL: `/tmp/chaos-sim-results.jsonl`.
 
 Параметры: `SIM_WAIT_BUG=75`, `SIM_WAIT_SKIP=20`, фоновый шум между баг-репортами.

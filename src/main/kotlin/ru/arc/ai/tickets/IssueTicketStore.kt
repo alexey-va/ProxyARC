@@ -10,11 +10,13 @@ object IssueTicketStore {
     private val gson = Gson()
     private val cache = ConcurrentHashMap<String, IssueTicket>()
     private var redis: RedisOperations? = null
+    @Volatile
     private var loaded = false
 
     const val STORAGE_KEY = "arc.issue.tickets"
     const val COUNTER_KEY = "arc.issue.tickets.counter"
 
+    @Synchronized
     fun bind(redisOps: RedisOperations?) {
         redis = redisOps
         loaded = false
@@ -22,6 +24,7 @@ object IssueTicketStore {
         ensureLoaded()
     }
 
+    @Synchronized
     fun ensureLoaded() {
         if (loaded) return
         val r = redis
@@ -34,17 +37,20 @@ object IssueTicketStore {
             cache.clear()
             for ((id, json) in map) {
                 if (json.isNullOrBlank()) continue
-                runCatching { gson.fromJson(json, IssueTicket::class.java) }
+                runCatching {
+                    val ticket: IssueTicket? = gson.fromJson(json, IssueTicket::class.java)
+                    requireNotNull(ticket) { "ticket JSON is null" }
+                }
                     .onSuccess { cache[id] = it }
                     .onFailure { log.warn("Skip corrupt ticket {}: {}", id, it.message) }
             }
             loaded = true
         } catch (e: Exception) {
             log.warn("Failed to load issue tickets: {}", e.message)
-            loaded = true
         }
     }
 
+    @Synchronized
     fun nextTicketId(): String {
         ensureLoaded()
         val next = readCounter() + 1
@@ -52,10 +58,11 @@ object IssueTicketStore {
         return "RB-%05d".format(next)
     }
 
+    @Synchronized
     fun save(ticket: IssueTicket) {
         ensureLoaded()
-        cache[ticket.ticketId] = ticket
         persist(ticket)
+        cache[ticket.ticketId] = ticket
     }
 
     fun find(ticketId: String): IssueTicket? {
@@ -138,22 +145,27 @@ object IssueTicketStore {
         return stale.size
     }
 
+    @Synchronized
     fun delete(ticketId: String): Boolean {
         ensureLoaded()
         val id = ticketId.trim()
         if (id.isEmpty()) return false
-        val removed = cache.remove(id) != null
-        if (removed) {
-            redis?.saveMapEntries(STORAGE_KEY, id, null)?.get()
-        }
-        return removed
+        val storedId = cache.keys.firstOrNull { it.equals(id, ignoreCase = true) } ?: return false
+        redis?.saveMapEntries(STORAGE_KEY, storedId, null)?.get()
+        return cache.remove(storedId) != null
     }
 
     private fun readCounter(): Int {
-        val r = redis ?: return cache.size
-        return runCatching {
+        val cachedMax =
+            cache.keys.maxOfOrNull { id ->
+                id.removePrefix("RB-").toIntOrNull() ?: 0
+            } ?: 0
+        val r = redis ?: return cachedMax
+        val stored =
+            runCatching {
             r.loadMapEntries(COUNTER_KEY, "n").get().firstOrNull()?.toIntOrNull() ?: 0
-        }.getOrDefault(0)
+            }.getOrDefault(0)
+        return maxOf(stored, cachedMax)
     }
 
     private fun writeCounter(value: Int) {

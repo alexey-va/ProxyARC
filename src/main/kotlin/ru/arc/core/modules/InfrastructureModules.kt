@@ -13,8 +13,8 @@ import ru.arc.velocity.Velocity
 import ru.arc.xserver.NetworkRegistry
 import ru.arc.redis.RedisConfigBootstrap
 import ru.arc.redis.RedisModuleConfig
-import ru.arc.xserver.RedisManager
-import ru.arc.xserver.ServerIdentity
+import ru.arc.redis.RedisManager
+import ru.arc.redis.ServerIdentity
 
 private val log = LoggerFactory.getLogger("ru.arc.core.modules.Infrastructure")
 
@@ -81,7 +81,7 @@ object ConfigModule : PluginModule {
     override val priority = 15
 
     override fun init() {
-        val folder = Velocity.dataFolder!!
+        val folder = Velocity.requireDataFolder()
         RedisConfigBootstrap.ensure(folder)
         Velocity.config = ProxyConfigs.main()
         Velocity.serverName = RedisModuleConfig.load(folder).serverName
@@ -105,19 +105,22 @@ object RedisModule : PluginModule {
         val redis = RedisModuleConfig.load(folder)
 
         if (!redis.enabled) {
+            Velocity.redisManager?.close()
+            Velocity.redisManager = null
             log.info("Redis disabled — skipping connection (redis.enabled=false)")
             return
         }
 
         val connection = redis.connection()
 
-        if (Velocity.redisManager != null) {
-            Velocity.redisManager!!.connect(connection)
+        val current = Velocity.redisManager
+        if (current != null) {
+            current.connect(connection)
         } else {
             Velocity.redisManager =
                 RedisManager(
                     connection,
-                    ServerIdentity { Velocity.serverName ?: redis.serverName },
+                    ServerIdentity { Velocity.serverName },
                 )
         }
     }
@@ -136,11 +139,14 @@ object NetworkModule : PluginModule {
 
     override fun init() {
         val redis = Velocity.redisManager ?: return
-        Velocity.networkRegistry = NetworkRegistry(redis)
-        Velocity.networkRegistry!!.init()
+        Velocity.networkRegistry?.close()
+        val registry = NetworkRegistry(redis)
+        registry.init()
+        Velocity.networkRegistry = registry
     }
 
     override fun shutdown() {
+        Velocity.networkRegistry?.close()
         Velocity.networkRegistry = null
     }
 

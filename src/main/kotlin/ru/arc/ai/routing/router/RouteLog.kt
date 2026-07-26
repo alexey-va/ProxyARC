@@ -30,10 +30,11 @@ object RouteLog {
         model: String?,
     ) {
         log.info(
-            "Router classify {} «{}» → {} conf={} parseOk={} model={} reason={}",
+            "Router classify {} «{}» → {} source={} conf={} parseOk={} model={} reason={}",
             message.player,
             snippet(message.displayText),
             decision.intent.wireName(),
+            message.source.wireName(),
             decision.confidence,
             decision.parseOk,
             model ?: decision.model ?: "?",

@@ -31,11 +31,13 @@ class AssistantAgentDispatch(
             triggerMessage = message,
             mode = mode,
             triggerServer = context.message.server,
+            source = context.message.source.wireName(),
         ).thenAccept { result ->
-            if (deliverPublicReply && result.hasReply) {
+            val reply = result.reply
+            if (deliverPublicReply && reply != null) {
                 AssistantChatBridge.deliverReply(
                     proxyServer = proxyServer,
-                    rawReply = result.reply!!,
+                    rawReply = reply,
                     triggerPlayer = player,
                     triggerMessage = message,
                     rawModelContent = result.rawModelContent,

@@ -12,9 +12,11 @@ import org.slf4j.LoggerFactory
 import ru.arc.Utils.mm
 import ru.arc.config.Config
 import ru.arc.core.delayed
+import ru.arc.core.modules.JoinMessagesModule
 import ru.arc.discord.DiscordBot
 import ru.arc.velocity.Velocity
-import java.util.concurrent.ThreadLocalRandom
+import ru.arc.xserver.JoinMessages
+import java.util.concurrent.CompletableFuture
 
 class JoinListener(
     private val proxyServer: ProxyServer,
@@ -91,31 +93,16 @@ class JoinListener(
                 sendMessageToAll(mm(message))
             } else {
                 if (!player.hasPermission("arc.join-message.join")) return
-                var messageOverride: String? = null
-                val joinRepo = Velocity.joinMessagesRedisRepo
-                if (joinRepo != null) {
-                    val join = joinRepo.getOrNull(player.username).join()
-                    if (join != null && join.joinMessages.isNotEmpty()) {
-                        val idx = ThreadLocalRandom.current().nextInt(join.joinMessages.size)
-                        var current = 0
-                        for (joinMessage in join.joinMessages) {
-                            if (current == idx) {
-                                messageOverride = joinMessage.replace("%player_name%", player.username)
-                                break
-                            }
-                            current++
+                loadCustomMessage(player.username, JoinMessages::randomJoinMessage)
+                    .whenComplete { customMessage, error ->
+                        if (Velocity.isShuttingDown.get() || !player.isActive) {
+                            return@whenComplete
                         }
+                        if (error != null) {
+                            log.warn("Could not load join message for {}", player.username, error)
+                        }
+                        sendRegularJoin(player, customMessage)
                     }
-                }
-                Velocity.discordBot?.sendJoinEmbed(player.username, DiscordBot.JoinType.JOIN, messageOverride)
-                Velocity.telegramBot?.sendJoinMessage(player.username, DiscordBot.JoinType.JOIN, messageOverride)
-                if (messageOverride != null) {
-                    messageOverride = config.string("messages.join-prefix", "<dark_green>❖ ") + messageOverride
-                }
-                var message = config.string("messages.join", "<gray>Игрок <green>%player_name% <gray>присоединился!")
-                message = message.replace("%player_name%", player.username)
-                message = config.string("messages.join-prefix", "<dark_green>❖ ") + message
-                sendMessageToAll(if (messageOverride != null) mm(messageOverride) else mm(message))
             }
         } catch (e: Exception) {
             log.error("Error while sending join message", e)
@@ -124,31 +111,61 @@ class JoinListener(
 
     private fun leaveMessage(player: Player) {
         if (Velocity.isShuttingDown.get()) return
-        var messageOverride: String? = null
-        val joinRepo = Velocity.joinMessagesRedisRepo
-        if (joinRepo != null) {
-            val join = joinRepo.getOrNull(player.username).join()
-            if (join != null && join.leaveMessages.isNotEmpty()) {
-                val idx = ThreadLocalRandom.current().nextInt(join.leaveMessages.size)
-                var current = 0
-                for (leaveMessage in join.leaveMessages) {
-                    if (current == idx) {
-                        messageOverride = leaveMessage.replace("%player_name%", player.username)
-                        break
-                    }
-                    current++
+        loadCustomMessage(player.username, JoinMessages::randomLeaveMessage)
+            .whenComplete { customMessage, error ->
+                if (Velocity.isShuttingDown.get()) {
+                    return@whenComplete
                 }
+                if (error != null) {
+                    log.warn("Could not load leave message for {}", player.username, error)
+                }
+                sendRegularLeave(player, customMessage)
             }
+    }
+
+    private fun loadCustomMessage(
+        playerName: String,
+        selector: (JoinMessages) -> String?,
+    ): CompletableFuture<String?> {
+        return JoinMessagesModule.loadAsync(playerName).thenApply { messages ->
+            messages?.let(selector)?.replace("%player_name%", playerName)
         }
-        Velocity.discordBot?.sendJoinEmbed(player.username, DiscordBot.JoinType.LEAVE, messageOverride)
-        Velocity.telegramBot?.sendJoinMessage(player.username, DiscordBot.JoinType.LEAVE, messageOverride)
-        if (messageOverride != null) {
-            messageOverride = config.string("messages.leave-prefix", "<dark_red>❖ ") + messageOverride
-        }
-        var message = config.string("messages.leave", "gray>Игрок <red>%player_name% <gray>вышел!")
-        message = message.replace("%player_name%", player.username)
-        message = config.string("messages.leave-prefix", "<dark_red>❖ ") + message
-        sendMessageToAll(if (messageOverride != null) mm(messageOverride) else mm(message))
+    }
+
+    private fun sendRegularJoin(
+        player: Player,
+        customMessage: String?,
+    ) {
+        Velocity.discordBot?.sendJoinEmbed(player.username, DiscordBot.JoinType.JOIN, customMessage)
+        Velocity.telegramBot?.sendJoinMessage(player.username, DiscordBot.JoinType.JOIN, customMessage)
+        val message =
+            customMessage?.let {
+                config.string("messages.join-prefix", "<dark_green>❖ ") + it
+            } ?: run {
+                val fallback =
+                    config.string("messages.join", "<gray>Игрок <green>%player_name% <gray>присоединился!")
+                        .replace("%player_name%", player.username)
+                config.string("messages.join-prefix", "<dark_green>❖ ") + fallback
+            }
+        sendMessageToAll(mm(message))
+    }
+
+    private fun sendRegularLeave(
+        player: Player,
+        customMessage: String?,
+    ) {
+        Velocity.discordBot?.sendJoinEmbed(player.username, DiscordBot.JoinType.LEAVE, customMessage)
+        Velocity.telegramBot?.sendJoinMessage(player.username, DiscordBot.JoinType.LEAVE, customMessage)
+        val message =
+            customMessage?.let {
+                config.string("messages.leave-prefix", "<dark_red>❖ ") + it
+            } ?: run {
+                val fallback =
+                    config.string("messages.leave", "<gray>Игрок <red>%player_name% <gray>вышел!")
+                        .replace("%player_name%", player.username)
+                config.string("messages.leave-prefix", "<dark_red>❖ ") + fallback
+            }
+        sendMessageToAll(mm(message))
     }
 
     companion object {

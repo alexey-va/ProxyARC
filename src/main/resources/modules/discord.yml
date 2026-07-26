@@ -1,6 +1,12 @@
 enabled: false
 token: "token"
 
+# Routes both Discord REST requests and the Gateway WebSocket through Tinyproxy.
+http-proxy:
+  enabled: true
+  host: "185.242.106.81"
+  port: 8888
+
 channels:
   join-messages: "none"
   player-list: "none"

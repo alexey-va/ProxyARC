@@ -8,23 +8,29 @@ import org.slf4j.Logger
 object LlmRequestLogger {
     fun logAssistantRequestStart(
         log: Logger,
+        requestId: String,
         agent: String,
         mode: String,
+        source: String,
         depth: Int,
         player: String?,
         triggerMessage: String?,
+        queueWaitMs: Long,
         contextLayers: Int,
         historyMessages: Int,
         toolSchemas: Int,
         model: String,
     ) {
         log.info(
-            "LLM → agent={} mode={} depth={} player={} trigger=\"{}\" ctxLayers={} history={} toolSchemas={} model={}",
+            "LLM → requestId={} agent={} mode={} source={} depth={} player={} queueWaitMs={} trigger=\"{}\" ctxLayers={} history={} toolSchemas={} model={}",
+            requestId,
             agent,
             mode,
+            source,
             depth,
             player ?: "?",
-            triggerMessage?.take(80) ?: "",
+            queueWaitMs,
+            LogPreview.of(triggerMessage, 80),
             contextLayers,
             historyMessages,
             toolSchemas,
@@ -34,8 +40,10 @@ object LlmRequestLogger {
 
     fun logAssistantRequestComplete(
         log: Logger,
+        requestId: String,
         agent: String,
         mode: String,
+        source: String,
         depth: Int,
         player: String?,
         model: String,
@@ -56,9 +64,11 @@ object LlmRequestLogger {
                 .orEmpty()
         val usageLine = formatUsage(response.usage().orElse(null))
         log.info(
-            "LLM ← agent={} mode={} depth={} player={} model={} latencyMs={} {} tools=[{}] finish={} content=\"{}\"",
+            "LLM ← requestId={} agent={} mode={} source={} depth={} player={} model={} latencyMs={} outcome=success {} tools=[{}] finish={} content=\"{}\"",
+            requestId,
             agent,
             mode,
+            source,
             depth,
             player ?: "?",
             model,
@@ -66,28 +76,31 @@ object LlmRequestLogger {
             usageLine,
             toolNames.joinToString(",").ifEmpty { "-" },
             finish,
-            contentPreview,
+            LogPreview.of(contentPreview, 60),
         )
     }
 
     fun logRouterRequestStart(
         log: Logger,
+        requestId: String,
         model: String,
         player: String?,
         message: String?,
         userChars: Int,
     ) {
         log.info(
-            "LLM → router model={} player={} msg=\"{}\" userChars={}",
+            "LLM → requestId={} agent=router mode=route source=unknown depth=0 model={} player={} msg=\"{}\" userChars={}",
+            requestId,
             model,
             player ?: "?",
-            message?.take(80) ?: "",
+            LogPreview.of(message, 80),
             userChars,
         )
     }
 
     fun logRouterRequestComplete(
         log: Logger,
+        requestId: String,
         model: String,
         player: String?,
         latencyMs: Long,
@@ -106,13 +119,14 @@ object LlmRequestLogger {
                 .orEmpty()
         val usageLine = formatUsage(response.usage().orElse(null))
         log.info(
-            "LLM ← router model={} player={} latencyMs={} {} finish={} content=\"{}\"",
+            "LLM ← requestId={} agent=router mode=route source=unknown depth=0 model={} player={} latencyMs={} outcome=success {} finish={} content=\"{}\"",
+            requestId,
             model,
             player ?: "?",
             latencyMs,
             usageLine,
             finish,
-            contentPreview,
+            LogPreview.of(contentPreview, 80),
         )
     }
 

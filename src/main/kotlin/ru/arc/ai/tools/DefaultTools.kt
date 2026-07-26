@@ -24,11 +24,11 @@ object DefaultTools {
 
     @JsonClassDescription("Remember a fact about a player or the server for later replies")
     data class RememberFact(
-        @JsonPropertyDescription("Fact text to store")
+        @param:JsonPropertyDescription("Fact text to store")
         @JvmField var fact: String? = null,
-        @JsonPropertyDescription("Player nick, or server/общее for server-wide facts; omit for whoever triggered the bot")
+        @param:JsonPropertyDescription("Player nick, or server/общее for server-wide facts; omit for whoever triggered the bot")
         @JvmField var subject: String? = null,
-        @JsonPropertyDescription("Confidence from 0.0 to 1.0")
+        @param:JsonPropertyDescription("Confidence from 0.0 to 1.0")
         @JvmField var confidence: Double? = null,
     ) : Tool {
         override fun execute(assistant: Assistant?): Any {
@@ -64,11 +64,11 @@ object DefaultTools {
 
     @JsonClassDescription("Forget stored facts by id, subject, or partial text match")
     data class ForgetFact(
-        @JsonPropertyDescription("Exact fact id from rememberfact")
+        @param:JsonPropertyDescription("Exact fact id from rememberfact")
         @JvmField var factId: String? = null,
-        @JsonPropertyDescription("Player nick or topic")
+        @param:JsonPropertyDescription("Player nick or topic")
         @JvmField var subject: String? = null,
-        @JsonPropertyDescription("Substring that must appear in the fact text")
+        @param:JsonPropertyDescription("Substring that must appear in the fact text")
         @JvmField var factContains: String? = null,
     ) : Tool {
         override fun execute(assistant: Assistant?): Any {
@@ -84,7 +84,7 @@ object DefaultTools {
 
     @JsonClassDescription("Allows assistant to leave the conversation for a specified duration")
     data class LeaveForTime(
-        @JsonPropertyDescription("Duration in minutes")
+        @param:JsonPropertyDescription("Duration in minutes")
         @JvmField var durationMinutes: Int? = null,
     ) : Tool {
         override fun execute(assistant: Assistant?): Any {
@@ -98,7 +98,7 @@ object DefaultTools {
 
     @JsonClassDescription("Get top balance players")
     data class GetBalTop(
-        @JsonPropertyDescription("list of exact player names that must be included in the top")
+        @param:JsonPropertyDescription("list of exact player names that must be included in the top")
         @JvmField var mustIncludePlayers: List<String>? = null,
     ) : Tool, RemoteToolSupport {
         override fun execute(assistant: Assistant?): Any = executeRemote().join()
@@ -112,7 +112,7 @@ object DefaultTools {
 
     @JsonClassDescription("Get information about players")
     data class GetPlayerInfo(
-        @JsonPropertyDescription("List of exact player names")
+        @param:JsonPropertyDescription("List of exact player names")
         @JvmField var playerNames: List<String>? = null,
     ) : Tool, RemoteToolSupport {
         override fun execute(assistant: Assistant?): Any = executeRemote().join()
@@ -135,13 +135,13 @@ object DefaultTools {
 
     @JsonClassDescription("Create a Discord issue ticket when players report a real server bug")
     data class CreateIssueTicket(
-        @JsonPropertyDescription("Short ticket title, 5-80 chars")
+        @param:JsonPropertyDescription("Short ticket title, 5-80 chars")
         @JvmField var title: String? = null,
-        @JsonPropertyDescription("Detailed description: what broke, steps, expected vs actual")
+        @param:JsonPropertyDescription("Detailed description: what broke, steps, expected vs actual")
         @JvmField var description: String? = null,
-        @JsonPropertyDescription("Player who reported; default whoever triggered")
+        @param:JsonPropertyDescription("Player who reported; default whoever triggered")
         @JvmField var reporter: String? = null,
-        @JsonPropertyDescription("Optional server hint; real backend is resolved from Velocity")
+        @param:JsonPropertyDescription("Optional server hint; real backend is resolved from Velocity")
         @JvmField var server: String? = null,
     ) : Tool {
         override fun execute(assistant: Assistant?): Any {
@@ -183,7 +183,7 @@ object DefaultTools {
 
     @JsonClassDescription("Send a global in-game message to all online players on the proxy")
     data class SendGlobalMessage(
-        @JsonPropertyDescription("Short question or announcement for everyone online")
+        @param:JsonPropertyDescription("Short question or announcement for everyone online")
         @JvmField var message: String? = null,
     ) : Tool {
         override fun execute(assistant: Assistant?): Any {
@@ -210,9 +210,9 @@ object DefaultTools {
         "Send a private in-game message to a player. Offline players are logged (ok for ops simulate).",
     )
     data class SendPrivateMessage(
-        @JsonPropertyDescription("Exact player name (online or offline)")
+        @param:JsonPropertyDescription("Exact player name (online or offline)")
         @JvmField var playerName: String? = null,
-        @JsonPropertyDescription("Message text, short and clear")
+        @param:JsonPropertyDescription("Message text, short and clear")
         @JvmField var message: String? = null,
     ) : Tool {
         override fun execute(assistant: Assistant?): Any {
@@ -245,13 +245,13 @@ object DefaultTools {
 
     @JsonClassDescription("Update an existing Discord issue ticket by ID (RB-xxxxx)")
     data class UpdateIssueTicket(
-        @JsonPropertyDescription("Ticket id from createissueticket, e.g. RB-00042")
+        @param:JsonPropertyDescription("Ticket id from createissueticket, e.g. RB-00042")
         @JvmField var ticketId: String? = null,
-        @JsonPropertyDescription("Text to append to ticket description")
+        @param:JsonPropertyDescription("Text to append to ticket description")
         @JvmField var appendDescription: String? = null,
-        @JsonPropertyDescription("New title if needed")
+        @param:JsonPropertyDescription("New title if needed")
         @JvmField var title: String? = null,
-        @JsonPropertyDescription("open or closed")
+        @param:JsonPropertyDescription("open or closed")
         @JvmField var status: String? = null,
     ) : Tool {
         override fun execute(assistant: Assistant?): Any {
@@ -321,7 +321,7 @@ object DefaultTools {
 
     @JsonClassDescription("Finish bug-survey session when ticket is complete or message was not a real bug")
     data class CompleteBugSurvey(
-        @JsonPropertyDescription("Optional note for server logs")
+        @param:JsonPropertyDescription("Optional note for server logs")
         @JvmField var note: String? = null,
     ) : Tool {
         override fun execute(assistant: Assistant?): Any {
@@ -338,9 +338,9 @@ object DefaultTools {
 
     @JsonClassDescription("List recent issue tickets from forum and local registry")
     data class ListIssueTickets(
-        @JsonPropertyDescription("Max tickets to return, default 10")
+        @param:JsonPropertyDescription("Max tickets to return, default 10")
         @JvmField var limit: Int? = null,
-        @JsonPropertyDescription("Filter by reporter nick")
+        @param:JsonPropertyDescription("Filter by reporter nick")
         @JvmField var reporter: String? = null,
     ) : Tool {
         override fun execute(assistant: Assistant?): Any {
@@ -354,7 +354,7 @@ object DefaultTools {
 
     @JsonClassDescription("Get online player inventory snapshot")
     data class GetInventory(
-        @JsonPropertyDescription("Exact online player name")
+        @param:JsonPropertyDescription("Exact online player name")
         @JvmField var playerName: String? = null,
     ) : Tool, RemoteToolSupport {
         override fun execute(assistant: Assistant?): Any = executeRemote().join()
