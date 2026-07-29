@@ -31,6 +31,7 @@ import ru.arc.core.modules.FirstJoinModule
 import ru.arc.core.modules.JoinMessagesModule
 import ru.arc.core.modules.ListenersModule
 import ru.arc.core.modules.LoggingModule
+import ru.arc.core.modules.MetricsModule
 import ru.arc.core.modules.NetworkModule
 import ru.arc.core.modules.PlayerListModule
 import ru.arc.core.modules.ProxyTasksModule
@@ -97,6 +98,7 @@ class Velocity @Inject constructor(
             ConfigModule,
             RedisModule,
             NetworkModule,
+            MetricsModule,
             // Hooks (30)
             HooksModule,
             // Persistence & cross-server (50-69)

@@ -23,6 +23,7 @@ repositories {
 dependencies {
     implementation("ru.arc:arc-core:1.0-SNAPSHOT")
     implementation("ru.arc:arc-core-logging:1.0-SNAPSHOT")
+    implementation("ru.arc:arc-core-metrics:1.0-SNAPSHOT")
     implementation("ru.arc:arc-core-redis:1.0-SNAPSHOT")
     implementation("ru.arc:arc-core-velocity:1.0-SNAPSHOT")
     implementation("ru.arc:arc-core-ai:1.0-SNAPSHOT")
