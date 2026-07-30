@@ -2,6 +2,7 @@ package ru.arc.rtp
 
 import com.velocitypowered.api.proxy.ConnectionRequestBuilder
 import com.velocitypowered.api.event.connection.PluginMessageEvent
+import com.velocitypowered.api.event.player.ServerPostConnectEvent
 import com.velocitypowered.api.proxy.Player
 import com.velocitypowered.api.proxy.ProxyServer
 import com.velocitypowered.api.proxy.ServerConnection
@@ -85,6 +86,56 @@ class RtpRequestManagerTest :
             manager.pendingCount() shouldBe 1
             manager.pendingRequest(playerId)?.mode shouldBe NetworkRtpMode.FIRST_ENTRY
             verify(exactly = 1) { player.createConnectionRequest(registered) }
+        }
+
+        "delays cross-server delivery until Bukkit has completed the player join" {
+            val proxy = mockk<ProxyServer>()
+            val registered = mockk<RegisteredServer>()
+            val connection = mockk<ServerConnection>()
+            val player = mockk<Player>(relaxed = true)
+            val connectionRequest = mockk<ConnectionRequestBuilder>()
+            val future = CompletableFuture<ConnectionRequestBuilder.Result>()
+            val result = mockk<ConnectionRequestBuilder.Result>()
+            val event = mockk<ServerPostConnectEvent>()
+            val playerId = UUID.randomUUID()
+            var currentServer: Optional<ServerConnection> = Optional.empty()
+            var scheduledTicks: Long? = null
+            var scheduledTask: Runnable? = null
+
+            every { proxy.getServer("survival") } returns Optional.of(registered)
+            every { player.uniqueId } returns playerId
+            every { player.username } returns "TestPlayer"
+            every { player.currentServer } answers { currentServer }
+            every { player.createConnectionRequest(registered) } returns connectionRequest
+            every { connectionRequest.connect() } returns future
+            every { result.isSuccessful } returns true
+            every { connection.serverInfo } returns ServerInfo("survival", InetSocketAddress("127.0.0.1", 25565))
+            every { connection.sendPluginMessage(any(), any<ByteArray>()) } returns true
+            every { event.player } returns player
+
+            val manager =
+                RtpRequestManager(
+                    proxy,
+                    config(),
+                    clockMillis = { 1000L },
+                    scheduleLater = { ticks, task ->
+                        scheduledTicks = ticks
+                        scheduledTask = task
+                    },
+                )
+            manager.request(player, "survival")
+            currentServer = Optional.of(connection)
+            future.complete(result)
+            manager.onServerPostConnect(event)
+
+            scheduledTicks shouldBe 20L
+            verify(exactly = 0) { connection.sendPluginMessage(any(), any<ByteArray>()) }
+            manager.pendingCount() shouldBe 1
+
+            scheduledTask?.run()
+
+            verify(exactly = 1) { connection.sendPluginMessage(any(), any<ByteArray>()) }
+            manager.pendingCount() shouldBe 0
         }
 
         "consumes the trusted channel at the proxy boundary" {

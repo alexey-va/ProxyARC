@@ -22,6 +22,9 @@ class RtpRequestManager(
     private val config: ProxyRtpConfig,
     private val clockMillis: () -> Long = System::currentTimeMillis,
     private val requestIds: () -> UUID = UUID::randomUUID,
+    private val scheduleLater: (Long, Runnable) -> Unit = { ticks, task ->
+        Tasks.scheduler.runLater(ticks, task)
+    },
 ) {
     private val pending = ConcurrentHashMap<UUID, PendingRtp>()
 
@@ -98,7 +101,7 @@ class RtpRequestManager(
                     return@whenComplete
                 }
                 if (isOnTarget(player, request.targetServer)) {
-                    deliver(player)
+                    scheduleAfterTransfer(player)
                 }
             }
     }
@@ -107,7 +110,7 @@ class RtpRequestManager(
     fun onServerPostConnect(event: ServerPostConnectEvent) {
         val item = pending[event.player.uniqueId] ?: return
         if (isOnTarget(event.player, item.request.targetServer)) {
-            deliver(event.player)
+            scheduleAfterTransfer(event.player)
         }
     }
 
@@ -133,6 +136,25 @@ class RtpRequestManager(
     internal fun pendingCount(): Int = pending.size
 
     internal fun pendingRequest(playerId: UUID): NetworkRtpRequest? = pending[playerId]?.request
+
+    /**
+     * Velocity can report a successful backend connection before Bukkit has
+     * completed the player join. A plugin message sent in that window returns
+     * true but is silently lost by the backend, so cross-server requests wait
+     * one second before their first delivery. Regular requests for a player
+     * already on survival remain immediate.
+     */
+    private fun scheduleAfterTransfer(player: Player) {
+        val item = pending[player.uniqueId] ?: return
+        if (!item.deliveryScheduled.compareAndSet(false, true)) return
+        scheduleLater(
+            POST_CONNECT_DELIVERY_DELAY_TICKS,
+            Runnable {
+                item.deliveryScheduled.set(false)
+                deliver(player)
+            },
+        )
+    }
 
     private fun deliver(player: Player) {
         val item = pending[player.uniqueId] ?: return
@@ -161,7 +183,7 @@ class RtpRequestManager(
 
         item.delivering.set(false)
         if (item.attempts.incrementAndGet() < MAX_DELIVERY_ATTEMPTS) {
-            Tasks.scheduler.runLater(RETRY_DELAY_TICKS) { deliver(player) }
+            scheduleLater(RETRY_DELAY_TICKS, Runnable { deliver(player) })
         } else {
             fail(player, item, "ARC не принял сетевой запрос RTP")
         }
@@ -197,12 +219,14 @@ class RtpRequestManager(
         val expiresAt: Long,
         val attempts: AtomicInteger = AtomicInteger(),
         val delivering: AtomicBoolean = AtomicBoolean(),
+        val deliveryScheduled: AtomicBoolean = AtomicBoolean(),
     )
 
     companion object {
         val CHANNEL: MinecraftChannelIdentifier = MinecraftChannelIdentifier.from(NetworkRtpRequest.CHANNEL)
         private const val MAX_DELIVERY_ATTEMPTS = 3
         private const val RETRY_DELAY_TICKS = 10L
+        private const val POST_CONNECT_DELIVERY_DELAY_TICKS = 20L
         private val log = LoggerFactory.getLogger(RtpRequestManager::class.java)
     }
 }
