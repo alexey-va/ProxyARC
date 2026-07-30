@@ -36,8 +36,8 @@ class RtpRequestManager(
             player.sendMessage(Utils.mm("<red>RTP временно отключён."))
             return
         }
-        val world = normalize(rawWorld ?: config.defaultWorld)
-        if (world !in config.allowedWorlds) {
+        val explicitWorld = rawWorld?.let(::normalize)
+        if (explicitWorld != null && explicitWorld !in config.allowedWorlds) {
             player.sendMessage(
                 Utils.mm(
                     "<red>Неизвестный мир. Доступно: <white>${config.allowedWorlds.joinToString(", ")}",
@@ -61,6 +61,13 @@ class RtpRequestManager(
         pending.remove(player.uniqueId)
 
         val alreadyOnTarget = isOnTarget(player, config.targetServer)
+        val world =
+            explicitWorld
+                ?: if (alreadyOnTarget) {
+                    NetworkRtpRequest.CURRENT_WORLD
+                } else {
+                    config.defaultWorld
+                }
         val request =
             NetworkRtpRequest(
                 requestId = requestIds(),

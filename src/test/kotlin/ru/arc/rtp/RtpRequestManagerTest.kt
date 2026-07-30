@@ -64,6 +64,30 @@ class RtpRequestManagerTest :
             manager.pendingCount() shouldBe 0
         }
 
+        "keeps a bare request in the current Bukkit world on survival" {
+            val proxy = mockk<ProxyServer>()
+            val registered = mockk<RegisteredServer>()
+            val connection = mockk<ServerConnection>()
+            val player = mockk<Player>(relaxed = true)
+            val playerId = UUID.randomUUID()
+            var decoded: NetworkRtpRequest? = null
+
+            every { proxy.getServer("survival") } returns Optional.of(registered)
+            every { player.uniqueId } returns playerId
+            every { player.username } returns "TestPlayer"
+            every { player.currentServer } returns Optional.of(connection)
+            every { connection.serverInfo } returns ServerInfo("survival", InetSocketAddress("127.0.0.1", 25565))
+            every { connection.sendPluginMessage(any(), any<ByteArray>()) } answers {
+                decoded = NetworkRtpRequest.decode(secondArg())
+                true
+            }
+
+            RtpRequestManager(proxy, config(), clockMillis = { 1000L }).request(player, null)
+
+            decoded?.worldName shouldBe NetworkRtpRequest.CURRENT_WORLD
+            decoded?.mode shouldBe NetworkRtpMode.REGULAR
+        }
+
         "coalesces a second request while the server transfer is pending" {
             val proxy = mockk<ProxyServer>()
             val registered = mockk<RegisteredServer>()
