@@ -1,0 +1,8 @@
+enabled: true
+target-server: survival
+default-world: survival
+allowed-worlds:
+  - survival
+  - mining
+  - vanilla
+request-timeout-seconds: 20

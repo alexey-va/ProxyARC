@@ -36,6 +36,7 @@ import ru.arc.core.modules.NetworkModule
 import ru.arc.core.modules.PlayerListModule
 import ru.arc.core.modules.ProxyTasksModule
 import ru.arc.core.modules.RedisModule
+import ru.arc.core.modules.RtpModule
 import ru.arc.core.modules.SaveModule
 import ru.arc.discord.DiscordBot
 import ru.arc.discord.DiscordModule
@@ -48,6 +49,9 @@ import ru.arc.telegram.TelegramModule
 import ru.arc.xserver.NetworkRegistry
 import ru.arc.xserver.PlayerListAnnouncer
 import ru.arc.redis.RedisManager
+import ru.arc.rtp.ProxyRtpConfig
+import ru.arc.rtp.RtpCommand
+import ru.arc.rtp.RtpRequestManager
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -103,6 +107,7 @@ class Velocity @Inject constructor(
             HooksModule,
             // Persistence & cross-server (50-69)
             FirstJoinModule,
+            RtpModule,
             SaveModule,
             PlayerListModule,
             JoinMessagesModule,
@@ -126,6 +131,15 @@ class Velocity @Inject constructor(
                 .plugin(this)
                 .build()
         commandManager.register(metadata, ProxyARCCommand())
+
+        rtpRequestManager?.let { manager ->
+            val rtpMetadata =
+                commandManager
+                    .metaBuilder("rtp")
+                    .plugin(this)
+                    .build()
+            commandManager.register(rtpMetadata, RtpCommand(manager, ProxyRtpConfig()))
+        }
     }
 
     @Subscribe
@@ -186,6 +200,9 @@ class Velocity @Inject constructor(
 
         @JvmField
         var networkRegistry: NetworkRegistry? = null
+
+        @JvmField
+        var rtpRequestManager: RtpRequestManager? = null
 
         @JvmField
         var discordBot: DiscordBot? = null
