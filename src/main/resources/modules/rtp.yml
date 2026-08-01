@@ -1,6 +1,7 @@
 enabled: true
 target-server: survival
 default-world: survival
+transfer-message: ''
 allowed-worlds:
   - survival
   - mining

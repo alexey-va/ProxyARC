@@ -16,6 +16,9 @@ class ProxyRtpConfig(
     val defaultWorld: String
         get() = normalize(config.string("default-world", "survival"))
 
+    val transferMessage: String
+        get() = config.string("transfer-message", "").trim()
+
     val allowedWorlds: List<String>
         get() =
             config

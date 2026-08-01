@@ -84,7 +84,9 @@ class RtpRequestManager(
             return
         }
 
-        player.sendMessage(Utils.mm("<gray>Переношу на survival и запускаю RTP…"))
+        config.transferMessage
+            .takeIf(String::isNotBlank)
+            ?.let { player.sendMessage(Utils.mm(it)) }
         player
             .createConnectionRequest(target)
             .connect()

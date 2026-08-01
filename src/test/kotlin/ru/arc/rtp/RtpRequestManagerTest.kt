@@ -22,10 +22,11 @@ import java.util.concurrent.CompletableFuture
 
 class RtpRequestManagerTest :
     FreeSpec({
-        fun config(): ProxyRtpConfig {
+        fun config(transferMessage: String = ""): ProxyRtpConfig {
             val raw = Config(Files.createTempDirectory("proxy-rtp-manager-"), "rtp.yml")
             raw.setString("target-server", "survival")
             raw.setString("default-world", "survival")
+            raw.setString("transfer-message", transferMessage)
             raw.setStringList("allowed-worlds", listOf("survival", "mining", "vanilla"))
             raw.setLong("request-timeout-seconds", 20L)
             return ProxyRtpConfig(raw)
@@ -110,6 +111,44 @@ class RtpRequestManagerTest :
             manager.pendingCount() shouldBe 1
             manager.pendingRequest(playerId)?.mode shouldBe NetworkRtpMode.FIRST_ENTRY
             verify(exactly = 1) { player.createConnectionRequest(registered) }
+        }
+
+        "does not send a transfer message when it is empty" {
+            val proxy = mockk<ProxyServer>()
+            val registered = mockk<RegisteredServer>()
+            val player = mockk<Player>(relaxed = true)
+            val connectionRequest = mockk<ConnectionRequestBuilder>()
+            val playerId = UUID.randomUUID()
+
+            every { proxy.getServer("survival") } returns Optional.of(registered)
+            every { player.uniqueId } returns playerId
+            every { player.username } returns "TestPlayer"
+            every { player.currentServer } returns Optional.empty()
+            every { player.createConnectionRequest(registered) } returns connectionRequest
+            every { connectionRequest.connect() } returns CompletableFuture()
+
+            RtpRequestManager(proxy, config(transferMessage = "")).request(player, "survival")
+
+            verify(exactly = 0) { player.sendMessage(any()) }
+        }
+
+        "sends a configured transfer message" {
+            val proxy = mockk<ProxyServer>()
+            val registered = mockk<RegisteredServer>()
+            val player = mockk<Player>(relaxed = true)
+            val connectionRequest = mockk<ConnectionRequestBuilder>()
+            val playerId = UUID.randomUUID()
+
+            every { proxy.getServer("survival") } returns Optional.of(registered)
+            every { player.uniqueId } returns playerId
+            every { player.username } returns "TestPlayer"
+            every { player.currentServer } returns Optional.empty()
+            every { player.createConnectionRequest(registered) } returns connectionRequest
+            every { connectionRequest.connect() } returns CompletableFuture()
+
+            RtpRequestManager(proxy, config(transferMessage = "<gray>Переход…")).request(player, "survival")
+
+            verify(exactly = 1) { player.sendMessage(any()) }
         }
 
         "delays cross-server delivery until Bukkit has completed the player join" {
