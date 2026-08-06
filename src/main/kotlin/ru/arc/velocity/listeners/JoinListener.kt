@@ -11,6 +11,7 @@ import net.kyori.adventure.text.Component
 import org.slf4j.LoggerFactory
 import ru.arc.Utils.mm
 import ru.arc.config.Config
+import ru.arc.chat.ChatModeService
 import ru.arc.core.delayed
 import ru.arc.core.modules.JoinMessagesModule
 import ru.arc.discord.DiscordBot
@@ -26,6 +27,7 @@ class JoinListener(
     @Subscribe(async = true)
     fun onPlayerJoin(event: LoginEvent) {
         if (Velocity.isShuttingDown.get()) return
+        ChatModeService.track(event.player.uniqueId)
         delayed(20) { joinMessage(event.player) }
         val serverName =
             event.player.currentServer
@@ -56,6 +58,7 @@ class JoinListener(
     @Subscribe(async = true)
     fun onPlayerLeave(event: DisconnectEvent) {
         if (Velocity.isShuttingDown.get()) return
+        ChatModeService.untrack(event.player.uniqueId)
         Velocity.discordBot?.refreshPlayerListFromProxy()
         if (!event.player.hasPermission("arc.join-message.leave")) return
         delayed(20) { leaveMessage(event.player) }

@@ -8,14 +8,17 @@ import ru.arc.ai.routing.pipeline.PipelineContext
 import ru.arc.config.ProxyConfigs
 
 object ChatIngress {
-    fun onPlayerChat(event: PlayerChatEvent) {
+    fun onPlayerChat(
+        event: PlayerChatEvent,
+        effectiveMessage: String = event.result.message.orElse(event.message),
+    ) {
         if (!event.result.isAllowed) return
         val pipeline = RoutingModule.pipeline ?: return
 
         RoutingModule.sweepSurveyTimeouts()
 
         val player = event.player
-        val raw = event.message
+        val raw = effectiveMessage
         val displayText = if (raw.startsWith("!")) raw.substring(1) else raw
         if (displayText.isBlank()) return
 
