@@ -68,9 +68,9 @@ chat:
 
 bug:
   enabled: true
-  # When enabled, bug reports stay in observation history but never dispatch
-  # the bug agent, survey, ticket tools, or player-facing messages.
-  observe-only: false
+  # Observe and route bug reports for diagnostics, but never run the bug agent,
+  # survey, ticket tools, or send player-facing messages.
+  observe-only: true
   max-pending-jobs: 4
   max-queue-age-sec: 60
   # One PM per inbound message is enforced by ToolChainState. Cross-message
