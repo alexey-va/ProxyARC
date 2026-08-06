@@ -25,6 +25,7 @@ class BugIntentHandler(
         context: PipelineContext,
         services: DispatchServices,
     ) {
+        if (services.assistantConfig.bool("bug.observe-only", false)) return
         if (!services.assistantConfig.bool("bug.enabled", true)) return
 
         val player = context.message.player

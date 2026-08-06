@@ -47,5 +47,18 @@ class RouterConfigTest : FreeSpec({
             val config = Config(tmp, "assistant.yml")
             RouterConfig.from(config).prefilterEnabled shouldBe false
         }
+
+        "parses bug observe-only mode" {
+            val tmp = Files.createTempDirectory("router-config-bug-observe-only")
+            Files.writeString(
+                tmp.resolve("assistant.yml"),
+                """
+                bug:
+                  observe-only: true
+                """.trimIndent(),
+            )
+            val config = Config(tmp, "assistant.yml")
+            RouterConfig.from(config).bugObserveOnly shouldBe true
+        }
     }
 })

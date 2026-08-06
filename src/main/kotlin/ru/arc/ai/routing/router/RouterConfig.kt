@@ -19,6 +19,7 @@ data class RouterConfig(
     val recentOpenTickets: Int,
     val prefilterEnabled: Boolean = true,
     val maxConsecutiveReplies: Int = 2,
+    val bugObserveOnly: Boolean = false,
 ) {
     fun isIntentEnabled(intent: RouteIntent): Boolean {
         if (intent == RouteIntent.SKIP) return true
@@ -82,6 +83,7 @@ data class RouterConfig(
                 prefilterEnabled = config.bool("routing.prefilter-enabled", true),
                 maxConsecutiveReplies =
                     config.integer("chat.max-consecutive-replies", 2).coerceIn(1, 5),
+                bugObserveOnly = config.bool("bug.observe-only", false),
             )
         }
     }

@@ -54,6 +54,8 @@ object RouterBugHeuristic {
         )
     private val brokenState =
         Regex("""(?iuU)\b(?:сломано|сломался|сломалась|сломалось|сломались|поломан\w*)\b""")
+    private val bugTopic =
+        Regex("""(?iuU)\b(?:баг(?:а|и|ов|ом|ами)?|bug(?:s)?|ошибк\w*)\b""")
     private val tpsFailure =
         Regex("""(?iuU)\b(?:tps|тпс)\b.{0,24}\b(?:упал|падает|низк\w*|[0-9]+)\b""")
     private val lossSubject =
@@ -163,6 +165,9 @@ object RouterBugHeuristic {
                     silentCommand.containsMatchIn(lower)
             ) || namedSilentCommand.containsMatchIn(lower)
     }
+
+    /** Explicit bug/error topic, including requests to discuss or investigate it. */
+    fun mentionsBugTopic(text: String): Boolean = bugTopic.containsMatchIn(text.trim())
 
     /** «есть бага», «баг» without details — must open bug survey, not router skip. */
     fun looksLikeVagueBugClaim(text: String): Boolean {
