@@ -33,10 +33,38 @@ object RouteDecisionPolicy {
         result = applyActiveSurveyOverride(message, meta, result)
         result = applyOpenTicketOverride(message, result)
         result = applyBugLikeSkipOverride(message, result)
+        result = applyBugObserveOnly(message, meta, result, config)
         return result
     }
 
-    /** Router LLM often skips «есть бага» — force bug agent + survey PM. */
+    /**
+     * Observe bug reports in chat history, but never dispatch the bug agent,
+     * survey, ticket tools, or player-facing messages.
+     */
+    internal fun applyBugObserveOnly(
+        message: InboundMessage,
+        meta: InboundMeta,
+        decision: RouteDecision,
+        config: RouterConfig,
+    ): RouteDecision {
+        if (!config.bugObserveOnly) return decision
+
+        val activeSurvey = BugSurveySessionStore.findForPlayer(message.player)
+        val isBugConversation =
+            decision.intent == RouteIntent.BUG ||
+                RouterBugHeuristic.looksLikeBugReport(message.displayText) ||
+                RouterBugHeuristic.mentionsBugTopic(message.displayText) ||
+                vagueBugAttempt(message.displayText) ||
+                (activeSurvey != null && shouldForceBugDuringSurvey(message, meta))
+        if (!isBugConversation) return decision
+
+        return decision.copy(
+            intent = RouteIntent.SKIP,
+            reason = "bug_observe_only; ${decision.reason}",
+        )
+    }
+
+    /** Router LLM often skips «есть бага» — preserve the bug classification. */
     internal fun applyBugLikeSkipOverride(
         message: InboundMessage,
         decision: RouteDecision,
@@ -55,7 +83,7 @@ object RouteDecisionPolicy {
         )
     }
 
-    /** Close / resolved messages with an open RB ticket must go to bug-agent, not chat. */
+    /** Close / resolved messages with an open RB ticket remain bug intent, not chat. */
     internal fun applyOpenTicketOverride(
         message: InboundMessage,
         decision: RouteDecision,

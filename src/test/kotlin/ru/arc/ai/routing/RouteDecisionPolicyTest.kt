@@ -348,10 +348,88 @@ class RouteDecisionPolicyTest : FreeSpec({
                 )
             decision.intent shouldBe RouteIntent.SKIP
         }
+
+        "observe-only silences a concrete bug report" {
+            val decision =
+                RouteDecisionPolicy.apply(
+                    message("Tester", "rtp не работает"),
+                    InboundMeta(false, false, false, null, null),
+                    RouteDecision(RouteIntent.BUG, 0.98, "prefilter:clear_bug", ""),
+                    defaultConfig(bugObserveOnly = true),
+                )
+
+            decision.intent shouldBe RouteIntent.SKIP
+            decision.reason shouldBe "bug_observe_only; prefilter:clear_bug"
+        }
+
+        "observe-only silences a vague directed bug claim" {
+            val decision =
+                RouteDecisionPolicy.apply(
+                    message("Tester", "скорен, есть бага"),
+                    InboundMeta(true, false, false, null, null),
+                    RouteDecision(RouteIntent.CHAT, 0.98, "prefilter:directed_chat", ""),
+                    defaultConfig(bugObserveOnly = true),
+                )
+
+            decision.intent shouldBe RouteIntent.SKIP
+            decision.reason shouldBe "bug_observe_only; prefilter:directed_chat"
+        }
+
+        "observe-only keeps an ordinary direct question in chat" {
+            val decision =
+                RouteDecisionPolicy.apply(
+                    message("Tester", "скорен, как попасть на выживание?"),
+                    InboundMeta(true, false, false, null, null),
+                    RouteDecision(RouteIntent.CHAT, 0.98, "prefilter:directed_chat", ""),
+                    defaultConfig(bugObserveOnly = true),
+                )
+
+            decision.intent shouldBe RouteIntent.CHAT
+        }
+
+        "observe-only ignores a request to interrogate about a bug" {
+            val decision =
+                RouteDecisionPolicy.apply(
+                    message("Tester", "скорен, баг, расспроси меня подробнее"),
+                    InboundMeta(true, false, false, null, null),
+                    RouteDecision(RouteIntent.CHAT, 0.98, "prefilter:directed_chat", ""),
+                    defaultConfig(bugObserveOnly = true),
+                )
+
+            decision.intent shouldBe RouteIntent.SKIP
+            decision.reason shouldBe "bug_observe_only; prefilter:directed_chat"
+        }
+
+        "observe-only silences details from a legacy active survey" {
+            BugSurveySessionStore.openOrTouch("Tester")
+            val decision =
+                RouteDecisionPolicy.apply(
+                    message("Tester", "после релога всё равно не работает"),
+                    InboundMeta(false, true, true, 3, null),
+                    RouteDecision(RouteIntent.CHAT, 0.9, "continuation", ""),
+                    defaultConfig(bugObserveOnly = true),
+                )
+
+            decision.intent shouldBe RouteIntent.SKIP
+            decision.reason shouldBe "bug_observe_only; survey_primary_continuation; continuation"
+        }
     }
 })
 
-private fun defaultConfig(): RouterConfig =
+private fun message(
+    player: String,
+    text: String,
+): InboundMessage =
+    InboundMessage(
+        player = player,
+        rawText = text,
+        displayText = text,
+        timestampMs = 1L,
+        server = "survival",
+        source = InboundMessage.Source.GAME,
+    )
+
+private fun defaultConfig(bugObserveOnly: Boolean = false): RouterConfig =
     RouterConfig(
         enabled = true,
         model = "test",
@@ -367,4 +445,5 @@ private fun defaultConfig(): RouterConfig =
         logRouteInfo = true,
         enabledIntents = setOf(RouteIntent.CHAT, RouteIntent.BUG),
         recentOpenTickets = 3,
+        bugObserveOnly = bugObserveOnly,
     )
