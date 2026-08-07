@@ -22,6 +22,8 @@ class ProxyOpsHttpServerTest : FreeSpec({
 
         config.discordReadEnabled shouldBe false
         config.discordWriteEnabled shouldBe false
+        config.discordAdminEnabled shouldBe false
+        config.discordAllowedGuildIds shouldBe emptySet()
         config.discordAllowedChannelIds shouldBe emptySet()
         config.discordWriteChannelIds shouldBe emptySet()
         config.discordMaxHistory shouldBe 50
@@ -35,6 +37,9 @@ class ProxyOpsHttpServerTest : FreeSpec({
             enabled: true
             discord-read-enabled: true
             discord-write-enabled: true
+            discord-admin-enabled: true
+            discord-allowed-guild-ids:
+              - "*"
             discord-allowed-channel-ids:
               - "1073279998359765042"
               - "1073279640912789597"
@@ -49,6 +54,8 @@ class ProxyOpsHttpServerTest : FreeSpec({
 
         config.discordReadEnabled shouldBe true
         config.discordWriteEnabled shouldBe true
+        config.discordAdminEnabled shouldBe true
+        config.discordAllowedGuildIds.shouldContainExactly("*")
         config.discordAllowedChannelIds.shouldContainExactly(
             "1073279998359765042",
             "1073279640912789597",
@@ -150,7 +157,7 @@ class ProxyOpsHttpServerTest : FreeSpec({
                 """.trimIndent(),
             )
         rejected.statusCode() shouldBe 400
-        fixture.gateway.lastSendRequest shouldBe null
+        fixture.gateway.lastMessageRequest shouldBe null
 
         val accepted =
             fixture.request(
@@ -166,12 +173,125 @@ class ProxyOpsHttpServerTest : FreeSpec({
                 """.trimIndent(),
             )
         accepted.statusCode() shouldBe 200
-        fixture.gateway.lastSendRequest shouldBe
-            DiscordSendRequest(
+        fixture.gateway.lastMessageRequest shouldBe
+            DiscordMessageMutationRequest(
+                operation = DiscordMessageMutation.SEND,
                 channelId = "1073279998359765042",
                 content = "Проверка",
                 replyToMessageId = "100000000000000000",
             )
+        fixture.close()
+    }
+
+    "Discord channel admin requires its own gate, guild allowlist, and exact confirmation" {
+        val fixture =
+            discordServer(
+                """
+                discord-admin-enabled: true
+                discord-allowed-guild-ids:
+                  - "*"
+                """,
+            )
+        val body =
+            """
+            {
+              "operation": "create",
+              "guildId": "100000000000000001",
+              "type": "text",
+              "name": "новый-канал",
+              "confirmation": "DISCORD CHANNEL CREATE 100000000000000001"
+            }
+            """.trimIndent()
+
+        val accepted = fixture.request("POST", "/ops/discord/channels/actions", body)
+
+        accepted.statusCode() shouldBe 200
+        fixture.gateway.lastChannelRequest shouldBe
+            DiscordChannelMutationRequest(
+                operation = DiscordChannelMutation.CREATE,
+                guildId = "100000000000000001",
+                type = "text",
+                name = "новый-канал",
+            )
+        fixture.close()
+    }
+
+    "Discord admin rejects a mutation without the admin gate" {
+        val fixture =
+            discordServer(
+                """
+                discord-allowed-guild-ids:
+                  - "*"
+                """,
+            )
+
+        val response =
+            fixture.request(
+                "POST",
+                "/ops/discord/channels/actions",
+                """
+                {
+                  "operation": "delete",
+                  "guildId": "100000000000000001",
+                  "channelId": "200000000000000002",
+                  "confirmation": "DISCORD CHANNEL DELETE 200000000000000002"
+                }
+                """.trimIndent(),
+            )
+
+        response.statusCode() shouldBe 403
+        fixture.gateway.lastChannelRequest shouldBe null
+        fixture.close()
+    }
+
+    "Discord search cannot bypass a bounded channel allowlist" {
+        val fixture =
+            discordServer(
+                """
+                discord-read-enabled: true
+                discord-allowed-guild-ids:
+                  - "*"
+                discord-allowed-channel-ids:
+                  - "200000000000000002"
+                """,
+            )
+
+        val response =
+            fixture.request(
+                "GET",
+                "/ops/discord/search?guildId=100000000000000001&query=test",
+            )
+
+        response.statusCode() shouldBe 400
+        fixture.close()
+    }
+
+    "Discord thread update validates the target thread as well as its supplied parent" {
+        val fixture =
+            discordServer(
+                """
+                discord-write-enabled: true
+                discord-write-channel-ids:
+                  - "200000000000000002"
+                """,
+            )
+
+        val response =
+            fixture.request(
+                "POST",
+                "/ops/discord/threads/actions",
+                """
+                {
+                  "operation": "update",
+                  "channelId": "200000000000000002",
+                  "threadId": "300000000000000003",
+                  "archived": true,
+                  "confirmation": "DISCORD THREAD UPDATE 300000000000000003"
+                }
+                """.trimIndent(),
+            )
+
+        response.statusCode() shouldBe 403
         fixture.close()
     }
 
@@ -254,17 +374,35 @@ private fun discordServer(extraConfig: String): DiscordServerFixture {
 private class FakeDiscordOpsGateway : DiscordOpsGateway {
     var ready = true
     var lastHistoryRequest: DiscordHistoryRequest? = null
-    var lastSendRequest: DiscordSendRequest? = null
+    var lastMessageRequest: DiscordMessageMutationRequest? = null
+    var lastChannelRequest: DiscordChannelMutationRequest? = null
 
     override fun isReady(): Boolean = ready
 
+    override fun isGuildAllowed(
+        guildId: String,
+        allowedGuildIds: Set<String>,
+    ): Boolean = "*" in allowedGuildIds || guildId in allowedGuildIds
+
     override fun isChannelAllowed(
         channelId: String,
+        allowedGuildIds: Set<String>,
         allowedChannelIds: Set<String>,
-    ): Boolean = channelId in allowedChannelIds
+    ): Boolean = "*" in allowedChannelIds || channelId in allowedChannelIds
 
-    override fun listChannels(allowedChannelIds: Set<String>): Map<String, Any?> =
+    override fun listGuilds(allowedGuildIds: Set<String>): Map<String, Any?> =
+        mapOf("guilds" to emptyList<Any>())
+
+    override fun listChannels(
+        allowedGuildIds: Set<String>,
+        allowedChannelIds: Set<String>,
+    ): Map<String, Any?> =
         mapOf("channels" to emptyList<Any>())
+
+    override fun listRoles(guildId: String): Map<String, Any?> = mapOf("guildId" to guildId, "roles" to emptyList<Any>())
+
+    override fun readMember(request: DiscordMemberReadRequest): CompletableFuture<Map<String, Any?>> =
+        CompletableFuture.completedFuture(mapOf("userId" to request.userId))
 
     override fun readHistory(request: DiscordHistoryRequest): CompletableFuture<Map<String, Any?>> {
         lastHistoryRequest = request
@@ -279,8 +417,28 @@ private class FakeDiscordOpsGateway : DiscordOpsGateway {
     override fun readMessage(request: DiscordMessageRequest): CompletableFuture<Map<String, Any?>> =
         CompletableFuture.completedFuture(mapOf("id" to request.messageId))
 
-    override fun sendMessage(request: DiscordSendRequest): CompletableFuture<Map<String, Any?>> {
-        lastSendRequest = request
+    override fun readPins(request: DiscordPinsRequest): CompletableFuture<Map<String, Any?>> =
+        CompletableFuture.completedFuture(mapOf("pins" to emptyList<Any>()))
+
+    override fun searchMessages(request: DiscordSearchRequest): CompletableFuture<Map<String, Any?>> =
+        CompletableFuture.completedFuture(mapOf("messages" to emptyList<Any>()))
+
+    override fun mutateMessage(request: DiscordMessageMutationRequest): CompletableFuture<Map<String, Any?>> {
+        lastMessageRequest = request
         return CompletableFuture.completedFuture(mapOf("id" to "101"))
     }
+
+    override fun mutateThread(request: DiscordThreadMutationRequest): CompletableFuture<Map<String, Any?>> =
+        CompletableFuture.completedFuture(mapOf("threadId" to (request.threadId ?: "102")))
+
+    override fun mutateChannel(request: DiscordChannelMutationRequest): CompletableFuture<Map<String, Any?>> {
+        lastChannelRequest = request
+        return CompletableFuture.completedFuture(mapOf("channelId" to (request.channelId ?: "103")))
+    }
+
+    override fun mutateRole(request: DiscordRoleMutationRequest): CompletableFuture<Map<String, Any?>> =
+        CompletableFuture.completedFuture(mapOf("roleId" to (request.roleId ?: "104")))
+
+    override fun mutateMember(request: DiscordMemberMutationRequest): CompletableFuture<Map<String, Any?>> =
+        CompletableFuture.completedFuture(mapOf("userId" to request.userId))
 }

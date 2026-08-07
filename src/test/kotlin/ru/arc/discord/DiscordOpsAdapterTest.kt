@@ -9,7 +9,9 @@ import net.dv8tion.jda.api.JDA
 import net.dv8tion.jda.api.entities.Message
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel
 import net.dv8tion.jda.api.requests.restaction.MessageCreateAction
-import ru.arc.ops.DiscordSendRequest
+import net.dv8tion.jda.api.utils.messages.MessageCreateData
+import ru.arc.ops.DiscordMessageMutation
+import ru.arc.ops.DiscordMessageMutationRequest
 import java.time.OffsetDateTime
 import java.util.concurrent.CompletableFuture
 
@@ -38,15 +40,23 @@ class DiscordOpsAdapterTest : FreeSpec({
         ) shouldBe false
     }
 
+    "wildcard allows every guild channel" {
+        DiscordOpsAdapter.isAllowed(
+            channelId = "200000000000000002",
+            parentChannelId = null,
+            allowedChannelIds = setOf("*"),
+        ) shouldBe true
+    }
+
     "send disables mentions and replied-user ping" {
         val channelId = "100000000000000001"
         val replyId = "200000000000000002"
         val jda = mockk<JDA>()
         val channel = mockk<TextChannel>()
         val action = mockk<MessageCreateAction>()
-        val sent = mockk<Message>()
+        val sent = mockk<Message>(relaxed = true)
         every { jda.getTextChannelById(channelId) } returns channel
-        every { channel.sendMessage("Проверка") } returns action
+        every { channel.sendMessage(any<MessageCreateData>()) } returns action
         every { action.setAllowedMentions(emptySet()) } returns action
         every { action.mentionRepliedUser(false) } returns action
         every { action.setMessageReference(replyId) } returns action
@@ -54,13 +64,15 @@ class DiscordOpsAdapterTest : FreeSpec({
         every { sent.id } returns "300000000000000003"
         every { sent.channelId } returns channelId
         every { sent.timeCreated } returns OffsetDateTime.parse("2026-08-07T15:00:00+03:00")
+        every { sent.timeEdited } returns null
         every { sent.jumpUrl } returns
             "https://discord.com/channels/1/$channelId/300000000000000003"
         val adapter = DiscordOpsAdapter({ jda }, { emptyMap() })
 
         val result =
-            adapter.sendMessage(
-                DiscordSendRequest(
+            adapter.mutateMessage(
+                DiscordMessageMutationRequest(
+                    operation = DiscordMessageMutation.SEND,
                     channelId = channelId,
                     content = "Проверка",
                     replyToMessageId = replyId,

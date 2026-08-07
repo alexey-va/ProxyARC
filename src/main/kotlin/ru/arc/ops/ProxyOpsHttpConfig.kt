@@ -12,6 +12,8 @@ class ProxyOpsHttpConfig private constructor(
     val logsEnabled: Boolean,
     val discordReadEnabled: Boolean,
     val discordWriteEnabled: Boolean,
+    val discordAdminEnabled: Boolean,
+    val discordAllowedGuildIds: Set<String>,
     val discordAllowedChannelIds: Set<String>,
     val discordWriteChannelIds: Set<String>,
     val discordMaxHistory: Int,
@@ -25,16 +27,10 @@ class ProxyOpsHttpConfig private constructor(
         logsEnabled = config.bool("logs-enabled", true),
         discordReadEnabled = config.bool("discord-read-enabled", false),
         discordWriteEnabled = config.bool("discord-write-enabled", false),
-        discordAllowedChannelIds =
-            config.stringList("discord-allowed-channel-ids")
-                .map(String::trim)
-                .filter(String::isNotEmpty)
-                .toCollection(linkedSetOf()),
-        discordWriteChannelIds =
-            config.stringList("discord-write-channel-ids")
-                .map(String::trim)
-                .filter(String::isNotEmpty)
-                .toCollection(linkedSetOf()),
+        discordAdminEnabled = config.bool("discord-admin-enabled", false),
+        discordAllowedGuildIds = config.idSet("discord-allowed-guild-ids"),
+        discordAllowedChannelIds = config.idSet("discord-allowed-channel-ids"),
+        discordWriteChannelIds = config.idSet("discord-write-channel-ids"),
         discordMaxHistory = config.integer("discord-max-history", 50).coerceIn(1, 100),
     )
 
@@ -49,6 +45,8 @@ class ProxyOpsHttpConfig private constructor(
                 logsEnabled = false,
                 discordReadEnabled = false,
                 discordWriteEnabled = false,
+                discordAdminEnabled = false,
+                discordAllowedGuildIds = emptySet(),
                 discordAllowedChannelIds = emptySet(),
                 discordWriteChannelIds = emptySet(),
                 discordMaxHistory = 50,
@@ -62,5 +60,11 @@ class ProxyOpsHttpConfig private constructor(
         fun reload() {
             instance = ProxyOpsHttpConfig(ProxyConfigs.module("ops-http.yml"))
         }
+
+        private fun Config.idSet(path: String): Set<String> =
+            stringList(path)
+                .map(String::trim)
+                .filter(String::isNotEmpty)
+                .toCollection(linkedSetOf())
     }
 }

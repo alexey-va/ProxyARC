@@ -26,10 +26,17 @@ import ru.arc.ai.tickets.IssueTicketTitles
 import ru.arc.auction.AuctionItemDto
 import ru.arc.config.Config
 import ru.arc.config.ProxyConfigs
+import ru.arc.ops.DiscordChannelMutationRequest
 import ru.arc.ops.DiscordHistoryRequest
+import ru.arc.ops.DiscordMemberMutationRequest
+import ru.arc.ops.DiscordMemberReadRequest
+import ru.arc.ops.DiscordMessageMutationRequest
 import ru.arc.ops.DiscordMessageRequest
 import ru.arc.ops.DiscordOpsGateway
-import ru.arc.ops.DiscordSendRequest
+import ru.arc.ops.DiscordPinsRequest
+import ru.arc.ops.DiscordRoleMutationRequest
+import ru.arc.ops.DiscordSearchRequest
+import ru.arc.ops.DiscordThreadMutationRequest
 import java.awt.Color
 import java.time.OffsetDateTime
 import java.util.Arrays
@@ -85,11 +92,27 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
 
     override fun isChannelAllowed(
         channelId: String,
+        allowedGuildIds: Set<String>,
         allowedChannelIds: Set<String>,
-    ): Boolean = opsAdapter.isChannelAllowed(channelId, allowedChannelIds)
+    ): Boolean = opsAdapter.isChannelAllowed(channelId, allowedGuildIds, allowedChannelIds)
 
-    override fun listChannels(allowedChannelIds: Set<String>): Map<String, Any?> =
-        opsAdapter.listChannels(allowedChannelIds)
+    override fun isGuildAllowed(
+        guildId: String,
+        allowedGuildIds: Set<String>,
+    ): Boolean = opsAdapter.isGuildAllowed(guildId, allowedGuildIds)
+
+    override fun listGuilds(allowedGuildIds: Set<String>): Map<String, Any?> =
+        opsAdapter.listGuilds(allowedGuildIds)
+
+    override fun listChannels(
+        allowedGuildIds: Set<String>,
+        allowedChannelIds: Set<String>,
+    ): Map<String, Any?> = opsAdapter.listChannels(allowedGuildIds, allowedChannelIds)
+
+    override fun listRoles(guildId: String): Map<String, Any?> = opsAdapter.listRoles(guildId)
+
+    override fun readMember(request: DiscordMemberReadRequest): CompletableFuture<Map<String, Any?>> =
+        opsAdapter.readMember(request)
 
     override fun readHistory(request: DiscordHistoryRequest): CompletableFuture<Map<String, Any?>> =
         opsAdapter.readHistory(request)
@@ -97,8 +120,26 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
     override fun readMessage(request: DiscordMessageRequest): CompletableFuture<Map<String, Any?>> =
         opsAdapter.readMessage(request)
 
-    override fun sendMessage(request: DiscordSendRequest): CompletableFuture<Map<String, Any?>> =
-        opsAdapter.sendMessage(request)
+    override fun readPins(request: DiscordPinsRequest): CompletableFuture<Map<String, Any?>> =
+        opsAdapter.readPins(request)
+
+    override fun searchMessages(request: DiscordSearchRequest): CompletableFuture<Map<String, Any?>> =
+        opsAdapter.searchMessages(request)
+
+    override fun mutateMessage(request: DiscordMessageMutationRequest): CompletableFuture<Map<String, Any?>> =
+        opsAdapter.mutateMessage(request)
+
+    override fun mutateThread(request: DiscordThreadMutationRequest): CompletableFuture<Map<String, Any?>> =
+        opsAdapter.mutateThread(request)
+
+    override fun mutateChannel(request: DiscordChannelMutationRequest): CompletableFuture<Map<String, Any?>> =
+        opsAdapter.mutateChannel(request)
+
+    override fun mutateRole(request: DiscordRoleMutationRequest): CompletableFuture<Map<String, Any?>> =
+        opsAdapter.mutateRole(request)
+
+    override fun mutateMember(request: DiscordMemberMutationRequest): CompletableFuture<Map<String, Any?>> =
+        opsAdapter.mutateMember(request)
 
     private fun configuredChannelAliases(): Map<String, String> =
         OPS_CHANNEL_ALIASES.associateWith { alias ->

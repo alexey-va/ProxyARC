@@ -37,7 +37,7 @@ dependencies {
     compileOnly("com.gitlab.ruany:LiteBansAPI:0.5.0")
 
     implementation(kotlin("stdlib"))
-    implementation("net.dv8tion:JDA:6.0.0-rc.4") {
+    implementation("net.dv8tion:JDA:6.5.0") {
         exclude(group = "club.minnced", module = "opus-java")
     }
     implementation("org.telegram:telegrambots:6.9.7.1")

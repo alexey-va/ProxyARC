@@ -7,9 +7,12 @@ token: ""
 simulate-enabled: true
 logs-enabled: true
 
-# Discord ops stay disabled until the runtime config explicitly selects channels.
+# Discord ops stay disabled until the runtime config explicitly selects guilds/channels.
+# A single "*" entry enables every guild/channel visible to the bot.
 discord-read-enabled: false
 discord-write-enabled: false
+discord-admin-enabled: false
+discord-allowed-guild-ids: []
 discord-allowed-channel-ids: []
 discord-write-channel-ids: []
 discord-max-history: 50
