@@ -1,11 +1,14 @@
 package ru.arc.core.modules
 
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.log4j.core.LoggerContext
 import org.slf4j.LoggerFactory
 import ru.arc.config.ConfigManager
 import ru.arc.config.ProxyConfigs
 import ru.arc.core.PluginModule
 import ru.arc.logging.ArcLogging
 import ru.arc.logging.LoggingConfigSource
+import ru.arc.logging.LoggingModuleConfig
 import ru.arc.logging.LokiAttachTarget
 import ru.arc.logging.LokiInstallSpec
 import ru.arc.logging.Slf4jLoggingPlatform
@@ -43,6 +46,7 @@ object LoggingModule : PluginModule {
                         appenderName = "lokiAppender",
                     ),
             )
+            applyConfiguredRootLevel()
         } catch (e: Exception) {
             log.error("Error adding loki appender", e)
         }
@@ -70,9 +74,21 @@ object LoggingModule : PluginModule {
                         appenderName = "lokiAppender",
                     ),
             )
+            applyConfiguredRootLevel()
         } catch (e: Exception) {
             log.error("Error reloading Loki appender", e)
         }
+    }
+
+    private fun applyConfiguredRootLevel() {
+        val context = LogManager.getContext(false) as LoggerContext
+        val level =
+            org.apache.logging.log4j.Level.valueOf(
+                LoggingModuleConfig(ProxyConfigs.module("logging.yml")).level.name,
+            )
+        context.configuration.rootLogger.level = level
+        context.updateLoggers()
+        log.info("Velocity root log level set to {}", level)
     }
 }
 

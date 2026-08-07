@@ -29,6 +29,7 @@ import ru.arc.core.modules.ProxyArcReload
 import ru.arc.core.modules.ConfigModule
 import ru.arc.core.modules.FirstJoinModule
 import ru.arc.core.modules.JoinMessagesModule
+import ru.arc.core.modules.ChatModeModule
 import ru.arc.core.modules.ListenersModule
 import ru.arc.core.modules.LoggingModule
 import ru.arc.core.modules.MetricsModule
@@ -111,6 +112,7 @@ class Velocity @Inject constructor(
             SaveModule,
             PlayerListModule,
             JoinMessagesModule,
+            ChatModeModule,
             // Integrations (70-89)
             DiscordModule,
             TelegramModule,

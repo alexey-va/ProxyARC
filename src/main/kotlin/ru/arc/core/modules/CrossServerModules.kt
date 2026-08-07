@@ -7,6 +7,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.future.future
 import kotlinx.coroutines.runBlocking
 import ru.arc.Common
+import ru.arc.chat.ChatModeService
 import ru.arc.core.PluginModule
 import ru.arc.redis.RedisOperations
 import ru.arc.repository.CachedRepository
@@ -94,6 +95,22 @@ object JoinMessagesModule : PluginModule {
         if (currentRepository != null) {
             runBlocking { currentRepository.shutdown() }
         }
+    }
+
+    override fun reload() {}
+}
+
+object ChatModeModule : PluginModule {
+    override val name = "ChatMode"
+    override val priority = 66
+
+    override fun init() {
+        val redis = Velocity.redisManager ?: return
+        ChatModeService.start(redis)
+    }
+
+    override fun shutdown() {
+        ChatModeService.shutdown()
     }
 
     override fun reload() {}
