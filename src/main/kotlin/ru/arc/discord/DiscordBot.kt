@@ -26,6 +26,10 @@ import ru.arc.ai.tickets.IssueTicketTitles
 import ru.arc.auction.AuctionItemDto
 import ru.arc.config.Config
 import ru.arc.config.ProxyConfigs
+import ru.arc.ops.DiscordHistoryRequest
+import ru.arc.ops.DiscordMessageRequest
+import ru.arc.ops.DiscordOpsGateway
+import ru.arc.ops.DiscordSendRequest
 import java.awt.Color
 import java.time.OffsetDateTime
 import java.util.Arrays
@@ -36,7 +40,7 @@ import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
-class DiscordBot : AutoCloseable {
+class DiscordBot : AutoCloseable, DiscordOpsGateway {
 
     private val log = LoggerFactory.getLogger(DiscordBot::class.java)
 
@@ -49,6 +53,11 @@ class DiscordBot : AutoCloseable {
     private var chatChannel: TextChannel? = null
     private var generalChannel: TextChannel? = null
     private var issueTicketsChannel: Channel? = null
+    private val opsAdapter =
+        DiscordOpsAdapter(
+            jdaProvider = { jda },
+            aliasesProvider = ::configuredChannelAliases,
+        )
     private val service: ScheduledExecutorService = Executors.newScheduledThreadPool(4)
     private val chatCleaner =
         DiscordChatCleaner(
@@ -72,7 +81,29 @@ class DiscordBot : AutoCloseable {
     @Volatile
     private var playerListRetryFuture: ScheduledFuture<*>? = null
 
-    fun isReady(): Boolean = isEnabled && channelsReady
+    override fun isReady(): Boolean = isEnabled && channelsReady
+
+    override fun isChannelAllowed(
+        channelId: String,
+        allowedChannelIds: Set<String>,
+    ): Boolean = opsAdapter.isChannelAllowed(channelId, allowedChannelIds)
+
+    override fun listChannels(allowedChannelIds: Set<String>): Map<String, Any?> =
+        opsAdapter.listChannels(allowedChannelIds)
+
+    override fun readHistory(request: DiscordHistoryRequest): CompletableFuture<Map<String, Any?>> =
+        opsAdapter.readHistory(request)
+
+    override fun readMessage(request: DiscordMessageRequest): CompletableFuture<Map<String, Any?>> =
+        opsAdapter.readMessage(request)
+
+    override fun sendMessage(request: DiscordSendRequest): CompletableFuture<Map<String, Any?>> =
+        opsAdapter.sendMessage(request)
+
+    private fun configuredChannelAliases(): Map<String, String> =
+        OPS_CHANNEL_ALIASES.associateWith { alias ->
+            config.string("channels.$alias", "").trim()
+        }
 
     init {
         try {
@@ -915,6 +946,16 @@ class DiscordBot : AutoCloseable {
     }
 
     companion object {
+        private val OPS_CHANNEL_ALIASES =
+            listOf(
+                "join-messages",
+                "player-list",
+                "auction",
+                "chat",
+                "general",
+                "issue-tickets",
+            )
+
         private const val PLAYER_LIST_MAX_RETRIES = 5
         private const val PLAYER_LIST_HEARTBEAT_MS = 10 * 60 * 1000L
 

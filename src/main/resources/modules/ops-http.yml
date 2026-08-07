@@ -6,3 +6,10 @@ token: ""
 
 simulate-enabled: true
 logs-enabled: true
+
+# Discord ops stay disabled until the runtime config explicitly selects channels.
+discord-read-enabled: false
+discord-write-enabled: false
+discord-allowed-channel-ids: []
+discord-write-channel-ids: []
+discord-max-history: 50

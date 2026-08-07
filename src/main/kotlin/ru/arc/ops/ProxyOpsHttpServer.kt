@@ -13,6 +13,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class ProxyOpsHttpServer(
     private val executorFactory: () -> ExecutorService = {
@@ -21,6 +22,7 @@ class ProxyOpsHttpServer(
         }
     },
     private val configProvider: () -> ProxyOpsHttpConfig = ProxyOpsHttpConfig::current,
+    private val discordProvider: () -> DiscordOpsGateway? = { Velocity.discordBot },
 ) {
     private val log = LoggerFactory.getLogger(ProxyOpsHttpServer::class.java)
     private val mapper = ObjectMapper()
@@ -100,9 +102,155 @@ class ProxyOpsHttpServer(
                 simulate(exchange, cfg, previewOnly = true)
             path == "assistant/logs" && method == "GET" ->
                 logs(exchange, cfg)
+            path == "discord/channels" && method == "GET" ->
+                discordChannels(exchange, cfg)
+            path == "discord/messages" && method == "GET" ->
+                discordHistory(exchange, cfg)
+            path.startsWith("discord/messages/") && method == "GET" ->
+                discordMessage(exchange, cfg, path.removePrefix("discord/messages/"))
+            path == "discord/messages" && method == "POST" ->
+                discordSend(exchange, cfg)
             else -> respond(exchange, 404, ProxyOpsJson.error("Not found: /ops/$path"))
         }
     }
+
+    private fun discordChannels(
+        exchange: HttpExchange,
+        cfg: ProxyOpsHttpConfig,
+    ) {
+        if (!requireDiscordRead(exchange, cfg)) return
+        val gateway = requireDiscordGateway(exchange) ?: return
+        respond(exchange, 200, successJson(gateway.listChannels(cfg.discordAllowedChannelIds)))
+    }
+
+    private fun discordHistory(
+        exchange: HttpExchange,
+        cfg: ProxyOpsHttpConfig,
+    ) {
+        if (!requireDiscordRead(exchange, cfg)) return
+        val gateway = requireDiscordGateway(exchange) ?: return
+        val query = parseQuery(exchange.requestURI.rawQuery)
+        val channelId = query["channelId"].orEmpty()
+        if (!validSnowflake(channelId)) {
+            respond(exchange, 400, ProxyOpsJson.error("valid channelId required"))
+            return
+        }
+        if (!gateway.isChannelAllowed(channelId, cfg.discordAllowedChannelIds)) {
+            respond(exchange, 403, ProxyOpsJson.error("discord-channel-not-allowed"))
+            return
+        }
+        val before = query["before"]?.takeIf(String::isNotBlank)
+        if (before != null && !validSnowflake(before)) {
+            respond(exchange, 400, ProxyOpsJson.error("before must be a valid message id"))
+            return
+        }
+        val limit =
+            query["limit"]?.toIntOrNull()
+                ?.coerceIn(1, cfg.discordMaxHistory)
+                ?: minOf(20, cfg.discordMaxHistory)
+        val result =
+            gateway.readHistory(
+                DiscordHistoryRequest(
+                    channelId = channelId,
+                    limit = limit,
+                    beforeMessageId = before,
+                ),
+            ).get(DISCORD_REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        respond(exchange, 200, successJson(result))
+    }
+
+    private fun discordMessage(
+        exchange: HttpExchange,
+        cfg: ProxyOpsHttpConfig,
+        messageId: String,
+    ) {
+        if (!requireDiscordRead(exchange, cfg)) return
+        val gateway = requireDiscordGateway(exchange) ?: return
+        val query = parseQuery(exchange.requestURI.rawQuery)
+        val channelId = query["channelId"].orEmpty()
+        if (!validSnowflake(channelId) || !validSnowflake(messageId)) {
+            respond(exchange, 400, ProxyOpsJson.error("valid channelId and messageId required"))
+            return
+        }
+        if (!gateway.isChannelAllowed(channelId, cfg.discordAllowedChannelIds)) {
+            respond(exchange, 403, ProxyOpsJson.error("discord-channel-not-allowed"))
+            return
+        }
+        val result =
+            gateway.readMessage(DiscordMessageRequest(channelId, messageId))
+                .get(DISCORD_REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        respond(exchange, 200, successJson(result))
+    }
+
+    private fun discordSend(
+        exchange: HttpExchange,
+        cfg: ProxyOpsHttpConfig,
+    ) {
+        if (!cfg.discordWriteEnabled) {
+            respond(exchange, 403, ProxyOpsJson.error("discord-write-disabled"))
+            return
+        }
+        val gateway = requireDiscordGateway(exchange) ?: return
+        val request = parseDiscordSendRequest(readBody(exchange))
+        if (request == null) {
+            respond(exchange, 400, ProxyOpsJson.error("Invalid JSON body"))
+            return
+        }
+        if (!validSnowflake(request.channelId)) {
+            respond(exchange, 400, ProxyOpsJson.error("valid channelId required"))
+            return
+        }
+        if (!gateway.isChannelAllowed(request.channelId, cfg.discordWriteChannelIds)) {
+            respond(exchange, 403, ProxyOpsJson.error("discord-channel-not-allowed"))
+            return
+        }
+        if (request.content.isBlank() || request.content.length > DISCORD_MESSAGE_MAX_LENGTH) {
+            respond(exchange, 400, ProxyOpsJson.error("content must contain 1..2000 characters"))
+            return
+        }
+        if (request.replyToMessageId != null && !validSnowflake(request.replyToMessageId)) {
+            respond(exchange, 400, ProxyOpsJson.error("replyToMessageId must be a valid message id"))
+            return
+        }
+        if (request.confirmation != "SEND ${request.channelId}") {
+            respond(exchange, 400, ProxyOpsJson.error("confirmation must equal SEND <channelId>"))
+            return
+        }
+        val result =
+            gateway.sendMessage(
+                DiscordSendRequest(
+                    channelId = request.channelId,
+                    content = request.content,
+                    replyToMessageId = request.replyToMessageId,
+                ),
+            ).get(DISCORD_REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        log.info(
+            "Discord ops sent message channel={} message={} reply={}",
+            request.channelId,
+            result["id"],
+            request.replyToMessageId,
+        )
+        respond(exchange, 200, successJson(result))
+    }
+
+    private fun requireDiscordRead(
+        exchange: HttpExchange,
+        cfg: ProxyOpsHttpConfig,
+    ): Boolean {
+        if (cfg.discordReadEnabled) return true
+        respond(exchange, 403, ProxyOpsJson.error("discord-read-disabled"))
+        return false
+    }
+
+    private fun requireDiscordGateway(exchange: HttpExchange): DiscordOpsGateway? {
+        val gateway = discordProvider()
+        if (gateway?.isReady() == true) return gateway
+        respond(exchange, 503, ProxyOpsJson.error("discord-not-ready"))
+        return null
+    }
+
+    private fun successJson(payload: Map<String, Any?>): String =
+        mapper.writeValueAsString(linkedMapOf<String, Any?>("ok" to true).apply { putAll(payload) })
 
     private fun simulate(
         exchange: HttpExchange,
@@ -199,10 +347,17 @@ class ProxyOpsHttpServer(
             if (cfg.simulateEnabled) add("POST /ops/assistant/simulate")
             if (cfg.simulateEnabled) add("POST /ops/assistant/preview")
             if (cfg.logsEnabled) add("GET /ops/assistant/logs?pattern=&lines=")
+            if (cfg.discordReadEnabled) {
+                add("GET /ops/discord/channels")
+                add("GET /ops/discord/messages?channelId=&limit=&before=")
+                add("GET /ops/discord/messages/{messageId}?channelId=")
+            }
+            if (cfg.discordWriteEnabled) add("POST /ops/discord/messages")
         }
 
     private fun readBody(exchange: HttpExchange): String {
-        val bytes = exchange.requestBody.readAllBytes()
+        val bytes = exchange.requestBody.readNBytes(MAX_REQUEST_BODY_BYTES + 1)
+        require(bytes.size <= MAX_REQUEST_BODY_BYTES) { "Request body too large" }
         return String(bytes, StandardCharsets.UTF_8)
     }
 
@@ -234,6 +389,23 @@ class ProxyOpsHttpServer(
             null
         }
 
+    @Suppress("UNCHECKED_CAST")
+    private fun parseDiscordSendRequest(body: String): DiscordSendHttpRequest? =
+        try {
+            val map = mapper.readValue(body, Map::class.java) as Map<String, Any?>
+            DiscordSendHttpRequest(
+                channelId = map["channelId"]?.toString()?.trim().orEmpty(),
+                content = map["content"]?.toString().orEmpty(),
+                replyToMessageId = map["replyToMessageId"]?.toString()?.trim()?.takeIf(String::isNotEmpty),
+                confirmation = map["confirmation"]?.toString().orEmpty(),
+            )
+        } catch (_: Exception) {
+            null
+        }
+
+    private fun validSnowflake(value: String): Boolean =
+        value.length in 17..20 && value.all(Char::isDigit)
+
     private fun respond(
         exchange: HttpExchange,
         code: Int,
@@ -254,4 +426,17 @@ class ProxyOpsHttpServer(
         val continuationWithBot: Boolean = false,
         val waitSeconds: Int = 45,
     )
+
+    private data class DiscordSendHttpRequest(
+        val channelId: String,
+        val content: String,
+        val replyToMessageId: String?,
+        val confirmation: String,
+    )
+
+    companion object {
+        private const val DISCORD_MESSAGE_MAX_LENGTH = 2_000
+        private const val DISCORD_REQUEST_TIMEOUT_SECONDS = 15L
+        private const val MAX_REQUEST_BODY_BYTES = 64 * 1024
+    }
 }

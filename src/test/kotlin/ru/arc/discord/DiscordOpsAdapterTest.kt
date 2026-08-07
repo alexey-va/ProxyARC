@@ -1,0 +1,75 @@
+package ru.arc.discord
+
+import io.kotest.core.spec.style.FreeSpec
+import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
+import net.dv8tion.jda.api.JDA
+import net.dv8tion.jda.api.entities.Message
+import net.dv8tion.jda.api.entities.channel.concrete.TextChannel
+import net.dv8tion.jda.api.requests.restaction.MessageCreateAction
+import ru.arc.ops.DiscordSendRequest
+import java.time.OffsetDateTime
+import java.util.concurrent.CompletableFuture
+
+class DiscordOpsAdapterTest : FreeSpec({
+    "a configured root channel is allowed" {
+        DiscordOpsAdapter.isAllowed(
+            channelId = "100000000000000001",
+            parentChannelId = null,
+            allowedChannelIds = setOf("100000000000000001"),
+        ) shouldBe true
+    }
+
+    "a thread inherits access from its configured parent" {
+        DiscordOpsAdapter.isAllowed(
+            channelId = "200000000000000002",
+            parentChannelId = "100000000000000001",
+            allowedChannelIds = setOf("100000000000000001"),
+        ) shouldBe true
+    }
+
+    "an unrelated channel is denied" {
+        DiscordOpsAdapter.isAllowed(
+            channelId = "200000000000000002",
+            parentChannelId = "300000000000000003",
+            allowedChannelIds = setOf("100000000000000001"),
+        ) shouldBe false
+    }
+
+    "send disables mentions and replied-user ping" {
+        val channelId = "100000000000000001"
+        val replyId = "200000000000000002"
+        val jda = mockk<JDA>()
+        val channel = mockk<TextChannel>()
+        val action = mockk<MessageCreateAction>()
+        val sent = mockk<Message>()
+        every { jda.getTextChannelById(channelId) } returns channel
+        every { channel.sendMessage("Проверка") } returns action
+        every { action.setAllowedMentions(emptySet()) } returns action
+        every { action.mentionRepliedUser(false) } returns action
+        every { action.setMessageReference(replyId) } returns action
+        every { action.submit() } returns CompletableFuture.completedFuture(sent)
+        every { sent.id } returns "300000000000000003"
+        every { sent.channelId } returns channelId
+        every { sent.timeCreated } returns OffsetDateTime.parse("2026-08-07T15:00:00+03:00")
+        every { sent.jumpUrl } returns
+            "https://discord.com/channels/1/$channelId/300000000000000003"
+        val adapter = DiscordOpsAdapter({ jda }, { emptyMap() })
+
+        val result =
+            adapter.sendMessage(
+                DiscordSendRequest(
+                    channelId = channelId,
+                    content = "Проверка",
+                    replyToMessageId = replyId,
+                ),
+            ).join()
+
+        result["id"] shouldBe "300000000000000003"
+        verify(exactly = 1) { action.setAllowedMentions(emptySet()) }
+        verify(exactly = 1) { action.mentionRepliedUser(false) }
+        verify(exactly = 1) { action.setMessageReference(replyId) }
+    }
+})

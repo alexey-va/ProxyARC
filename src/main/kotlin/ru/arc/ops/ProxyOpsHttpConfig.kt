@@ -10,6 +10,11 @@ class ProxyOpsHttpConfig private constructor(
     val bindPort: Int,
     val simulateEnabled: Boolean,
     val logsEnabled: Boolean,
+    val discordReadEnabled: Boolean,
+    val discordWriteEnabled: Boolean,
+    val discordAllowedChannelIds: Set<String>,
+    val discordWriteChannelIds: Set<String>,
+    val discordMaxHistory: Int,
 ) {
     constructor(config: Config) : this(
         enabled = config.bool("enabled", false),
@@ -18,6 +23,19 @@ class ProxyOpsHttpConfig private constructor(
         bindPort = config.integer("bind-port", 25825),
         simulateEnabled = config.bool("simulate-enabled", true),
         logsEnabled = config.bool("logs-enabled", true),
+        discordReadEnabled = config.bool("discord-read-enabled", false),
+        discordWriteEnabled = config.bool("discord-write-enabled", false),
+        discordAllowedChannelIds =
+            config.stringList("discord-allowed-channel-ids")
+                .map(String::trim)
+                .filter(String::isNotEmpty)
+                .toCollection(linkedSetOf()),
+        discordWriteChannelIds =
+            config.stringList("discord-write-channel-ids")
+                .map(String::trim)
+                .filter(String::isNotEmpty)
+                .toCollection(linkedSetOf()),
+        discordMaxHistory = config.integer("discord-max-history", 50).coerceIn(1, 100),
     )
 
     companion object {
@@ -29,6 +47,11 @@ class ProxyOpsHttpConfig private constructor(
                 bindPort = 25825,
                 simulateEnabled = false,
                 logsEnabled = false,
+                discordReadEnabled = false,
+                discordWriteEnabled = false,
+                discordAllowedChannelIds = emptySet(),
+                discordWriteChannelIds = emptySet(),
+                discordMaxHistory = 50,
             )
 
         @Volatile
