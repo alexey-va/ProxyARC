@@ -7,6 +7,7 @@ import com.velocitypowered.api.event.player.ServerPostConnectEvent
 import com.velocitypowered.api.proxy.ConnectionRequestBuilder
 import com.velocitypowered.api.proxy.Player
 import com.velocitypowered.api.proxy.ProxyServer
+import com.velocitypowered.api.proxy.ServerConnection
 import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier
 import org.slf4j.LoggerFactory
 import ru.arc.Utils
@@ -146,12 +147,24 @@ class RtpRequestManager(
 
     internal fun pendingRequest(playerId: UUID): NetworkRtpRequest? = pending[playerId]?.request
 
+    internal fun backendReady(connection: ServerConnection) {
+        val player = connection.player
+        val item = pending[player.uniqueId] ?: return
+        if (!connection.serverInfo.name.equals(item.request.targetServer, ignoreCase = true)) return
+        log.info(
+            "Target backend {} reported {} ready for network RTP request {}",
+            connection.serverInfo.name,
+            player.username,
+            item.request.requestId,
+        )
+        deliver(player, connection)
+    }
+
     /**
      * Velocity can report a successful backend connection before Bukkit has
-     * completed the player join. A plugin message sent in that window returns
-     * true but is silently lost by the backend, so cross-server requests wait
-     * one second before their first delivery. Regular requests for a player
-     * already on survival remain immediate.
+     * completed the player join. ARC normally reports backend readiness from
+     * PlayerJoinEvent and triggers immediate delivery. This one-second task is
+     * retained only as a compatibility fallback when that signal is missing.
      */
     private fun scheduleAfterTransfer(player: Player) {
         val item = pending[player.uniqueId] ?: return
@@ -160,24 +173,31 @@ class RtpRequestManager(
             POST_CONNECT_DELIVERY_DELAY_TICKS,
             Runnable {
                 item.deliveryScheduled.set(false)
+                if (pending[player.uniqueId] === item) {
+                    log.warn(
+                        "Backend-ready signal missing for network RTP request {}; using one-second fallback",
+                        item.request.requestId,
+                    )
+                }
                 deliver(player)
             },
         )
     }
 
-    private fun deliver(player: Player) {
+    private fun deliver(
+        player: Player,
+        readyConnection: ServerConnection? = null,
+    ) {
         val item = pending[player.uniqueId] ?: return
         if (clockMillis() > item.expiresAt) {
             fail(player, item, "запрос RTP устарел")
             return
         }
-        if (!isOnTarget(player, item.request.targetServer)) return
+        val connection = readyConnection ?: player.currentServer.orElse(null) ?: return
+        if (!connection.serverInfo.name.equals(item.request.targetServer, ignoreCase = true)) return
         if (!item.delivering.compareAndSet(false, true)) return
 
-        val sent =
-            player.currentServer
-                .map { it.sendPluginMessage(CHANNEL, item.request.encode()) }
-                .orElse(false)
+        val sent = connection.sendPluginMessage(CHANNEL, item.request.encode())
         if (sent) {
             pending.remove(player.uniqueId, item)
             log.info(

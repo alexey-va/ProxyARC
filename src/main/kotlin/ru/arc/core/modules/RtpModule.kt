@@ -2,6 +2,7 @@ package ru.arc.core.modules
 
 import ru.arc.core.PluginModule
 import ru.arc.rtp.BackendRtpMessageHandler
+import ru.arc.rtp.BackendRtpReadyMessageHandler
 import ru.arc.rtp.ProxyRtpConfig
 import ru.arc.rtp.RtpRequestManager
 import ru.arc.velocity.Velocity
@@ -12,6 +13,7 @@ object RtpModule : PluginModule {
 
     private var manager: RtpRequestManager? = null
     private var backendHandler: BackendRtpMessageHandler? = null
+    private var backendReadyHandler: BackendRtpReadyMessageHandler? = null
 
     override fun init() {
         val plugin = Velocity.requirePlugin()
@@ -21,14 +23,21 @@ object RtpModule : PluginModule {
             BackendRtpMessageHandler { player, world ->
                 requestManager.request(player, world)
             }
+        val readyHandler =
+            BackendRtpReadyMessageHandler { connection ->
+                requestManager.backendReady(connection)
+            }
         server.channelRegistrar.register(
             RtpRequestManager.CHANNEL,
             BackendRtpMessageHandler.CHANNEL,
+            BackendRtpReadyMessageHandler.CHANNEL,
         )
         server.eventManager.register(plugin, requestManager)
         server.eventManager.register(plugin, handler)
+        server.eventManager.register(plugin, readyHandler)
         manager = requestManager
         backendHandler = handler
+        backendReadyHandler = readyHandler
         Velocity.rtpRequestManager = requestManager
     }
 
@@ -41,12 +50,17 @@ object RtpModule : PluginModule {
         backendHandler?.let {
             server?.eventManager?.unregisterListener(Velocity.plugin, it)
         }
+        backendReadyHandler?.let {
+            server?.eventManager?.unregisterListener(Velocity.plugin, it)
+        }
         server?.channelRegistrar?.unregister(
             RtpRequestManager.CHANNEL,
             BackendRtpMessageHandler.CHANNEL,
+            BackendRtpReadyMessageHandler.CHANNEL,
         )
         manager = null
         backendHandler = null
+        backendReadyHandler = null
         Velocity.rtpRequestManager = null
     }
 
