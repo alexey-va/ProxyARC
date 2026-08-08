@@ -37,6 +37,9 @@ object ChatModeService {
                     scope = newScope,
                 ) {
                     loadAllOnStart(true)
+                    // Proxy chat routing is synchronous; retain the complete
+                    // mode mirror to avoid a first-message race after join.
+                    enableCleanup(false)
                     saveInterval(1.seconds)
                 }
             repository = newRepository
