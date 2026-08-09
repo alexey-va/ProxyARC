@@ -76,6 +76,14 @@ class Velocity @Inject constructor(
         isShuttingDown.set(false)
         pluginLogger.info("Initializing ProxyARC")
         VelocityArcRuntime.installScheduling(server, this)
+        proxyRestartService =
+            ProxyRestartService(
+                scheduler = Tasks.scheduler,
+                playerCount = { server.playerCount },
+                broadcast = { component -> sendMessageToAll(component) },
+                shutdown = { reason -> server.shutdown(reason) },
+                eventLog = { event -> pluginLogger.info("[ProxyRestart] {}", event) },
+            )
         VelocityArcRuntime.installModuleLifecycleReporting(
             consoleLog = { line -> pluginLogger.info(stripMiniMessage(line)) },
             logError = { msg, t -> pluginLogger.error(msg, t) },
@@ -152,6 +160,8 @@ class Velocity @Inject constructor(
     @Subscribe
     fun onProxyStop(@Suppress("UNUSED_PARAMETER") event: ProxyShutdownEvent) {
         isShuttingDown.set(true)
+        proxyRestartService?.shutdownModule()
+        proxyRestartService = null
         ModuleRegistry.shutdownAll()
         Tasks.reset()
         plugin = null
@@ -217,6 +227,9 @@ class Velocity @Inject constructor(
 
         @JvmField
         var playerListAnnouncer: PlayerListAnnouncer? = null
+
+        @JvmField
+        var proxyRestartService: ProxyRestartService? = null
 
         @JvmField
         var llmClient: ru.arc.ai.llm.OpenRouterLlmClient? = null

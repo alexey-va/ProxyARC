@@ -17,6 +17,7 @@ class VelocityRuntimeStateTest : FreeSpec({
         Velocity.proxyServer = null
         Velocity.logger = null
         Velocity.dataFolder = null
+        Velocity.proxyRestartService = null
     }
     afterSpec {
         dataPath.toFile().deleteRecursively() shouldBe true
