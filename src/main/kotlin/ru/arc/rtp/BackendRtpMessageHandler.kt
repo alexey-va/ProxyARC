@@ -8,7 +8,7 @@ import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier
 import org.slf4j.LoggerFactory
 
 class BackendRtpMessageHandler(
-    private val dispatch: (Player, String) -> Unit,
+    private val dispatch: (Player, BackendRtpRequest) -> Unit,
 ) {
     @Subscribe
     fun onPluginMessage(event: PluginMessageEvent) {
@@ -48,7 +48,7 @@ class BackendRtpMessageHandler(
             )
             return
         }
-        dispatch(carrier, request.worldName)
+        dispatch(carrier, request)
     }
 
     companion object {

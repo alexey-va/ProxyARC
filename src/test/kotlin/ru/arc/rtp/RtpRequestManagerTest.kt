@@ -109,7 +109,7 @@ class RtpRequestManagerTest :
             manager.request(player, "vanilla")
 
             manager.pendingCount() shouldBe 1
-            manager.pendingRequest(playerId)?.mode shouldBe NetworkRtpMode.FIRST_ENTRY
+            manager.pendingRequest(playerId)?.mode shouldBe NetworkRtpMode.REGULAR_AFTER_TRANSFER
             verify(exactly = 1) { player.createConnectionRequest(registered) }
         }
 

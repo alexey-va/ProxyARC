@@ -17,19 +17,30 @@ class BackendRtpMessageHandlerTest :
             val source = mockk<ServerConnection>()
             val event = mockk<PluginMessageEvent>(relaxed = true)
             val playerId = UUID.randomUUID()
-            val dispatched = mutableListOf<Pair<Player, String>>()
+            val dispatched = mutableListOf<Pair<Player, BackendRtpRequest>>()
 
             every { player.uniqueId } returns playerId
             every { source.player } returns player
             every { event.identifier } returns BackendRtpMessageHandler.CHANNEL
             every { event.source } returns source
             every { event.target } returns player
-            every { event.data } returns BackendRtpRequest.create(playerId, "mining").encode()
+            every { event.data } returns
+                BackendRtpRequest
+                    .create(playerId, "mining", NetworkRtpMode.FIRST_ENTRY)
+                    .encode()
 
-            BackendRtpMessageHandler { carrier, world -> dispatched += carrier to world }
+            BackendRtpMessageHandler { carrier, request -> dispatched += carrier to request }
                 .onPluginMessage(event)
 
-            dispatched shouldBe listOf(player to "mining")
+            dispatched shouldBe
+                listOf(
+                    player to
+                        BackendRtpRequest.create(
+                            playerId,
+                            "mining",
+                            NetworkRtpMode.FIRST_ENTRY,
+                        ),
+                )
             verify { event.result = PluginMessageEvent.ForwardResult.handled() }
         }
 

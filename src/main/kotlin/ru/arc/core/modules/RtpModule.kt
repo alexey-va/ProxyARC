@@ -20,8 +20,8 @@ object RtpModule : PluginModule {
         val server = Velocity.requireProxyServer()
         val requestManager = RtpRequestManager(server, ProxyRtpConfig())
         val handler =
-            BackendRtpMessageHandler { player, world ->
-                requestManager.request(player, world)
+            BackendRtpMessageHandler { player, request ->
+                requestManager.request(player, request.worldName, request.mode)
             }
         val readyHandler =
             BackendRtpReadyMessageHandler { connection ->

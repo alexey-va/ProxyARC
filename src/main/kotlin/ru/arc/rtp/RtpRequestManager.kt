@@ -32,6 +32,7 @@ class RtpRequestManager(
     fun request(
         player: Player,
         rawWorld: String?,
+        mode: NetworkRtpMode = NetworkRtpMode.REGULAR,
     ) {
         if (!config.enabled) {
             player.sendMessage(Utils.mm("<red>RTP временно отключён."))
@@ -75,7 +76,7 @@ class RtpRequestManager(
                 playerId = player.uniqueId,
                 worldName = world,
                 targetServer = config.targetServer,
-                mode = if (alreadyOnTarget) NetworkRtpMode.REGULAR else NetworkRtpMode.FIRST_ENTRY,
+                mode = mode.withServerTransfer(!alreadyOnTarget),
             )
         val item = PendingRtp(request, now + config.requestTimeoutMillis)
         pending[player.uniqueId] = item
