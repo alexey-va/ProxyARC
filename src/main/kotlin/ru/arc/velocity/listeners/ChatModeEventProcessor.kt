@@ -10,19 +10,20 @@ internal class ChatModeEventProcessor(
         val before = effectiveMessage(event)
         val mode = modeProvider(event.player.uniqueId)
         if (!event.result.isAllowed || mode != ChatMode.GLOBAL || before.startsWith("!")) {
-            return Outcome(mode, before, prefixAdded = false)
+            return Outcome(mode, before, logicalPrefixAdded = false)
         }
 
-        val replacement = "!$before"
-        event.setResult(PlayerChatEvent.ChatResult.message(replacement))
-        return Outcome(mode, replacement, prefixAdded = true)
+        return Outcome(mode, "!$before", logicalPrefixAdded = true)
     }
 
     data class Outcome(
         val mode: ChatMode,
         val effectiveMessage: String,
-        val prefixAdded: Boolean,
-    )
+        val logicalPrefixAdded: Boolean,
+    ) {
+        val globalBridgeMessage: String?
+            get() = effectiveMessage.takeIf { it.startsWith("!") }?.substring(1)
+    }
 
     companion object {
         fun effectiveMessage(event: PlayerChatEvent): String =

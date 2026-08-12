@@ -22,7 +22,7 @@ class ChatModeEventProcessorTest : FreeSpec({
         subscription.priority shouldBe Short.MAX_VALUE
     }
 
-    "global mode replaces an unprefixed Velocity message before forwarding" {
+    "global mode exposes a logical prefix without replacing the Velocity message" {
         val playerId = UUID.randomUUID()
         val event = PlayerChatEvent(player(playerId), "Привет")
         val processor = ChatModeEventProcessor { ChatMode.GLOBAL }
@@ -30,8 +30,9 @@ class ChatModeEventProcessorTest : FreeSpec({
         val outcome = processor.apply(event)
 
         outcome.effectiveMessage shouldBe "!Привет"
-        outcome.prefixAdded shouldBe true
-        event.result.message.orElseThrow() shouldBe "!Привет"
+        outcome.logicalPrefixAdded shouldBe true
+        outcome.globalBridgeMessage shouldBe "Привет"
+        event.result.message.isEmpty shouldBe true
     }
 
     "global mode preserves a manually supplied prefix" {
@@ -42,7 +43,9 @@ class ChatModeEventProcessorTest : FreeSpec({
         val outcome = processor.apply(event)
 
         outcome.effectiveMessage shouldBe "!Привет"
-        outcome.prefixAdded shouldBe false
+        outcome.logicalPrefixAdded shouldBe false
+        outcome.globalBridgeMessage shouldBe "Привет"
+        event.result.message.isEmpty shouldBe true
     }
 
     "local mode leaves an unprefixed message local" {
@@ -53,7 +56,8 @@ class ChatModeEventProcessorTest : FreeSpec({
         val outcome = processor.apply(event)
 
         outcome.effectiveMessage shouldBe "Привет"
-        outcome.prefixAdded shouldBe false
+        outcome.logicalPrefixAdded shouldBe false
+        outcome.globalBridgeMessage shouldBe null
         event.result.message.isEmpty shouldBe true
     }
 

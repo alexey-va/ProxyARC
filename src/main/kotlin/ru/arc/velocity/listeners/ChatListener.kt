@@ -22,30 +22,30 @@ class ChatListener(
     fun onChatMessage(event: PlayerChatEvent) {
         val outcome = chatModeProcessor.apply(event)
         ArcLogging.debug(
-            "[ChatMode] proxy player={} mode={} allowed={} had-prefix={} prefix-added={}",
+            "[ChatMode] proxy player={} mode={} allowed={} source-prefixed={} logical-prefix-added={} wire-result-replaced={}",
             event.player.username,
             outcome.mode,
             event.result.isAllowed,
-            outcome.effectiveMessage.startsWith("!"),
-            outcome.prefixAdded,
+            event.message.startsWith("!"),
+            outcome.logicalPrefixAdded,
+            event.result.message.isPresent,
         )
         ChatIngress.onPlayerChat(event, outcome.effectiveMessage)
-        chatProcess(event, outcome.effectiveMessage)
+        chatProcess(event, outcome.globalBridgeMessage)
     }
 
     private fun chatProcess(
         event: PlayerChatEvent,
-        effectiveMessage: String,
+        globalBridgeMessage: String?,
     ) {
         if (!event.result.isAllowed) return
-        if (!effectiveMessage.startsWith("!")) return
+        val message = globalBridgeMessage ?: return
         val username = event.player.username
         val ip = event.player.remoteAddress.address.hostAddress
         val uuid = event.player.uniqueId
 
         if (Velocity.liteBansHook?.isMuted(uuid, ip) == true) return
 
-        val message = effectiveMessage.substring(1)
         val player = event.player
         val firstJoinTime = Velocity.firstJoinData?.getFirstJoinTime(player.username)
         val minPlayerTime = mainConfig.integer("discord.min-play-time-sec", 600) * 1000L
