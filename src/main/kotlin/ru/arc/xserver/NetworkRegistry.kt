@@ -1,11 +1,13 @@
 package ru.arc.xserver
 
-import ru.arc.redis.RedisOperations
+import org.slf4j.LoggerFactory
 import ru.arc.ai.config.LlmModuleConfig
 import ru.arc.ai.llm.OpenRouterLlmClient
 import ru.arc.ai.tools.PlayerServerResolver
 import ru.arc.ai.tools.ToolRpcClient
 import ru.arc.auction.AuctionMessager
+import ru.arc.redis.RedisOperations
+import ru.arc.redis.resourcepack.ResourcePackPublication
 import ru.arc.velocity.Velocity
 
 class NetworkRegistry(
@@ -13,6 +15,7 @@ class NetworkRegistry(
 ) : AutoCloseable {
     private var auctionMessager: AuctionMessager? = null
     private var toolRpcClient: ToolRpcClient? = null
+    private var resourcePackHashRefreshListener: ResourcePackHashRefreshListener? = null
 
     @Synchronized
     fun init() {
@@ -22,6 +25,31 @@ class NetworkRegistry(
             auctionMessager = auction
             redis.registerChannelUnique(auction.channelPartial, auction)
             redis.registerChannelUnique(auction.channelAll, auction)
+
+            val resourcePackListener =
+                ResourcePackHashRefreshListener(
+                    commandAvailable = {
+                        Velocity.requireProxyServer().commandManager.hasCommand(RESOURCE_PACK_COMMAND)
+                    },
+                    executeGenerateHashes = {
+                        Velocity.requireProxyServer().commandManager.executeAsync(
+                            Velocity.requireProxyServer().consoleCommandSource,
+                            "$RESOURCE_PACK_COMMAND generatehashes",
+                        )
+                    },
+                    acknowledge = { originServer, request ->
+                        redis.saveMapEntries(
+                            ResourcePackPublication.ACK_KEY,
+                            originServer,
+                            ResourcePackPublication.encodeAcknowledgement(request),
+                        )
+                    },
+                    info = { message -> log.info(message) },
+                    warn = { message -> log.warn(message) },
+                    error = { message, failure -> log.error(message, failure) },
+                )
+            resourcePackHashRefreshListener = resourcePackListener
+            redis.registerChannelUnique(ResourcePackPublication.CHANNEL, resourcePackListener)
 
             val dataPath = Velocity.dataFolder ?: return
             val llmConfig = LlmModuleConfig.load(dataPath)
@@ -54,6 +82,11 @@ class NetworkRegistry(
         }
         auctionMessager = null
 
+        resourcePackHashRefreshListener?.let { listener ->
+            redis.unregisterChannel(ResourcePackPublication.CHANNEL, listener)
+        }
+        resourcePackHashRefreshListener = null
+
         toolRpcClient?.let { rpc ->
             rpc.close()
             if (ToolRpcClient.instance === rpc) {
@@ -62,5 +95,10 @@ class NetworkRegistry(
         }
         toolRpcClient = null
         Velocity.llmClient = null
+    }
+
+    companion object {
+        private const val RESOURCE_PACK_COMMAND = "velocityresourcepacks"
+        private val log = LoggerFactory.getLogger(ResourcePackHashRefreshListener::class.java)
     }
 }
