@@ -14,6 +14,7 @@ import net.kyori.adventure.text.Component
 import org.slf4j.Logger
 import ru.arc.Antibot
 import ru.arc.AntibotModule
+import ru.arc.activity.PlayerActivityTracker
 import ru.arc.Arc
 import ru.arc.ai.Assistant
 import ru.arc.ai.AssistantModule
@@ -35,6 +36,7 @@ import ru.arc.core.modules.LoggingModule
 import ru.arc.core.modules.MetricsModule
 import ru.arc.core.modules.NetworkModule
 import ru.arc.core.modules.PlayerListModule
+import ru.arc.core.modules.PlayerActivityModule
 import ru.arc.core.modules.ProxyTasksModule
 import ru.arc.core.modules.RedisModule
 import ru.arc.core.modules.RtpModule
@@ -118,6 +120,7 @@ class Velocity @Inject constructor(
             FirstJoinModule,
             RtpModule,
             SaveModule,
+            PlayerActivityModule,
             PlayerListModule,
             JoinMessagesModule,
             ChatModeModule,
@@ -229,6 +232,9 @@ class Velocity @Inject constructor(
         var playerListAnnouncer: PlayerListAnnouncer? = null
 
         @JvmField
+        var playerActivityTracker: PlayerActivityTracker? = null
+
+        @JvmField
         var proxyRestartService: ProxyRestartService? = null
 
         @JvmField
@@ -257,6 +263,9 @@ class Velocity @Inject constructor(
 
         internal fun requireDataFolder(): Path =
             checkNotNull(dataFolder) { "ProxyARC data folder is not initialized" }
+
+        internal fun requireLogger(): Logger =
+            checkNotNull(logger) { "ProxyARC logger is not initialized" }
 
         private fun stripMiniMessage(line: String): String = line.replace(Regex("</?[^>]+>"), "")
     }

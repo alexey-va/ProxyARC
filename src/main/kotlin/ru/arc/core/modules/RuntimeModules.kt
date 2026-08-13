@@ -40,6 +40,7 @@ object ProxyTasksModule : PluginModule {
 
     private var playerListTask: ScheduledTask? = null
     private var redisPlayerListTask: ScheduledTask? = null
+    private var playerActivityTask: ScheduledTask? = null
     private val counter = AtomicInteger(0)
 
     override fun init() {
@@ -65,13 +66,20 @@ object ProxyTasksModule : PluginModule {
                     }
                 }
             }
+
+        playerActivityTask =
+            repeating(0, PLAYER_ACTIVITY_HEARTBEAT_TICKS) {
+                Velocity.playerActivityTracker?.markSeenAll(server.allPlayers.map { it.uniqueId })
+            }
     }
 
     override fun shutdown() {
         playerListTask?.cancel()
         redisPlayerListTask?.cancel()
+        playerActivityTask?.cancel()
         playerListTask = null
         redisPlayerListTask = null
+        playerActivityTask = null
         counter.set(0)
     }
 
@@ -79,4 +87,6 @@ object ProxyTasksModule : PluginModule {
         shutdown()
         init()
     }
+
+    private const val PLAYER_ACTIVITY_HEARTBEAT_TICKS = 6_000L
 }

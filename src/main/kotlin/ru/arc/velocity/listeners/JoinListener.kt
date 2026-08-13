@@ -4,6 +4,7 @@ import com.velocitypowered.api.event.ResultedEvent
 import com.velocitypowered.api.event.Subscribe
 import com.velocitypowered.api.event.connection.DisconnectEvent
 import com.velocitypowered.api.event.connection.LoginEvent
+import com.velocitypowered.api.event.connection.PostLoginEvent
 import com.velocitypowered.api.event.player.ServerConnectedEvent
 import com.velocitypowered.api.proxy.Player
 import com.velocitypowered.api.proxy.ProxyServer
@@ -23,6 +24,12 @@ class JoinListener(
     private val proxyServer: ProxyServer,
     private val config: Config,
 ) {
+
+    @Subscribe(async = true)
+    fun onPlayerAuthenticated(event: PostLoginEvent) {
+        if (Velocity.isShuttingDown.get()) return
+        Velocity.playerActivityTracker?.markSeen(event.player.uniqueId)
+    }
 
     @Subscribe(async = true)
     fun onPlayerJoin(event: LoginEvent) {
@@ -58,6 +65,9 @@ class JoinListener(
     @Subscribe(async = true)
     fun onPlayerLeave(event: DisconnectEvent) {
         if (Velocity.isShuttingDown.get()) return
+        if (event.loginStatus == DisconnectEvent.LoginStatus.SUCCESSFUL_LOGIN) {
+            Velocity.playerActivityTracker?.markSeen(event.player.uniqueId)
+        }
         ChatModeService.untrack(event.player.uniqueId)
         Velocity.discordBot?.refreshPlayerListFromProxy()
         if (!event.player.hasPermission("arc.join-message.leave")) return
