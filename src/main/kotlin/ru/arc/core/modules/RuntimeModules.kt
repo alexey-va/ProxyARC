@@ -7,6 +7,7 @@ import ru.arc.core.repeating
 import ru.arc.velocity.Velocity
 import ru.arc.velocity.listeners.ChatListener
 import ru.arc.velocity.listeners.JoinListener
+import ru.arc.velocity.listeners.RestartKickListener
 import java.util.concurrent.atomic.AtomicInteger
 
 // ==================== Priority 90-99: Runtime ====================
@@ -25,6 +26,10 @@ object ListenersModule : PluginModule {
         server.eventManager.register(
             plugin,
             ChatListener(server),
+        )
+        server.eventManager.register(
+            plugin,
+            RestartKickListener(),
         )
     }
 
