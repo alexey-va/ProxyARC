@@ -40,16 +40,17 @@ class RestartKickListenerTest : FreeSpec({
         val rendered = plain.serialize(message)
         result.server shouldBe fallbackServer
         rendered shouldBe
-            "⚠ Сервер перезапускается\n" +
-            "Вы остались в сети на другом сервере.\n" +
-            "Вернуться можно через несколько минут."
+            "\n" +
+            "  ⚠ Сервер перезапускается\n" +
+            "  Вы остались в сети на другом сервере.\n" +
+            "  Вернуться можно через несколько минут.\n"
         rendered shouldNotContain "\\n"
         message.style().color() shouldBe null
-        message.children().first().style().color() shouldBe TextColor.color(0xFF9F0F)
-        message.children().first().hasDecoration(TextDecoration.BOLD) shouldBe true
-        message.children()[2].style().color() shouldBe TextColor.color(0xE6FFF3)
-        message.children()[4].style().color() shouldBe TextColor.color(0x969696)
-        message.children()[5].style().color() shouldBe TextColor.color(0x92BED8)
+        message.children()[2].style().color() shouldBe TextColor.color(0xFF9F0F)
+        message.children()[2].hasDecoration(TextDecoration.BOLD) shouldBe true
+        message.children()[5].style().color() shouldBe TextColor.color(0xE6FFF3)
+        message.children()[8].style().color() shouldBe TextColor.color(0x969696)
+        message.children()[9].style().color() shouldBe TextColor.color(0x92BED8)
     }
 
     "planned restart gets a standalone disconnect screen when no fallback exists" {
@@ -85,9 +86,10 @@ class RestartKickListenerTest : FreeSpec({
 
         val result = event.result as KickedFromServerEvent.Notify
         plain.serialize(result.messageComponent) shouldBe
-            "⚠ Сервер перезапускается\n" +
-            "Вы остались в сети на другом сервере.\n" +
-            "Вернуться можно через несколько минут."
+            "\n" +
+            "  ⚠ Сервер перезапускается\n" +
+            "  Вы остались в сети на другом сервере.\n" +
+            "  Вернуться можно через несколько минут.\n"
     }
 
     "ordinary kick result stays untouched" {

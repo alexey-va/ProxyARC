@@ -42,13 +42,18 @@ class RestartKickListener {
 
         private val ONLINE_MESSAGE =
             Component.empty()
+                .append(Component.newline())
+                .append(Component.text("  "))
                 .append(TITLE)
                 .append(Component.newline())
+                .append(Component.text("  "))
                 .append(Component.text("Вы остались в сети на другом сервере.", BODY))
                 .append(Component.newline())
+                .append(Component.text("  "))
                 .append(Component.text("Вернуться можно через ", MUTED))
                 .append(Component.text("несколько минут", ACCENT))
                 .append(Component.text(".", MUTED))
+                .append(Component.newline())
 
         private val DISCONNECT_MESSAGE =
             Component.empty()
