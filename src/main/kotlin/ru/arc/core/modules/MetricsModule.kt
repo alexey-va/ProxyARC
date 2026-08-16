@@ -10,6 +10,9 @@ import ru.arc.metrics.core.MetricsConfig
 import ru.arc.metrics.core.MetricsIdentity
 import ru.arc.metrics.core.RedisMetricsBinder
 import ru.arc.metrics.velocity.VelocityMetricsCollector
+import ru.arc.metrics.ProxyProductConfig
+import ru.arc.metrics.ProxyProductTelemetry
+import ru.arc.metrics.ProxyProductTelemetryListener
 import ru.arc.velocity.Velocity
 import kotlin.time.Duration.Companion.seconds
 
@@ -21,6 +24,8 @@ object MetricsModule : PluginModule {
     private var runtime: ArcMetricsRuntime? = null
     private var collector: VelocityMetricsCollector? = null
     private var redisMetrics: RedisMetricsBinder? = null
+    private var productTelemetry: ProxyProductTelemetry? = null
+    private var productListener: ProxyProductTelemetryListener? = null
     private var sampleTask: ScheduledTask? = null
 
     override fun init() {
@@ -44,12 +49,28 @@ object MetricsModule : PluginModule {
             )
         val velocity = VelocityMetricsCollector(proxy, plugin, metrics.registry)
         val redisBinder = Velocity.redisManager?.let { RedisMetricsBinder(it, metrics.registry) }
+        val productConfig = ProxyProductConfig.from(ProxyConfigs.module("metrics.yml"))
+        val product =
+            if (productConfig.enabled) {
+                ProxyProductTelemetry(
+                    registry = metrics.registry,
+                    config = productConfig,
+                    redis = Velocity.redisManager,
+                    rawSource = Velocity.serverName,
+                )
+            } else {
+                null
+            }
+        val listener = product?.let { ProxyProductTelemetryListener(proxy, it) }
         try {
             metrics.start()
             velocity.start()
+            listener?.let { proxy.eventManager.register(plugin, it) }
             runtime = metrics
             collector = velocity
             redisMetrics = redisBinder
+            productTelemetry = product
+            productListener = listener
             sample()
             sampleTask =
                 repeating(
@@ -59,6 +80,7 @@ object MetricsModule : PluginModule {
                     sample()
                 }
         } catch (failure: Throwable) {
+            listener?.let { proxy.eventManager.unregisterListener(plugin, it) }
             redisBinder?.close()
             velocity.stop()
             metrics.close()
@@ -86,7 +108,8 @@ object MetricsModule : PluginModule {
                     "arc_redis_channels",
                     "Registered ProxyARC Redis channels",
                     (redis?.getChannelCount() ?: 0).toDouble(),
-                )
+                ) +
+                (productTelemetry?.snapshot(redis?.isConnected() == true) ?: emptyList())
         }
     }
 
@@ -97,6 +120,14 @@ object MetricsModule : PluginModule {
         sampleTask = null
         collector?.stop()
         collector = null
+        val listener = productListener
+        val proxy = Velocity.proxyServer
+        val plugin = Velocity.plugin
+        if (listener != null && proxy != null && plugin != null) {
+            proxy.eventManager.unregisterListener(plugin, listener)
+        }
+        productListener = null
+        productTelemetry = null
         redisMetrics?.close()
         redisMetrics = null
         runtime?.close()
