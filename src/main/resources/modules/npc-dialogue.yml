@@ -1,0 +1,48 @@
+enabled: true
+
+# NPC dialogue is deliberately small: Paper owns proximity/session state, ProxyARC owns prompts and OpenRouter.
+defaults:
+  model: openai/gpt-4o-mini
+  max-tokens: 120
+  temperature: 0.65
+
+personas:
+  arrival_host:
+    display-name: Встречающий
+    prompt-file: prompts/npc/arrival_host.txt
+  cartographer:
+    display-name: Помощник картографа
+    prompt-file: prompts/npc/cartographer.txt
+  pathfinder:
+    display-name: Следопыт
+    prompt-file: prompts/npc/pathfinder.txt
+  florist:
+    display-name: Цветочник
+    prompt-file: prompts/npc/florist.txt
+  market_clerk:
+    display-name: Счётчик
+    prompt-file: prompts/npc/market_clerk.txt
+  auditor:
+    display-name: Аудитор
+    prompt-file: prompts/npc/auditor.txt
+  draftsman:
+    display-name: Чертёжник
+    prompt-file: prompts/npc/draftsman.txt
+  armorer:
+    display-name: Бронник
+    prompt-file: prompts/npc/armorer.txt
+  stable_instructor:
+    display-name: Инструктор
+    prompt-file: prompts/npc/stable_instructor.txt
+  expedition_scout:
+    display-name: Разведчик
+    prompt-file: prompts/npc/expedition_scout.txt
+  training_assistant:
+    display-name: Помощник тренера
+    prompt-file: prompts/npc/training_assistant.txt
+  beekeeper:
+    display-name: Пчеловод
+    prompt-file: prompts/npc/beekeeper.txt
+  harbormaster:
+    display-name: Начальник причала
+    prompt-file: prompts/npc/harbormaster.txt

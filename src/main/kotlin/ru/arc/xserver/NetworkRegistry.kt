@@ -3,18 +3,27 @@ package ru.arc.xserver
 import org.slf4j.LoggerFactory
 import ru.arc.ai.config.LlmModuleConfig
 import ru.arc.ai.llm.OpenRouterLlmClient
+import ru.arc.ai.llm.SimpleChatService
+import ru.arc.ai.npc.NpcChatRpcServer
+import ru.arc.ai.npc.NpcDialogueConfig
+import ru.arc.ai.npc.NpcDialogueService
 import ru.arc.ai.tools.PlayerServerResolver
 import ru.arc.ai.tools.ToolRpcClient
 import ru.arc.auction.AuctionMessager
 import ru.arc.redis.RedisOperations
 import ru.arc.redis.resourcepack.ResourcePackPublication
 import ru.arc.velocity.Velocity
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 
 class NetworkRegistry(
     private val redis: RedisOperations,
 ) : AutoCloseable {
     private var auctionMessager: AuctionMessager? = null
     private var toolRpcClient: ToolRpcClient? = null
+    private var npcChatRpcServer: NpcChatRpcServer? = null
+    private var npcChatExecutor: ExecutorService? = null
     private var resourcePackHashRefreshListener: ResourcePackHashRefreshListener? = null
 
     @Synchronized
@@ -53,7 +62,30 @@ class NetworkRegistry(
 
             val dataPath = Velocity.dataFolder ?: return
             val llmConfig = LlmModuleConfig.load(dataPath)
-            Velocity.llmClient = OpenRouterLlmClient.create(llmConfig)
+            val llmClient = OpenRouterLlmClient.create(llmConfig)
+            Velocity.llmClient = llmClient
+
+            val dialogueConfig = NpcDialogueConfig.load(dataPath)
+            val dialogueExecutor =
+                Executors.newFixedThreadPool(NPC_CHAT_THREADS) { runnable ->
+                    Thread(runnable, "proxyarc-npc-chat-${npcChatThreadNumber.incrementAndGet()}").apply {
+                        isDaemon = true
+                    }
+                }
+            val dialogueServer =
+                NpcChatRpcServer(
+                    redis = redis,
+                    config = llmConfig,
+                    handler = NpcDialogueService(dialogueConfig, SimpleChatService(llmClient, dialogueExecutor)),
+                )
+            try {
+                dialogueServer.start()
+            } catch (error: Exception) {
+                dialogueExecutor.shutdownNow()
+                throw error
+            }
+            npcChatExecutor = dialogueExecutor
+            npcChatRpcServer = dialogueServer
 
             val resolver =
                 PlayerServerResolver { playerName ->
@@ -94,11 +126,18 @@ class NetworkRegistry(
             }
         }
         toolRpcClient = null
+
+        npcChatRpcServer?.close()
+        npcChatRpcServer = null
+        npcChatExecutor?.shutdownNow()
+        npcChatExecutor = null
         Velocity.llmClient = null
     }
 
     companion object {
         private const val RESOURCE_PACK_COMMAND = "velocityresourcepacks"
+        private const val NPC_CHAT_THREADS = 4
+        private val npcChatThreadNumber = AtomicInteger()
         private val log = LoggerFactory.getLogger(ResourcePackHashRefreshListener::class.java)
     }
 }
