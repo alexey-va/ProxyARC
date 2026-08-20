@@ -1,0 +1,5 @@
+# Non-secret OpenRouter route for Velocity. The API key remains live-only in llm.yml.
+http-proxy:
+  enabled: true
+  host: "172.29.172.1"
+  port: 8888

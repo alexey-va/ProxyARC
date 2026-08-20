@@ -61,7 +61,10 @@ class NetworkRegistry(
             redis.registerChannelUnique(ResourcePackPublication.CHANNEL, resourcePackListener)
 
             val dataPath = Velocity.dataFolder ?: return
-            val llmConfig = LlmModuleConfig.load(dataPath)
+            // Keep the live-only API key in llm.yml while the tracked network route
+            // is supplied independently. This prevents config deploys from replacing
+            // the credential with the repository's deliberate `none` placeholder.
+            val llmConfig = LlmModuleConfig.load(dataPath, LLM_NETWORK_RESOURCE)
             val llmClient = OpenRouterLlmClient.create(llmConfig)
             Velocity.llmClient = llmClient
 
@@ -136,6 +139,7 @@ class NetworkRegistry(
 
     companion object {
         private const val RESOURCE_PACK_COMMAND = "velocityresourcepacks"
+        private const val LLM_NETWORK_RESOURCE = "llm-network.yml"
         private const val NPC_CHAT_THREADS = 4
         private val npcChatThreadNumber = AtomicInteger()
         private val log = LoggerFactory.getLogger(ResourcePackHashRefreshListener::class.java)
