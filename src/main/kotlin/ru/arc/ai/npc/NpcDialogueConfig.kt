@@ -53,34 +53,10 @@ class NpcDialogueConfig private constructor(
     companion object {
         const val RESOURCE = "npc-dialogue.yml"
         const val COMMON_PROMPT = "prompts/npc/common.txt"
-        val PERSONA_IDS =
-            setOf(
-                "arrival_host",
-                "cartographer",
-                "pathfinder",
-                "florist",
-                "market_clerk",
-                "auditor",
-                "draftsman",
-                "armorer",
-                "stable_instructor",
-                "expedition_scout",
-                "training_assistant",
-                "beekeeper",
-                "harbormaster",
-            )
 
         fun load(dataRoot: Path): NpcDialogueConfig {
             Config.copyDefaultConfig(ConfigManager.bundledModuleResource(RESOURCE), dataRoot, replace = false)
-            Config.copyDefaultConfig(COMMON_PROMPT, dataRoot, replace = false)
-            PERSONA_IDS.forEach { id ->
-                Config.copyDefaultConfig("prompts/npc/$id.txt", dataRoot, replace = false)
-            }
             val result = NpcDialogueConfig(dataRoot, ConfigManager.ofModule(dataRoot, RESOURCE))
-            val configured = result.personas.keys
-            require(configured == PERSONA_IDS) {
-                "NPC dialogue personas must exactly match the Origin manifest: missing=${PERSONA_IDS - configured}, extra=${configured - PERSONA_IDS}"
-            }
             result.personas.values.forEach { persona ->
                 require(result.systemPrompt(persona, "Player").isNotBlank()) {
                     "Missing prompt for NPC persona ${persona.id}: ${persona.promptFile}"
