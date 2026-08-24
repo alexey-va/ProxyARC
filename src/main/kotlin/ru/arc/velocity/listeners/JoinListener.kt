@@ -82,6 +82,14 @@ class JoinListener(
         val username = event.player.username
         Velocity.playerListAnnouncer?.updatePlayer(event.player.uniqueId, username, server)
         Velocity.discordBot?.refreshPlayerListFromProxy()
+        val discord = Velocity.discordBot
+        if (discord?.isVerificationBackendAllowed(server) == true) {
+            discord.reconcileIdentity(event.player.uniqueId, username).whenComplete { _, error ->
+                if (error != null) {
+                    log.warn("Discord identity reconciliation failed for {}", username, error)
+                }
+            }
+        }
     }
 
     private fun sendMessageToAll(component: Component) {

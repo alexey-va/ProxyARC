@@ -43,6 +43,7 @@ import ru.arc.core.modules.RtpModule
 import ru.arc.core.modules.SaveModule
 import ru.arc.discord.DiscordBot
 import ru.arc.discord.DiscordModule
+import ru.arc.discord.VerifyCommand
 import ru.arc.FirstJoinData
 import ru.arc.hooks.HooksModule
 import ru.arc.hooks.LiteBansHook
@@ -144,6 +145,13 @@ class Velocity @Inject constructor(
                 .plugin(this)
                 .build()
         commandManager.register(metadata, ProxyARCCommand())
+
+        val verifyMetadata =
+            commandManager
+                .metaBuilder("verify")
+                .plugin(this)
+                .build()
+        commandManager.register(verifyMetadata, VerifyCommand())
 
         rtpRequestManager?.let { manager ->
             val rtpMetadata =

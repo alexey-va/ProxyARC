@@ -1,0 +1,52 @@
+# Portable defaults. RusCrafting production ids live in the tracked runtime mirror.
+enabled: false
+guild-id: "none"
+
+codes:
+  length: 8
+  ttl-seconds: 600
+  issue-cooldown-seconds: 60
+  issue-window-seconds: 600
+  max-issues-per-window: 3
+  attempt-window-seconds: 600
+  max-attempts-per-window: 5
+
+# A verification command is accepted only after the player reached a real backend.
+allowed-backends:
+  - "spawn"
+  - "survival"
+  - "parkour"
+  - "end"
+  - "etd"
+
+roles:
+  verified-role-id: "none"
+  player-role-id: "none"
+  nickname-enabled: true
+  nickname-format: "%player_name%"
+
+  policies:
+    vip:
+      role-id: "none"
+      groups:
+        - "vip"
+        - "supervip"
+      permissions:
+        - "arc.vip"
+    administration:
+      role-id: "none"
+      groups:
+        - "admin"
+        - "moderator"
+      permissions: []
+    helper:
+      role-id: "none"
+      groups:
+        - "helper"
+      permissions: []
+
+sync:
+  interval-seconds: 300
+
+messages:
+  identity: "Discord"
