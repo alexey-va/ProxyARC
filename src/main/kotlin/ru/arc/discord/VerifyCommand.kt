@@ -3,7 +3,10 @@ package ru.arc.discord
 import com.velocitypowered.api.command.SimpleCommand
 import com.velocitypowered.api.proxy.Player
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.event.ClickEvent
 import net.kyori.adventure.text.format.NamedTextColor
+import net.kyori.adventure.text.format.TextColor
+import net.kyori.adventure.text.format.TextDecoration
 import ru.arc.core.Tasks
 import ru.arc.velocity.Velocity
 import java.util.concurrent.CompletableFuture
@@ -54,18 +57,14 @@ class VerifyCommand : SimpleCommand {
                 }
             if (!player.isActive) return@runAsync
             when (result) {
-                is DiscordChallengeIssueResult.Issued -> {
+                is DiscordChallengeIssueResult.Issued ->
                     player.sendMessage(
-                        prefix().append(Component.text("Код: ", NamedTextColor.GRAY))
-                            .append(Component.text(result.code, NamedTextColor.YELLOW)),
-                    )
-                    player.sendMessage(
-                        message(
-                            "В Discord: /verify → code. Срок — ${retryMinutes(result.expiresAt)} мин.",
-                            NamedTextColor.GRAY,
+                        challengeMessage(
+                            code = result.code,
+                            expiresInMinutes = retryMinutes(result.expiresAt),
+                            recovery = recovery,
                         ),
                     )
-                }
                 is DiscordChallengeIssueResult.AlreadyLinked ->
                     player.sendMessage(message("Уже связан. Перенос: /verify recover."))
                 DiscordChallengeIssueResult.NotLinked ->
@@ -139,4 +138,64 @@ class VerifyCommand : SimpleCommand {
     private fun retryMinutes(retryAt: Long): Long =
         TimeUnit.MILLISECONDS.toMinutes((retryAt - System.currentTimeMillis()).coerceAtLeast(0) + 59_999)
             .coerceAtLeast(1)
+
+    companion object {
+        private val ACCENT = TextColor.color(0x92BED8)
+        private val BODY = TextColor.color(0xE6FFF3)
+        private val STRUCTURE = TextColor.color(0x8C8C8C)
+        private val MUTED = TextColor.color(0x969696)
+        private val CODE = TextColor.color(0xFFACD5)
+
+        internal fun challengeMessage(
+            code: String,
+            expiresInMinutes: Long,
+            recovery: Boolean,
+        ): Component {
+            val title = if (recovery) "Перенос привязки Discord" else "Привязка Discord-аккаунта"
+            val codeComponent =
+                Component.text(code, CODE, TextDecoration.BOLD)
+                    .clickEvent(ClickEvent.copyToClipboard(code))
+                    .hoverEvent(Component.text("Нажмите, чтобы скопировать", MUTED))
+
+            return Component.empty()
+                .append(Component.newline())
+                .append(indented(Component.text(title, ACCENT, TextDecoration.BOLD)))
+                .append(Component.newline())
+                .append(indented(Component.text("Код: ", STRUCTURE).append(codeComponent)))
+                .append(Component.newline())
+                .append(indented(Component.text("Откройте сервер RusCrafting в Discord.", BODY)))
+                .append(Component.newline())
+                .append(indented(Component.text("Введите команду ", MUTED).append(Component.text("/verify", ACCENT))))
+                .append(Component.newline())
+                .append(
+                    indented(
+                        Component.text("В поле ", MUTED)
+                            .append(Component.text("code", BODY))
+                            .append(Component.text(" вставьте код выше.", MUTED)),
+                    ),
+                )
+                .append(Component.newline())
+                .append(
+                    indented(
+                        Component.text(
+                            "Код действует $expiresInMinutes ${minutesWord(expiresInMinutes)}.",
+                            MUTED,
+                        ),
+                    ),
+                )
+                .append(Component.newline())
+        }
+
+        private fun indented(content: Component): Component = Component.text("  ").append(content)
+
+        private fun minutesWord(value: Long): String {
+            val lastTwo = value % 100
+            if (lastTwo in 11..14) return "минут"
+            return when (value % 10) {
+                1L -> "минуту"
+                2L, 3L, 4L -> "минуты"
+                else -> "минут"
+            }
+        }
+    }
 }
