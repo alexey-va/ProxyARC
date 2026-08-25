@@ -109,6 +109,67 @@ internal class DiscordVerificationMessages(
         }
     }
 
+    fun adminStatus(status: DiscordIdentityLookupResult.Linked): Component {
+        val diagnostic = status.diagnostic
+        val components =
+            mapOf(
+                "title" to parse(raw("minecraft.admin.status-title")),
+                "minecraft" to
+                    parse(
+                        raw("minecraft.admin.status-minecraft"),
+                        mapOf("player_name" to status.link.playerName),
+                    ),
+                "uuid" to
+                    parse(
+                        raw("minecraft.admin.status-uuid"),
+                        mapOf("player_uuid" to status.link.playerUuid.toString()),
+                    ),
+                "discord" to
+                    parse(
+                        raw("minecraft.admin.status-discord"),
+                        mapOf("discord_id" to status.link.discordUserId),
+                    ),
+                "sync" to
+                    if (diagnostic == null) {
+                        parse(raw("minecraft.admin.status-sync-never"))
+                    } else {
+                        parse(
+                            raw("minecraft.admin.status-sync"),
+                            mapOf(
+                                "status" to diagnostic.result.status.name.lowercase(),
+                                "trigger" to diagnostic.trigger.label,
+                            ),
+                        )
+                    },
+                "age" to
+                    if (diagnostic == null) {
+                        Component.empty()
+                    } else {
+                        parse(
+                            raw("minecraft.admin.status-age"),
+                            mapOf(
+                                "seconds" to
+                                    ((System.currentTimeMillis() - diagnostic.attemptedAt).coerceAtLeast(0L) / 1_000)
+                                        .toString(),
+                            ),
+                        )
+                    },
+                "reason" to
+                    if (diagnostic?.result?.reason == null) {
+                        parse(raw("minecraft.admin.status-reason-none"))
+                    } else {
+                        parse(
+                            raw("minecraft.admin.status-reason"),
+                            mapOf("reason" to diagnostic.result.reason),
+                        )
+                    },
+            )
+        val lines = adminStatusLayout().map { parse(it, components = components) }
+        return lines.drop(1).fold(lines.first()) { result, line ->
+            result.append(Component.newline()).append(line)
+        }
+    }
+
     fun validate(requireInviteUrl: Boolean) {
         require(identity.isNotBlank() && identity.length <= 24) {
             "messages.identity must be 1..24 characters"
@@ -146,6 +207,18 @@ internal class DiscordVerificationMessages(
                 "messages.minecraft.challenge.layout must contain <$tag>"
             }
         }
+        val adminLayout = adminStatusLayout()
+        require(adminLayout.size in 5..16 && adminLayout.first().isEmpty() && adminLayout.last().isEmpty()) {
+            "messages.minecraft.admin.status-layout must frame the block with one blank line"
+        }
+        require(adminLayout.filter(String::isNotEmpty).all { it.startsWith("  ") }) {
+            "messages.minecraft.admin.status-layout visible lines must start with two spaces"
+        }
+        ADMIN_STATUS_LAYOUT_TAGS.forEach { tag ->
+            require(adminLayout.any { "<$tag>" in it }) {
+                "messages.minecraft.admin.status-layout must contain <$tag>"
+            }
+        }
 
         val dummy = arrayOf("player_name" to "PlayerName", "minutes" to "10")
         MINECRAFT_MESSAGE_KEYS.forEach { minecraft(it, *dummy) }
@@ -153,6 +226,22 @@ internal class DiscordVerificationMessages(
             require(discord(key, *dummy).length <= 2_000) { "messages.discord.$key exceeds Discord's limit" }
         }
         if (requireInviteUrl) challenge("ABCD1234", 10, recovery = false)
+        adminStatus(
+            DiscordIdentityLookupResult.Linked(
+                DiscordIdentityLink(
+                    playerUuid = java.util.UUID.fromString("11111111-1111-1111-1111-111111111111"),
+                    playerName = "PlayerName",
+                    discordUserId = "1073279640912789595",
+                    linkedAt = 1,
+                    updatedAt = 1,
+                ),
+                DiscordRoleSyncDiagnostic(
+                    attemptedAt = System.currentTimeMillis(),
+                    trigger = DiscordRoleSyncTrigger.ADMIN,
+                    result = DiscordRoleReconcileResult(DiscordRoleReconcileResult.Status.UNCHANGED),
+                ),
+            ),
+        )
     }
 
     private fun minuteWord(value: Long): String {
@@ -170,6 +259,8 @@ internal class DiscordVerificationMessages(
     }
 
     private fun layout(): List<String> = config.stringList("messages.minecraft.challenge.layout")
+
+    private fun adminStatusLayout(): List<String> = config.stringList("messages.minecraft.admin.status-layout")
 
     private fun raw(path: String): String = config.string("messages.$path", "")
 
@@ -222,6 +313,19 @@ internal class DiscordVerificationMessages(
                 "unlink-not-linked",
                 "unlink-role-failure",
                 "unlink-failed-saved",
+                "admin-no-permission",
+                "admin-unavailable",
+                "admin-usage",
+                "admin-invalid-query",
+                "admin-not-linked",
+                "admin-ambiguous-query",
+                "admin-sync-success",
+                "admin-sync-failed",
+                "admin-unlink-confirm",
+                "admin-unlink-success",
+                "admin-unlink-role-failure",
+                "admin-unlink-failed",
+                "admin-conflict",
             )
         internal val DISCORD_MESSAGE_KEYS =
             setOf(
@@ -272,14 +376,29 @@ internal class DiscordVerificationMessages(
                 "minute-few",
                 "minute-many",
             )
+        private val ADMIN_STATUS_STRING_KEYS =
+            setOf(
+                "status-title",
+                "status-minecraft",
+                "status-uuid",
+                "status-discord",
+                "status-sync",
+                "status-sync-never",
+                "status-age",
+                "status-reason",
+                "status-reason-none",
+            )
         private val REQUIRED_STRING_KEYS =
             setOf("identity", "minecraft.format", "discord.format") +
                 MINECRAFT_MESSAGE_KEYS.map { "minecraft.$it" } +
                 CHALLENGE_STRING_KEYS.map { "minecraft.challenge.$it" } +
+                ADMIN_STATUS_STRING_KEYS.map { "minecraft.admin.$it" } +
                 DISCORD_MESSAGE_KEYS.map { "discord.$it" } +
                 DISCORD_COMMAND_DESCRIPTION_KEYS.map { "discord.commands.$it" }
         private val CHALLENGE_LAYOUT_TAGS =
             setOf("title", "code_row", "copy_hint", "invite_link", "command_hint", "input_hint", "expiry")
+        private val ADMIN_STATUS_LAYOUT_TAGS =
+            setOf("title", "minecraft", "uuid", "discord", "sync", "age", "reason")
 
         fun load(): DiscordVerificationMessages =
             DiscordVerificationMessages(ProxyConfigs.module("discord-verification.yml"))

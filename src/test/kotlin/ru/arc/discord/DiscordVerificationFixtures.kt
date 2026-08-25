@@ -1,5 +1,6 @@
 package ru.arc.discord
 
+import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.config.ProxyConfigs
 import java.nio.file.Path
@@ -10,6 +11,7 @@ internal fun verificationConfig(
     allowedBackends: String = "[\"spawn\", \"survival\"]",
     inviteUrl: String = "https://discord.gg/TJUXMGJD9q",
     messageOverrides: Map<String, String> = emptyMap(),
+    configure: (Config) -> Unit = {},
 ): DiscordVerificationConfig {
     ConfigManager.clear()
     ProxyConfigs.module(root, "discord-verification.yml").also { config ->
@@ -23,6 +25,7 @@ internal fun verificationConfig(
         config.setString("roles.policies.helper.role-id", helperRoleId)
         config.setString("messages.invite-url", inviteUrl)
         messageOverrides.forEach(config::setString)
+        configure(config)
         config.saveStrict()
     }
     ConfigManager.clear()

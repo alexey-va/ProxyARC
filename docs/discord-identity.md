@@ -27,6 +27,9 @@ guild session.
 | `DiscordTicketService` | forum ticket creation, update, listing, and reconciliation |
 | `DiscordIdentityService` | atomic snapshot, challenges, uniqueness, rate limits, audit |
 | `DiscordRoleService` | exact allowlisted role and nickname reconciliation |
+| `DiscordRoleSyncCoordinator` | initial, periodic, and debounced LuckPerms-event reconciliation |
+| `DiscordVerificationTelemetry` | bounded diagnostics and aggregate metrics without identity labels |
+| `DiscordVerificationAdminCommand` | permission-gated status, manual sync, and fail-closed unlink |
 | `DiscordFeedService` | join, player-list, and auction publications |
 | `DiscordBot` | thin compatibility facade and service wiring |
 
@@ -73,10 +76,58 @@ longer permits that cleanup, unlink remains fail-closed.
 ## Role policy
 
 The tracked runtime config owns exact Discord role ids and exact LuckPerms
-group/permission matchers. Reconciliation never discovers roles by display
-name and never edits roles outside that configured set. The Discord bot's
-highest role must be above every managed role; startup/readback reports an
-actionable hierarchy failure without widening the policy.
+group/permission matchers. Policy blocks below `roles.policies` are discovered
+by key, so adding a role mapping does not require a code change. Reconciliation
+never discovers roles by display name and never edits roles outside that
+configured set. The Discord bot's highest role must be above every managed
+role; startup/readback reports an actionable hierarchy failure without
+widening the policy.
+
+To retire a managed role safely, first keep its policy block and set
+`enabled: false`. Reconciliation then removes that role from every linked
+member while continuing to recognize it as managed. Delete the policy block
+only after that cleanup has run. Deleting the block first intentionally removes
+the role from ProxyARC's authority and can leave existing assignments orphaned.
+
+Role reconciliation runs once when Discord becomes ready, every configured
+`sync.interval-seconds`, when a linked player joins, and after a debounced
+LuckPerms `UserDataRecalculateEvent`. The event subscription uses the plugin-
+bound LuckPerms EventBus API; the periodic pass remains the recovery fallback.
+
+## Administration and diagnostics
+
+All administrative identity operations require `arc.admin`. A target is an
+exact stored Minecraft name, UUID, or Discord snowflake:
+
+```text
+/proxyarc discord status <account>
+/proxyarc discord sync <account>
+/proxyarc discord unlink <account> confirm
+```
+
+`status` reports the persisted pair plus the latest reconcile status, trigger,
+age, and bounded reason. Manual `sync` runs the same authoritative reconciler.
+Admin unlink rechecks the expected UUID/Discord pair after role cleanup, so a
+concurrent recovery cannot delete the replacement identity.
+If a recycled Minecraft name occurs in more than one historical link, lookup
+fails closed and requires the UUID or Discord id instead of selecting one row.
+
+The metrics snapshot exports storage readiness, current link/challenge counts,
+last reconcile timestamps and lag, and bounded counters by operation/outcome:
+
+```text
+arc_discord_verification_storage_ready
+arc_discord_identity_links
+arc_discord_verification_pending_challenges
+arc_discord_role_sync_last_attempt_timestamp_seconds
+arc_discord_role_sync_last_success_timestamp_seconds
+arc_discord_role_sync_lag_seconds
+arc_discord_role_sync_results{status="..."}
+arc_discord_verification_results{operation="...",outcome="..."}
+```
+
+No UUID, player name, Discord id, error text, or other unbounded value is used
+as a metric label.
 
 The in-game invite is configured as `messages.invite-url`. Validation accepts
 only a direct HTTPS `discord.gg/<code>` or `discord.com/invite/<code>` URL with
@@ -92,16 +143,17 @@ become MiniMessage markup.
 
 ## Verification
 
-Focused tests:
+The automated acceptance matrix covers repeat verification, role-provider
+failure, fail-closed unlink, identity replacement races, dynamic/disabled
+policies, event debounce/suppression, admin authorization/confirmation, and
+bounded metric labels. Focused tests:
 
 ```bash
-JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-25.jdk/Contents/Home \
-  ./gradlew test --tests 'ru.arc.discord.*'
+./gradlew test --tests 'ru.arc.discord.*'
 ```
 
 Full build:
 
 ```bash
-JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-25.jdk/Contents/Home \
-  ./gradlew build
+./gradlew build
 ```

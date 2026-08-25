@@ -6,6 +6,8 @@ import ru.arc.ai.tickets.ForumTicketSync
 import ru.arc.auction.AuctionItemDto
 import ru.arc.config.Config
 import ru.arc.config.ProxyConfigs
+import ru.arc.core.Tasks
+import ru.arc.metrics.core.MetricPoint
 import ru.arc.ops.DiscordChannelMutationRequest
 import ru.arc.ops.DiscordHistoryRequest
 import ru.arc.ops.DiscordMemberMutationRequest
@@ -22,8 +24,6 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
-import java.util.concurrent.ScheduledFuture
-import java.util.concurrent.TimeUnit
 
 /** Public compatibility facade; concrete Discord responsibilities live in focused services. */
 class DiscordBot : AutoCloseable, DiscordOpsGateway {
@@ -31,6 +31,7 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
     private val joinConfig: Config get() = ProxyConfigs.module("join_config.yml")
     private val executor: ScheduledExecutorService = Executors.newScheduledThreadPool(4)
     private val session = DiscordSession()
+    private val verificationTelemetry = DiscordVerificationTelemetry()
     private val verificationConfig =
         runCatching { DiscordVerificationConfig.load().also(DiscordVerificationConfig::validate) }
             .onFailure { log.error("Discord verification configuration is invalid", it) }
@@ -56,7 +57,24 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
         }
     private val verification =
         identities?.let { identityService ->
-            roleService?.let { DiscordVerificationService(identityService, it) }
+            roleService?.let { DiscordVerificationService(identityService, it, verificationTelemetry) }
+        }
+    private val roleSyncCoordinator =
+        verificationConfig?.let { configured ->
+            verification?.let { service ->
+                DiscordRoleSyncCoordinator(
+                    config = configured,
+                    verification = service,
+                    scheduler = Tasks.scheduler,
+                    eventSubscriber =
+                        DiscordLuckPermsEventSubscriber { listener ->
+                            Velocity.luckpermsHook?.subscribeUserDataRecalculation(
+                                Velocity.requirePlugin(),
+                                listener,
+                            )
+                        },
+                )
+            }
         }
     private val codec = DiscordMessageCodec { playerName -> identities?.findByPlayerName(playerName) }
     private val cleaner =
@@ -88,9 +106,6 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
             jdaProvider = session::jda,
             aliasesProvider = ::configuredChannelAliases,
         )
-    @Volatile
-    private var roleSyncFuture: ScheduledFuture<*>? = null
-
     init {
         instance = this
         if (identities?.isAvailable() == false) {
@@ -110,36 +125,14 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
             listener.registerCommands(snapshot)
             listeners += listener
         }
-        roleService?.hierarchyProblems()?.takeIf(List<String>::isNotEmpty)?.let { problems ->
-            log.error("Discord managed-role prerequisites are not met: {}", problems.joinToString(","))
-        }
-        scheduleRoleReconciliation()
-        ForumTicketSync.scheduleIfEnabled()
-        return listeners
-    }
-
-    private fun scheduleRoleReconciliation() {
-        val configured = verificationConfig ?: return
-        val service = verification ?: return
-        if (!configured.enabled || roleSyncFuture != null) return
-        service.reconcileAll().whenComplete { _, error ->
-            if (error != null) {
-                log.warn("Initial Discord role reconciliation failed: {}", error.javaClass.simpleName)
+        if (verificationConfig?.enabled == true) {
+            roleService?.hierarchyProblems()?.takeIf(List<String>::isNotEmpty)?.let { problems ->
+                log.error("Discord managed-role prerequisites are not met: {}", problems.joinToString(","))
             }
         }
-        roleSyncFuture =
-            executor.scheduleAtFixedRate(
-                {
-                    service.reconcileAll().whenComplete { _, error ->
-                        if (error != null) {
-                            log.warn("Periodic Discord role reconciliation failed: {}", error.javaClass.simpleName)
-                        }
-                    }
-                },
-                configured.syncIntervalSeconds,
-                configured.syncIntervalSeconds,
-                TimeUnit.SECONDS,
-            )
+        roleSyncCoordinator?.start()
+        ForumTicketSync.scheduleIfEnabled()
+        return listeners
     }
 
     fun scheduler(): ScheduledExecutorService = executor
@@ -219,10 +212,46 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
         playerUuid: UUID,
         playerName: String,
     ): CompletableFuture<DiscordRoleReconcileResult> =
-        verification?.reconcilePlayer(playerUuid, playerName)
+        verification?.reconcilePlayer(playerUuid, playerName, DiscordRoleSyncTrigger.SERVER_CONNECT)
             ?: CompletableFuture.completedFuture(
                 DiscordRoleReconcileResult(DiscordRoleReconcileResult.Status.NOT_READY),
             )
+
+    internal fun lookupIdentity(query: String): DiscordIdentityLookupResult =
+        verification?.lookup(query) ?: DiscordIdentityLookupResult.Unavailable
+
+    internal fun reconcileIdentity(
+        link: DiscordIdentityLink,
+        trigger: DiscordRoleSyncTrigger,
+    ): CompletableFuture<DiscordRoleReconcileResult> =
+        verification?.reconcilePlayer(link.playerUuid, link.playerName, trigger)
+            ?: CompletableFuture.completedFuture(
+                DiscordRoleReconcileResult(
+                    DiscordRoleReconcileResult.Status.NOT_READY,
+                    reason = "verification-unavailable",
+                ),
+            )
+
+    internal fun unlinkIdentity(link: DiscordIdentityLink): CompletableFuture<DiscordVerificationWorkflowResult> =
+        verification?.unlinkExpected(link)
+            ?: CompletableFuture.completedFuture(DiscordVerificationWorkflowResult.Unavailable)
+
+    internal fun adminGateway(): DiscordVerificationAdminGateway =
+        object : DiscordVerificationAdminGateway {
+            override fun lookupIdentity(query: String): DiscordIdentityLookupResult = this@DiscordBot.lookupIdentity(query)
+
+            override fun reconcileIdentity(
+                link: DiscordIdentityLink,
+                trigger: DiscordRoleSyncTrigger,
+            ): CompletableFuture<DiscordRoleReconcileResult> = this@DiscordBot.reconcileIdentity(link, trigger)
+
+            override fun unlinkIdentity(link: DiscordIdentityLink): CompletableFuture<DiscordVerificationWorkflowResult> =
+                this@DiscordBot.unlinkIdentity(link)
+        }
+
+    internal fun verificationMetricsSnapshot(): List<MetricPoint> =
+        verification?.metricsSnapshot()
+            ?: verificationTelemetry.snapshot(DiscordIdentityStats(false, 0, 0))
 
     internal fun roleHierarchyProblems(): List<String> = roleService?.hierarchyProblems() ?: emptyList()
 
@@ -261,8 +290,7 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
     @Synchronized
     override fun close() {
         ForumTicketSync.stop()
-        roleSyncFuture?.cancel(false)
-        roleSyncFuture = null
+        roleSyncCoordinator?.close()
         feeds.close()
         cleaner.close()
         connection.close()

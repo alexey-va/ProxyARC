@@ -109,6 +109,7 @@ object MetricsModule : PluginModule {
                     "Registered ProxyARC Redis channels",
                     (redis?.getChannelCount() ?: 0).toDouble(),
                 ) +
+                (Velocity.discordBot?.verificationMetricsSnapshot() ?: emptyList()) +
                 (productTelemetry?.snapshot(redis?.isConnected() == true) ?: emptyList())
         }
     }

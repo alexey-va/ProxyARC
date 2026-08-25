@@ -1,6 +1,7 @@
 package ru.arc.hooks
 
 import net.luckperms.api.LuckPermsProvider
+import net.luckperms.api.event.user.UserDataRecalculateEvent
 import net.luckperms.api.query.QueryOptions
 import ru.arc.discord.DiscordRoleFacts
 import ru.arc.discord.DiscordRolePolicyRule
@@ -9,6 +10,14 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
 class LuckpermsHook {
+    internal fun subscribeUserDataRecalculation(
+        plugin: Any,
+        handler: (UUID) -> Unit,
+    ): AutoCloseable =
+        LuckPermsProvider.get().eventBus.subscribe(plugin, UserDataRecalculateEvent::class.java) { event ->
+            handler(event.user.uniqueId)
+        }
+
     fun getMeta(uuid: UUID, key: String): CompletableFuture<String?> {
         val userManager = LuckPermsProvider.get().userManager
         return userManager.loadUser(uuid)

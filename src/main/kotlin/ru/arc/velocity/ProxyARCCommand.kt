@@ -4,10 +4,12 @@ import com.velocitypowered.api.command.CommandSource
 import com.velocitypowered.api.command.SimpleCommand
 import ru.arc.Utils
 import ru.arc.core.modules.ProxyArcReload
+import ru.arc.discord.DiscordVerificationAdminCommand
 import java.time.Duration
 import java.util.concurrent.CompletableFuture
 
 class ProxyARCCommand : SimpleCommand {
+    private val discordAdmin = DiscordVerificationAdminCommand()
 
     override fun execute(invocation: SimpleCommand.Invocation) {
         val commandSource = invocation.source()
@@ -26,6 +28,7 @@ class ProxyARCCommand : SimpleCommand {
                         "<gray>/proxyarc cleardiscord <channelId> start|stop",
                 ),
             )
+            discordAdmin.execute(commandSource, emptyList())
             return
         }
         when {
@@ -36,6 +39,7 @@ class ProxyARCCommand : SimpleCommand {
                 )
             }
             args[0].equals("restart", ignoreCase = true) -> handleRestart(commandSource, args)
+            args[0].equals("discord", ignoreCase = true) -> discordAdmin.execute(commandSource, args.drop(1))
             args[0].equals("cleardiscord", ignoreCase = true) -> {
                 if (args.size != 3) {
                     commandSource.sendMessage(Utils.mm("Usage: /proxyarc cleardiscord <channelId> start/stop"))
@@ -130,6 +134,9 @@ class ProxyARCCommand : SimpleCommand {
                 else -> emptyList()
             }
         }
+        if (args[0].equals("discord", ignoreCase = true)) {
+            return discordAdmin.suggest(args.drop(1))
+        }
         if (args[0].equals("cleardiscord", ignoreCase = true) && args.size == 3) {
             return listOf("start", "stop").filter { it.startsWith(args[2], ignoreCase = true) }
         }
@@ -144,7 +151,7 @@ class ProxyARCCommand : SimpleCommand {
 
     companion object {
         private const val DEFAULT_RESTART_DELAY_SECONDS = 30L
-        private val ROOT_SUGGESTIONS = listOf("reload", "restart", "cleardiscord")
+        private val ROOT_SUGGESTIONS = listOf("reload", "restart", "discord", "cleardiscord")
         private val RESTART_DELAYS = listOf("10s", "30s", "1m", "3m", "5m")
     }
 }

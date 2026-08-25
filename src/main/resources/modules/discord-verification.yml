@@ -26,7 +26,10 @@ roles:
   nickname-format: "%player_name%"
 
   policies:
+    # Policies are discovered by key. To retire one safely, first set enabled: false,
+    # let reconciliation remove the role, and only then delete the whole policy block.
     vip:
+      enabled: true
       role-id: "none"
       groups:
         - "vip"
@@ -34,12 +37,14 @@ roles:
       permissions:
         - "arc.vip"
     administration:
+      enabled: true
       role-id: "none"
       groups:
         - "admin"
         - "moderator"
       permissions: []
     helper:
+      enabled: true
       role-id: "none"
       groups:
         - "helper"
@@ -47,6 +52,9 @@ roles:
 
 sync:
   interval-seconds: 300
+  luckperms-events-enabled: true
+  event-debounce-millis: 1000
+  event-suppression-seconds: 5
 
 messages:
   identity: "Discord"
@@ -71,6 +79,40 @@ messages:
     unlink-not-linked: "<#e6fff3>Discord-аккаунт не связан."
     unlink-role-failure: "<#c42323>Не удалось снять роли. Отвязка отменена."
     unlink-failed-saved: "<#c42323>Не удалось отвязать. Данные сохранены."
+    admin-no-permission: "<#c42323>Недостаточно прав для управления Discord-привязками."
+    admin-unavailable: "<#c42323>Управление Discord-привязками временно недоступно."
+    admin-usage: "<#e6fff3>Команды администратора:<newline>  <#666666>• <#92bed8>/proxyarc discord status [аккаунт]<newline>  <#666666>• <#92bed8>/proxyarc discord sync [аккаунт]<newline>  <#666666>• <#92bed8>/proxyarc discord unlink [аккаунт] confirm"
+    admin-invalid-query: "<#c42323>Укажите игровой ник, UUID или Discord ID."
+    admin-not-linked: "<#e6fff3>Привязка для <#92bed8><query><#e6fff3> не найдена."
+    admin-ambiguous-query: "<#ff9f0f>Ник найден в нескольких привязках.<newline>  <#969696>Используйте UUID или Discord ID."
+    admin-sync-success: "<#2bba43>Роли <player_name>: <status>."
+    admin-sync-failed: "<#c42323>Роли <player_name> не синхронизированы.<newline>  <#666666>• <#8c8c8c><status>: <#e6fff3><reason>"
+    admin-unlink-confirm: "<#ff9f0f>Подтвердите отвязку:<newline>  <#666666>• <#92bed8>/proxyarc discord unlink <query> confirm"
+    admin-unlink-success: "<#2bba43>Привязка <player_name> удалена, управляемые роли сняты."
+    admin-unlink-role-failure: "<#c42323>Отвязка отменена: роли не сняты.<newline>  <#666666>• <#8c8c8c><status>: <#e6fff3><reason>"
+    admin-unlink-failed: "<#c42323>Не удалось безопасно удалить привязку. Данные сохранены."
+    admin-conflict: "<#ff9f0f>Привязка изменилась во время операции. Повторите команду."
+
+    admin:
+      status-layout:
+        - ""
+        - "  <title>"
+        - "  <minecraft>"
+        - "  <uuid>"
+        - "  <discord>"
+        - "  <sync>"
+        - "  <age>"
+        - "  <reason>"
+        - ""
+      status-title: "<#92bed8><bold>Диагностика Discord</bold>"
+      status-minecraft: "<#8c8c8c>Minecraft: <#e6fff3><player_name>"
+      status-uuid: "<#8c8c8c>UUID: <#969696><player_uuid>"
+      status-discord: "<#8c8c8c>Discord ID: <#969696><discord_id>"
+      status-sync: "<#8c8c8c>Роли: <#e6fff3><status> <#666666>• <#969696><trigger>"
+      status-sync-never: "<#8c8c8c>Роли: <#969696>ещё не синхронизировались"
+      status-age: "<#8c8c8c>Последняя попытка: <#969696><seconds> сек. назад"
+      status-reason: "<#8c8c8c>Причина: <#e6fff3><reason>"
+      status-reason-none: "<#8c8c8c>Причина: <#969696>нет"
 
     challenge:
       # Empty first/last rows frame this rare important message; visible rows keep two spaces.

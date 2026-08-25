@@ -34,6 +34,50 @@ class DiscordVerificationConfigTest : FreeSpec({
         }
     }
 
+    "loads arbitrary policy names without a code allowlist" {
+        val root = Files.createTempDirectory("discord-verification-dynamic-policy")
+        val config =
+            verificationConfig(root) { raw ->
+                raw.setString("roles.policies.builder.role-id", "123456789012345678")
+                raw.setBoolean("roles.policies.builder.enabled", true)
+                raw.setStringList("roles.policies.builder.groups", listOf("builder"))
+                raw.setStringList("roles.policies.builder.permissions", emptyList())
+            }
+
+        config.policyRules.map(DiscordRolePolicyRule::name) shouldBe
+            listOf("administration", "builder", "helper", "vip")
+        config.managedRoleIds.contains("123456789012345678") shouldBe true
+    }
+
+    "keeps a disabled policy managed so reconciliation can remove its role" {
+        val root = Files.createTempDirectory("discord-verification-disabled-policy")
+        val config =
+            verificationConfig(root) { raw ->
+                raw.setBoolean("roles.policies.helper.enabled", false)
+            }
+        val helper = config.policyRules.single { it.name == "helper" }
+
+        helper.matches(DiscordRoleFacts(setOf("helper"), emptySet())) shouldBe false
+        config.managedRoleIds.contains(helper.roleId) shouldBe true
+    }
+
+    "rejects unsafe policy keys and empty enabled policies" {
+        shouldThrow<IllegalArgumentException> {
+            verificationConfig(Files.createTempDirectory("discord-verification-policy-name")) { raw ->
+                raw.setString("roles.policies.Bad Key.role-id", "123456789012345678")
+                raw.setBoolean("roles.policies.Bad Key.enabled", true)
+            }
+        }
+        shouldThrow<IllegalArgumentException> {
+            verificationConfig(Files.createTempDirectory("discord-verification-empty-policy")) { raw ->
+                raw.setString("roles.policies.empty.role-id", "123456789012345678")
+                raw.setBoolean("roles.policies.empty.enabled", true)
+                raw.setStringList("roles.policies.empty.groups", emptyList())
+                raw.setStringList("roles.policies.empty.permissions", emptyList())
+            }
+        }
+    }
+
     "rejects a missing managed policy role instead of abandoning stale roles" {
         val root = Files.createTempDirectory("discord-verification-missing-role")
         shouldThrow<IllegalArgumentException> {

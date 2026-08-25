@@ -56,6 +56,23 @@ class DiscordRoleServiceTest : FreeSpec({
             setOf(config.verifiedRoleId, config.playerRoleId, "1083480822818029608")
     }
 
+    "a disabled policy stays managed but is excluded from desired roles" {
+        val config =
+            verificationConfig(Files.createTempDirectory("discord-role-disabled-policy")) { raw ->
+                raw.setBoolean("roles.policies.helper.enabled", false)
+            }
+        val service =
+            DiscordRoleService(
+                DiscordSession(),
+                config,
+                DiscordRoleFactsProvider { _, _ -> CompletableFuture.completedFuture(DiscordRoleFacts(emptySet(), emptySet())) },
+            )
+
+        config.managedRoleIds.contains("1079927708743643156") shouldBe true
+        service.desiredRoleIds(DiscordRoleFacts(setOf("helper"), emptySet())) shouldContainExactlyInAnyOrder
+            setOf(config.verifiedRoleId, config.playerRoleId)
+    }
+
     "an unmodifiable member still receives every manageable role while nickname sync is skipped" {
         val root = Files.createTempDirectory("discord-owner-role-reconcile")
         val config = verificationConfig(root)

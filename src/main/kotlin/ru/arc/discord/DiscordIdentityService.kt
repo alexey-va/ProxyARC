@@ -230,8 +230,35 @@ internal class DiscordIdentityService(
         }
     }
 
+    fun findAllByPlayerName(playerName: String): List<DiscordIdentityLink> {
+        val normalized = normalizeName(playerName)
+        return safely(emptyList()) {
+            store.read { state ->
+                state.links
+                    .filter { normalizeName(it.playerName) == normalized }
+                    .map { it.toDomain() }
+            }
+        }
+    }
+
     fun allLinks(): List<DiscordIdentityLink> =
         safely(emptyList()) { store.read { state -> state.links.map { it.toDomain() } } }
+
+    fun stats(): DiscordIdentityStats {
+        val now = clock()
+        return safely(DiscordIdentityStats(false, 0, 0)) {
+            store.read { state ->
+                DiscordIdentityStats(
+                    storageAvailable = true,
+                    linkedAccounts = state.links.size,
+                    pendingChallenges =
+                        state.challenges.count { challenge ->
+                            challenge.expiresAt > now && challenge.completedDiscordUserId == null
+                        },
+                )
+            }
+        }
+    }
 
     fun updatePlayerName(
         playerUuid: UUID,

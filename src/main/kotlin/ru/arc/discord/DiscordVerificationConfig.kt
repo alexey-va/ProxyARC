@@ -9,11 +9,12 @@ import java.util.Locale
 internal data class DiscordRolePolicyRule(
     val name: String,
     val roleId: String,
+    val enabled: Boolean,
     val groups: Set<String>,
     val permissions: Set<String>,
 ) {
     fun matches(facts: DiscordRoleFacts): Boolean =
-        groups.any(facts.groups::contains) || permissions.any(facts.permissions::contains)
+        enabled && (groups.any(facts.groups::contains) || permissions.any(facts.permissions::contains))
 }
 
 internal data class DiscordRoleFacts(
@@ -43,12 +44,15 @@ internal class DiscordVerificationConfig(
     val nicknameEnabled: Boolean get() = config.bool("roles.nickname-enabled", true)
     val nicknameFormat: String get() = config.string("roles.nickname-format", "%player_name%").trim()
     val syncIntervalSeconds: Long get() = config.longValue("sync.interval-seconds", 300L)
+    val luckPermsEventsEnabled: Boolean get() = config.bool("sync.luckperms-events-enabled", true)
+    val eventDebounceMillis: Long get() = config.longValue("sync.event-debounce-millis", 1_000L)
+    val eventSuppressionSeconds: Long get() = config.longValue("sync.event-suppression-seconds", 5L)
     val messages = DiscordVerificationMessages(config)
     val messageIdentity: String get() = messages.identity
     val inviteUrl: String get() = messages.inviteUrl
 
     val policyRules: List<DiscordRolePolicyRule>
-        get() = POLICY_NAMES.mapNotNull(::policyRule)
+        get() = policyNames().map(::policyRule)
 
     val managedRoleIds: Set<String>
         get() = buildSet {
@@ -72,6 +76,8 @@ internal class DiscordVerificationConfig(
         }
         require(maxAttemptsPerWindow in 1..20) { "codes.max-attempts-per-window must be 1..20" }
         require(syncIntervalSeconds in 60..3600) { "sync.interval-seconds must be 60..3600" }
+        require(eventDebounceMillis in 100..10_000) { "sync.event-debounce-millis must be 100..10000" }
+        require(eventSuppressionSeconds in 1..60) { "sync.event-suppression-seconds must be 1..60" }
         require(nicknameFormat.contains("%player_name%")) {
             "roles.nickname-format must contain %player_name%"
         }
@@ -86,8 +92,28 @@ internal class DiscordVerificationConfig(
         require(allowedBackends.none(DENIED_AUTH_BACKENDS::contains)) {
             "allowed-backends must not contain an authentication backend"
         }
-        require(policyRules.size == POLICY_NAMES.size) {
-            "all role policies must configure a valid role id"
+        require(policyRules.size <= MAX_POLICY_RULES) {
+            "roles.policies must not contain more than $MAX_POLICY_RULES entries"
+        }
+        policyRules.forEach { rule ->
+            require(POLICY_NAME.matches(rule.name)) {
+                "roles.policies.${rule.name} must use a lowercase technical name"
+            }
+            require(validSnowflake(rule.roleId)) {
+                "roles.policies.${rule.name}.role-id must be a Discord snowflake"
+            }
+            require(rule.groups.size <= MAX_POLICY_FACTS && rule.permissions.size <= MAX_POLICY_FACTS) {
+                "roles.policies.${rule.name} has too many groups or permissions"
+            }
+            require(rule.groups.all(GROUP_NAME::matches)) {
+                "roles.policies.${rule.name}.groups contains an invalid group name"
+            }
+            require(rule.permissions.all(PERMISSION_NODE::matches)) {
+                "roles.policies.${rule.name}.permissions contains an invalid permission node"
+            }
+            require(!rule.enabled || rule.groups.isNotEmpty() || rule.permissions.isNotEmpty()) {
+                "roles.policies.${rule.name} must configure groups or permissions while enabled"
+            }
         }
         require(managedRoleIds.size == 2 + policyRules.size) {
             "all managed Discord role ids must be distinct"
@@ -97,22 +123,30 @@ internal class DiscordVerificationConfig(
     fun nickname(playerName: String): String =
         nicknameFormat.replace("%player_name%", playerName).trim().take(32)
 
-    private fun policyRule(name: String): DiscordRolePolicyRule? {
+    private fun policyNames(): List<String> = config.keys("roles.policies").sorted()
+
+    private fun policyRule(name: String): DiscordRolePolicyRule {
         val root = "roles.policies.$name"
         val roleId = config.string("$root.role-id", "none").trim()
-        if (!validSnowflake(roleId)) return null
         val groups = normalizedSet(config.stringList("$root.groups"))
         val permissions = normalizedSet(config.stringList("$root.permissions"))
-        require(groups.isNotEmpty() || permissions.isNotEmpty()) {
-            "$root must configure groups or permissions"
-        }
-        return DiscordRolePolicyRule(name, roleId, groups, permissions)
+        return DiscordRolePolicyRule(
+            name = name,
+            roleId = roleId,
+            enabled = config.bool("$root.enabled", true),
+            groups = groups,
+            permissions = permissions,
+        )
     }
 
     companion object {
-        private val POLICY_NAMES = listOf("vip", "administration", "helper")
         private val DENIED_AUTH_BACKENDS = setOf("auth", "limbo", "limboauth", "login", "prelogin")
         private val SNOWFLAKE = Regex("\\d{17,20}")
+        private val POLICY_NAME = Regex("[a-z0-9][a-z0-9_-]{0,31}")
+        private val GROUP_NAME = Regex("[a-z0-9][a-z0-9_-]{0,63}")
+        private val PERMISSION_NODE = Regex("[a-z0-9*][a-z0-9*._-]{0,127}")
+        private const val MAX_POLICY_RULES = 64
+        private const val MAX_POLICY_FACTS = 64
 
         fun load(): DiscordVerificationConfig =
             DiscordVerificationConfig(ProxyConfigs.module("discord-verification.yml"))
