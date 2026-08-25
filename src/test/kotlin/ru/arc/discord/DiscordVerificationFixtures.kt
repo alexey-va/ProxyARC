@@ -8,6 +8,7 @@ internal fun verificationConfig(
     root: Path,
     helperRoleId: String = "1079927708743643156",
     allowedBackends: String = "[\"spawn\", \"survival\"]",
+    inviteUrl: String = "https://discord.gg/TJUXMGJD9q",
 ): DiscordVerificationConfig {
     val modules = root.resolve("modules")
     Files.createDirectories(modules)
@@ -47,6 +48,7 @@ internal fun verificationConfig(
           interval-seconds: 300
         messages:
           identity: "Discord"
+          invite-url: "$inviteUrl"
         """.trimIndent(),
     )
     ConfigManager.clear()

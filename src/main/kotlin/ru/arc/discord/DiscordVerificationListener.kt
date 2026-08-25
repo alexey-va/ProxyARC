@@ -98,13 +98,23 @@ internal class DiscordVerificationListener(
         when (result) {
             is DiscordVerificationWorkflowResult.Verified ->
                 if (result.reconciliation.successful) {
-                    "Discord • Аккаунт Minecraft ${result.link.playerName} подтверждён. Роли и ник синхронизированы."
+                    if (result.reconciliation.nicknameSkipped) {
+                        "Discord • Аккаунт Minecraft ${result.link.playerName} подтверждён. " +
+                            "Роли синхронизированы. Ник не изменён: участник выше бота в Discord."
+                    } else {
+                        "Discord • Аккаунт Minecraft ${result.link.playerName} подтверждён. Роли и ник синхронизированы."
+                    }
                 } else {
                     "Discord • Связь с ${result.link.playerName} сохранена, но роли пока не синхронизированы."
                 }
             is DiscordVerificationWorkflowResult.Recovered ->
                 if (result.reconciliation.successful) {
-                    "Discord • Доступ к аккаунту ${result.link.playerName} восстановлен."
+                    if (result.reconciliation.nicknameSkipped) {
+                        "Discord • Доступ к аккаунту ${result.link.playerName} восстановлен. " +
+                            "Роли синхронизированы, ник не изменён из-за иерархии Discord."
+                    } else {
+                        "Discord • Доступ к аккаунту ${result.link.playerName} восстановлен."
+                    }
                 } else {
                     "Discord • Доступ к ${result.link.playerName} восстановлен, но роли пока не синхронизированы."
                 }

@@ -2,6 +2,7 @@ package ru.arc.discord
 
 import ru.arc.config.Config
 import ru.arc.config.ProxyConfigs
+import java.net.URI
 import java.nio.file.Path
 import java.util.Locale
 
@@ -43,6 +44,7 @@ internal class DiscordVerificationConfig(
     val nicknameFormat: String get() = config.string("roles.nickname-format", "%player_name%").trim()
     val syncIntervalSeconds: Long get() = config.longValue("sync.interval-seconds", 300L)
     val messageIdentity: String get() = config.string("messages.identity", "Discord").trim().take(24)
+    val inviteUrl: String get() = config.string("messages.invite-url", "").trim()
 
     val policyRules: List<DiscordRolePolicyRule>
         get() = POLICY_NAMES.mapNotNull(::policyRule)
@@ -83,6 +85,9 @@ internal class DiscordVerificationConfig(
             "allowed-backends must not contain an authentication backend"
         }
         require(messageIdentity.isNotBlank()) { "messages.identity must not be blank" }
+        require(validInviteUrl(inviteUrl)) {
+            "messages.invite-url must be a direct HTTPS discord.gg or discord.com/invite URL"
+        }
         require(policyRules.size == POLICY_NAMES.size) {
             "all role policies must configure a valid role id"
         }
@@ -119,10 +124,32 @@ internal class DiscordVerificationConfig(
 
         internal fun validSnowflake(value: String): Boolean = SNOWFLAKE.matches(value)
 
+        internal fun validInviteUrl(value: String): Boolean {
+            val uri = runCatching { URI(value) }.getOrNull() ?: return false
+            if (uri.scheme?.lowercase(Locale.ROOT) != "https" ||
+                uri.userInfo != null ||
+                uri.port != -1 ||
+                uri.rawQuery != null ||
+                uri.rawFragment != null
+            ) {
+                return false
+            }
+            val host = uri.host?.lowercase(Locale.ROOT) ?: return false
+            val path = uri.rawPath.orEmpty()
+            return when (host) {
+                "discord.gg" -> DISCORD_INVITE_PATH.matches(path)
+                "discord.com", "www.discord.com" -> DISCORD_LONG_INVITE_PATH.matches(path)
+                else -> false
+            }
+        }
+
         private fun normalizedSet(values: Collection<String>): Set<String> =
             values.asSequence()
                 .map { it.trim().lowercase(Locale.ROOT) }
                 .filter(String::isNotEmpty)
                 .toCollection(linkedSetOf())
+
+        private val DISCORD_INVITE_PATH = Regex("/[A-Za-z0-9_-]{2,64}")
+        private val DISCORD_LONG_INVITE_PATH = Regex("/invite/[A-Za-z0-9_-]{2,64}")
     }
 }

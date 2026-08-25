@@ -31,12 +31,15 @@ guild session.
 
 ## Player flow
 
-1. `/verify` on Minecraft issues a link challenge.
+1. `/verify` on Minecraft issues a link challenge in one isolated chat block.
+   The whole code row copies the code, while the separately highlighted Discord
+   row opens the configured RusCrafting invite.
 2. The player enters it as the optional `code` value of Discord `/verify`.
 3. The identity link is committed atomically.
 4. Role reconciliation adds the configured verified/player roles, evaluates
    the exact LuckPerms group/permission policy, removes only configured managed
-   roles that are no longer desired, and applies the configured nickname.
+   roles that are no longer desired, and applies the configured nickname when
+   Discord's member hierarchy permits it.
 5. Repeating the same verification is idempotent and retries reconciliation.
 
 `/verify recover` issues a recovery challenge for an already linked UUID.
@@ -59,6 +62,13 @@ reconciliation retries safely. Unlink and recovery remove old managed roles
 before changing identity state, so an external failure cannot leave an unlinked
 account intentionally privileged.
 
+Discord role hierarchy and member nickname hierarchy are separate boundaries.
+If the target member is above the bot (including the guild owner), ProxyARC
+still applies every individually manageable allowlisted role and reports that
+only the nickname was skipped. During unlink, a nickname known to be managed
+by ProxyARC must still be cleared before the identity is deleted; if Discord no
+longer permits that cleanup, unlink remains fail-closed.
+
 ## Role policy
 
 The tracked runtime config owns exact Discord role ids and exact LuckPerms
@@ -66,6 +76,11 @@ group/permission matchers. Reconciliation never discovers roles by display
 name and never edits roles outside that configured set. The Discord bot's
 highest role must be above every managed role; startup/readback reports an
 actionable hierarchy failure without widening the policy.
+
+The in-game invite is configured as `messages.invite-url`. Validation accepts
+only a direct HTTPS `discord.gg/<code>` or `discord.com/invite/<code>` URL with
+no credentials, custom port, query, or fragment before it can become a chat
+click action.
 
 ## Verification
 

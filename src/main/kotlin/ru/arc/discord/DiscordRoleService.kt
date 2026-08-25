@@ -59,11 +59,11 @@ internal class DiscordRoleService(
             .thenCompose { member ->
                 val toRemove = member.roles.filter { it.id in roles.keys }
                 val ownsNickname = member.nickname == config.nickname(link.playerName)
-                if ((toRemove.isNotEmpty() || ownsNickname) && !guild.selfMember.canInteract(member)) {
+                if (ownsNickname && !guild.selfMember.canInteract(member)) {
                     return@thenCompose CompletableFuture.completedFuture(
                         DiscordRoleReconcileResult(
                             DiscordRoleReconcileResult.Status.HIERARCHY_BLOCKED,
-                            reason = "member-hierarchy",
+                            reason = "nickname-hierarchy",
                         ),
                     )
                 }
@@ -135,14 +135,7 @@ internal class DiscordRoleService(
         val removeIds = currentManagedIds - desiredIds
         val changedRoles = (addIds + removeIds).mapNotNull(roles::get)
         val nicknameChange = config.nicknameEnabled && member.nickname != config.nickname(link.playerName)
-        if ((changedRoles.isNotEmpty() || nicknameChange) && !guild.selfMember.canInteract(member)) {
-            return CompletableFuture.completedFuture(
-                DiscordRoleReconcileResult(
-                    DiscordRoleReconcileResult.Status.HIERARCHY_BLOCKED,
-                    reason = "member-hierarchy",
-                ),
-            )
-        }
+        val nicknameSkipped = nicknameChange && !guild.selfMember.canInteract(member)
         val blocked = changedRoles.firstOrNull { !guild.selfMember.canInteract(it) }
         if (blocked != null) {
             return CompletableFuture.completedFuture(
@@ -163,7 +156,13 @@ internal class DiscordRoleService(
                     .submit()
             }
         return rolesFuture.thenCompose {
-            applyNickname(guild, member, config.nickname(link.playerName)).thenApply { nicknameChanged ->
+            val nicknameFuture =
+                if (nicknameSkipped) {
+                    CompletableFuture.completedFuture(false)
+                } else {
+                    applyNickname(guild, member, config.nickname(link.playerName))
+                }
+            nicknameFuture.thenApply { nicknameChanged ->
                 DiscordRoleReconcileResult(
                     status =
                         if (addIds.isEmpty() && removeIds.isEmpty() && !nicknameChanged) {
@@ -174,6 +173,8 @@ internal class DiscordRoleService(
                     addedRoleIds = addIds,
                     removedRoleIds = removeIds,
                     nicknameChanged = nicknameChanged,
+                    nicknameSkipped = nicknameSkipped,
+                    reason = if (nicknameSkipped) "nickname-hierarchy" else null,
                 )
             }
         }

@@ -21,6 +21,7 @@ class DiscordVerificationConfigTest : FreeSpec({
                 "1079927708743643156",
             )
         config.nickname("PlayerName") shouldBe "PlayerName"
+        config.inviteUrl shouldBe "https://discord.gg/TJUXMGJD9q"
     }
 
     "rejects duplicate managed role ids" {
@@ -44,6 +45,28 @@ class DiscordVerificationConfigTest : FreeSpec({
         val root = Files.createTempDirectory("discord-verification-auth-backend")
         shouldThrow<IllegalArgumentException> {
             verificationConfig(root, allowedBackends = "[\"spawn\", \"limboauth\"]")
+        }
+    }
+
+    "rejects a Discord-looking open redirect instead of exposing it as a chat link" {
+        val root = Files.createTempDirectory("discord-verification-invite-url")
+        shouldThrow<IllegalArgumentException> {
+            verificationConfig(root, inviteUrl = "https://discord.gg.evil.example/TJUXMGJD9q")
+        }
+    }
+
+    "accepts only direct HTTPS Discord invitation targets" {
+        DiscordVerificationConfig.validInviteUrl("https://discord.gg/TJUXMGJD9q") shouldBe true
+        DiscordVerificationConfig.validInviteUrl("https://discord.com/invite/TJUXMGJD9q") shouldBe true
+        listOf(
+            "http://discord.gg/TJUXMGJD9q",
+            "https://user@discord.gg/TJUXMGJD9q",
+            "https://discord.gg:443/TJUXMGJD9q",
+            "https://discord.gg/TJUXMGJD9q?next=https://evil.example",
+            "https://discord.gg/TJUXMGJD9q#fragment",
+            "https://discord.gg/TJUXMGJD9q/extra",
+        ).forEach { candidate ->
+            DiscordVerificationConfig.validInviteUrl(candidate) shouldBe false
         }
     }
 })

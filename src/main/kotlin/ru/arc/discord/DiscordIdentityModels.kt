@@ -81,6 +81,7 @@ internal data class DiscordRoleReconcileResult(
     val addedRoleIds: Set<String> = emptySet(),
     val removedRoleIds: Set<String> = emptySet(),
     val nicknameChanged: Boolean = false,
+    val nicknameSkipped: Boolean = false,
     val reason: String? = null,
 ) {
     enum class Status {

@@ -49,6 +49,15 @@ class VerifyCommand : SimpleCommand {
     ) {
         Tasks.scheduler.runAsync {
             val bot = Velocity.discordBot ?: return@runAsync
+            val inviteUrl = bot.verificationInviteUrl()
+            if (inviteUrl == null || !DiscordVerificationConfig.validInviteUrl(inviteUrl)) {
+                if (player.isActive) {
+                    player.sendMessage(
+                        message("Сервис недоступен. Данные не изменены.", NamedTextColor.RED),
+                    )
+                }
+                return@runAsync
+            }
             val result =
                 if (recovery) {
                     bot.issueRecoveryChallenge(player.uniqueId, player.username)
@@ -63,6 +72,7 @@ class VerifyCommand : SimpleCommand {
                             code = result.code,
                             expiresInMinutes = retryMinutes(result.expiresAt),
                             recovery = recovery,
+                            inviteUrl = inviteUrl,
                         ),
                     )
                 is DiscordChallengeIssueResult.AlreadyLinked ->
@@ -150,30 +160,48 @@ class VerifyCommand : SimpleCommand {
             code: String,
             expiresInMinutes: Long,
             recovery: Boolean,
+            inviteUrl: String,
         ): Component {
+            require(DiscordVerificationConfig.validInviteUrl(inviteUrl)) { "invalid Discord invite URL" }
             val title = if (recovery) "Перенос привязки Discord" else "Привязка Discord-аккаунта"
+            val copyEvent = ClickEvent.copyToClipboard(code)
             val codeComponent =
                 Component.text(code, CODE, TextDecoration.BOLD)
-                    .clickEvent(ClickEvent.copyToClipboard(code))
+                    .clickEvent(copyEvent)
                     .hoverEvent(Component.text("Нажмите, чтобы скопировать", MUTED))
+            val codeRow =
+                Component.text("Код для Discord: ", STRUCTURE)
+                    .append(codeComponent)
+                    .clickEvent(copyEvent)
+                    .hoverEvent(Component.text("Скопировать код", MUTED))
+            val inviteRow =
+                Component.text("Открыть Discord RusCrafting", ACCENT, TextDecoration.BOLD)
+                    .decorate(TextDecoration.UNDERLINED)
+                    .clickEvent(ClickEvent.openUrl(inviteUrl))
+                    .hoverEvent(Component.text("Перейти на сервер RusCrafting", MUTED))
 
             return Component.empty()
                 .append(Component.newline())
                 .append(indented(Component.text(title, ACCENT, TextDecoration.BOLD)))
                 .append(Component.newline())
-                .append(indented(Component.text("Код: ", STRUCTURE).append(codeComponent)))
                 .append(Component.newline())
-                .append(indented(Component.text("Откройте сервер RusCrafting в Discord.", BODY)))
+                .append(indented(codeRow))
                 .append(Component.newline())
-                .append(indented(Component.text("Введите команду ", MUTED).append(Component.text("/verify", ACCENT))))
+                .append(indented(Component.text("Нажмите строку — код скопируется.", MUTED)))
+                .append(Component.newline())
+                .append(Component.newline())
+                .append(indented(inviteRow))
+                .append(Component.newline())
+                .append(indented(Component.text("В Discord введите ", BODY).append(Component.text("/verify", ACCENT))))
                 .append(Component.newline())
                 .append(
                     indented(
-                        Component.text("В поле ", MUTED)
+                        Component.text("В поле ", BODY)
                             .append(Component.text("code", BODY))
-                            .append(Component.text(" вставьте код выше.", MUTED)),
+                            .append(Component.text(" вставьте скопированный код.", BODY)),
                     ),
                 )
+                .append(Component.newline())
                 .append(Component.newline())
                 .append(
                     indented(

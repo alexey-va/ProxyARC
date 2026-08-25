@@ -179,6 +179,8 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
     internal fun isVerificationBackendAllowed(backend: String): Boolean =
         verificationConfig?.allowedBackends?.contains(backend.lowercase()) == true
 
+    internal fun verificationInviteUrl(): String? = verificationConfig?.inviteUrl
+
     internal fun issueLinkChallenge(
         playerUuid: UUID,
         playerName: String,

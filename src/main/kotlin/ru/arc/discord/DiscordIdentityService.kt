@@ -264,7 +264,7 @@ internal class DiscordIdentityService(
         link: DiscordIdentityLink,
         result: DiscordRoleReconcileResult,
     ) {
-        if (result.status == DiscordRoleReconcileResult.Status.UNCHANGED) return
+        if (result.status == DiscordRoleReconcileResult.Status.UNCHANGED && !result.nicknameSkipped) return
         safely(Unit) {
             store.mutate { state ->
                 appendAudit(
@@ -279,6 +279,7 @@ internal class DiscordIdentityService(
                         append("added=").append(result.addedRoleIds.size)
                         append(",removed=").append(result.removedRoleIds.size)
                         append(",nickname=").append(result.nicknameChanged)
+                        append(",nicknameSkipped=").append(result.nicknameSkipped)
                         result.reason?.let { append(",reason=").append(it.take(48)) }
                     },
                 )
