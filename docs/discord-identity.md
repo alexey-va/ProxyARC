@@ -22,6 +22,7 @@ guild session.
 | Owner | Responsibility |
 | --- | --- |
 | `DiscordConnectionService` | JDA lifecycle, guild/channel resolution, command registration |
+| `DiscordChatConfig` | validates and renders the tracked inbound bridge formats |
 | `DiscordChatService` | inbound/outbound bridge and allowed-mention enforcement |
 | `DiscordTicketService` | forum ticket creation, update, listing, and reconciliation |
 | `DiscordIdentityService` | atomic snapshot, challenges, uniqueness, rate limits, audit |
@@ -81,6 +82,13 @@ The in-game invite is configured as `messages.invite-url`. Validation accepts
 only a direct HTTPS `discord.gg/<code>` or `discord.com/invite/<code>` URL with
 no credentials, custom port, query, or fragment before it can become a chat
 click action.
+
+Player-facing inbound bridge templates are owned by the tracked
+`modules/discord-chat.yml`, separate from the token-bearing `discord.yml`.
+`formats.minecraft` is MiniMessage and `formats.telegram` is plain text; both
+must contain `%player_name%` and `%message%` exactly once. Discord content is
+inserted as an Adventure component or an unparsed value, so user text cannot
+become MiniMessage markup.
 
 ## Verification
 

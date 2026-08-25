@@ -1,0 +1,7 @@
+# Discord -> Minecraft uses MiniMessage. Keep both placeholders exactly once.
+# U+E2A1 is the active ItemsAdder font image `lzranks:discord_icon`.
+formats:
+  minecraft: "<white></white> <dark_gray>| <gray>%player_name% <dark_gray>» <white>%message%"
+
+  # Discord -> Telegram is plain bridge text.
+  telegram: "%player_name% » %message%"

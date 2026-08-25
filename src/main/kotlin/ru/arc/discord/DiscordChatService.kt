@@ -2,16 +2,13 @@ package ru.arc.discord
 
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel
-import net.kyori.adventure.text.minimessage.MiniMessage
-import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import org.slf4j.LoggerFactory
 import ru.arc.ai.routing.ingress.ChatIngress
-import ru.arc.config.Config
 import ru.arc.velocity.Velocity
 
 internal class DiscordChatService(
     private val session: DiscordSession,
-    private val config: Config,
+    private val config: DiscordChatConfig?,
     private val codec: DiscordMessageCodec,
     private val cleaner: DiscordChatCleaner,
     private val identityResolver: DiscordChatIdentityResolver = DiscordChatIdentityResolver(),
@@ -44,30 +41,17 @@ internal class DiscordChatService(
     }
 
     private fun relayChatInbound(event: MessageReceivedEvent) {
+        val configured = config ?: return
         val author = inboundAuthor(event)
         val messageText = codec.discordToMinecraft(event.message)
         if (messageText.isBlank()) return
         log.info("Discord chat relay from user={} chars={}", event.author.id, messageText.length)
 
-        val format =
-            normalizeChatFormat(
-                config.string(
-                    "chat-format",
-                    DEFAULT_CHAT_FORMAT,
-                ),
-            ).replace("%player_name%", "<player_name>")
-                .replace("%message%", "<message>")
-        val component =
-            MiniMessage.miniMessage().deserialize(
-                format,
-                Placeholder.unparsed("player_name", author),
-                Placeholder.component("message", codec.minecraftBody(messageText)),
-            )
+        val component = configured.minecraftMessage(author, codec.minecraftBody(messageText))
         Velocity.plugin?.sendMessageToAll(component)
 
-        val telegramFormat = config.string("telegram-format", "**%player_name%** » %message%")
         Velocity.telegramBot?.sendChatMessage(
-            telegramFormat.replace("%player_name%", author).replace("%message%", messageText),
+            configured.telegramMessage(author, messageText),
         )
 
         val proxy = Velocity.proxyServer ?: return
@@ -89,12 +73,12 @@ internal class DiscordChatService(
     }
 
     private fun relayGeneralInbound(event: MessageReceivedEvent) {
+        val configured = config ?: return
         val messageText = codec.discordToMinecraft(event.message)
         if (messageText.isBlank()) return
         val author = inboundAuthor(event)
-        val format = config.string("telegram-format", "%player_name% » %message%")
         Velocity.telegramBot?.sendGeneralMessage(
-            format.replace("%player_name%", author).replace("%message%", messageText),
+            configured.telegramMessage(author, messageText),
         )
     }
 
@@ -119,13 +103,6 @@ internal class DiscordChatService(
     companion object {
         private val log = LoggerFactory.getLogger(DiscordChatService::class.java)
         private const val DISCORD_MESSAGE_LIMIT = 2_000
-        private const val LEGACY_CHAT_FORMAT =
-            "<blue>D <gray>%player_name% <dark_gray>» <white>%message%"
-        private const val DEFAULT_CHAT_FORMAT =
-            "<blue>D <dark_gray>| <gray>%player_name% <dark_gray>» <white>%message%"
-
-        internal fun normalizeChatFormat(format: String): String =
-            if (format == LEGACY_CHAT_FORMAT) DEFAULT_CHAT_FORMAT else format
 
         internal fun splitMessage(message: String): List<String> {
             val remaining = ArrayDeque(message.trim().lines())

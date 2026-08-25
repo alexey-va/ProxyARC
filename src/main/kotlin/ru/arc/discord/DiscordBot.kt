@@ -35,6 +35,10 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
         runCatching { DiscordVerificationConfig.load().also(DiscordVerificationConfig::validate) }
             .onFailure { log.error("Discord verification configuration is invalid", it) }
             .getOrNull()
+    private val chatConfig =
+        runCatching { DiscordChatConfig.load().also(DiscordChatConfig::validate) }
+            .onFailure { log.error("Discord chat bridge configuration is invalid", it) }
+            .getOrNull()
     private val identities =
         verificationConfig?.let {
             DiscordIdentityService(
@@ -65,7 +69,7 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
     private val chat =
         DiscordChatService(
             session,
-            config,
+            chatConfig,
             codec,
             cleaner,
             DiscordChatIdentityResolver { discordUserId ->

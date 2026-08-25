@@ -25,16 +25,4 @@ class DiscordChatIdentityResolverTest : FreeSpec({
         resolver.resolve("1073279640912789595", "Discord Fallback") shouldBe "Discord Fallback"
     }
 
-    "upgrades the legacy Discord chat prefix to the vertical separator" {
-        DiscordChatService.normalizeChatFormat(
-            "<blue>D <gray>%player_name% <dark_gray>» <white>%message%",
-        ) shouldBe
-            "<blue>D <dark_gray>| <gray>%player_name% <dark_gray>» <white>%message%"
-    }
-
-    "keeps an explicitly customized Discord chat format" {
-        val custom = "<aqua>Discord <gray>• <white>%player_name%: %message%"
-
-        DiscordChatService.normalizeChatFormat(custom) shouldBe custom
-    }
 })
