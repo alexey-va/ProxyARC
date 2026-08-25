@@ -21,6 +21,9 @@ class DiscordChatConfigTest : FreeSpec({
         PlainTextComponentSerializer.plainText().serialize(
             config.minecraftMessage("GrocerMC", Component.text("123")),
         ) shouldBe " | GrocerMC » 123"
+        PlainTextComponentSerializer.plainText().serialize(
+            config.minecraftReplyMessage("GrocerMC", "Alex", "старое", Component.text("123")),
+        ) shouldBe " | GrocerMC ← 123"
     }
 
     "renders Telegram placeholders in one pass" {

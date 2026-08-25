@@ -13,6 +13,7 @@ internal sealed interface DiscordVerificationWorkflowResult {
     data class Recovered(
         val link: DiscordIdentityLink,
         val reconciliation: DiscordRoleReconcileResult,
+        val previousLink: DiscordIdentityLink,
     ) : DiscordVerificationWorkflowResult
 
     data class Unlinked(val previousLink: DiscordIdentityLink) : DiscordVerificationWorkflowResult
@@ -27,6 +28,8 @@ internal sealed interface DiscordVerificationWorkflowResult {
 
     data object NotLinked : DiscordVerificationWorkflowResult
 
+    data object RecoveryCancelled : DiscordVerificationWorkflowResult
+
     data class RoleFailure(val result: DiscordRoleReconcileResult) : DiscordVerificationWorkflowResult
 
     data object Conflict : DiscordVerificationWorkflowResult
@@ -38,6 +41,10 @@ internal class DiscordVerificationService(
     private val identities: DiscordIdentityService,
     private val roles: DiscordRoleReconciler,
     private val telemetry: DiscordVerificationTelemetry = DiscordVerificationTelemetry(),
+    private val workflowObserver: (DiscordVerificationWorkflowResult) -> Unit = {},
+    private val recoveryGuard: (DiscordChallengeCompletionResult.RecoveryPrepared) -> CompletableFuture<Boolean> = {
+        CompletableFuture.completedFuture(true)
+    },
 ) {
     fun isAvailable(): Boolean = identities.isAvailable()
 
@@ -193,43 +200,90 @@ internal class DiscordVerificationService(
     private fun completeRecovery(
         prepared: DiscordChallengeCompletionResult.RecoveryPrepared,
     ): CompletableFuture<DiscordVerificationWorkflowResult> =
-        roles.clearManagedRoles(prepared.currentLink).thenCompose { clearResult ->
-            recordRoleSync(prepared.currentLink, DiscordRoleSyncTrigger.RECOVERY, clearResult)
-            if (!clearResult.successful) {
+        recoveryGuard(prepared).thenCompose { allowed ->
+            if (!allowed) {
                 identities.releaseRecoveryClaim(
                     prepared.challengeId,
                     prepared.newDiscordUserId,
-                    clearResult.status.name,
+                    "cancelled-by-previous-discord",
                 )
-                return@thenCompose completed(DiscordVerificationWorkflowResult.RoleFailure(clearResult))
+                return@thenCompose completed(DiscordVerificationWorkflowResult.RecoveryCancelled)
             }
-            when (val recovered = identities.completeRecovery(prepared.challengeId, prepared.newDiscordUserId)) {
-                is DiscordRecoveryCompletionResult.Recovered ->
-                    roles.reconcile(recovered.newLink).thenApply { reconcileResult ->
-                        recordRoleSync(recovered.newLink, DiscordRoleSyncTrigger.RECOVERY, reconcileResult)
-                        DiscordVerificationWorkflowResult.Recovered(recovered.newLink, reconcileResult)
-                    }
-                DiscordRecoveryCompletionResult.Conflict -> completed(DiscordVerificationWorkflowResult.Conflict)
-                DiscordRecoveryCompletionResult.Unavailable -> completed(DiscordVerificationWorkflowResult.Unavailable)
+            roles.clearManagedRoles(prepared.currentLink).thenCompose { clearResult ->
+                recordRoleSync(prepared.currentLink, DiscordRoleSyncTrigger.RECOVERY, clearResult)
+                if (!clearResult.successful) {
+                    identities.releaseRecoveryClaim(
+                        prepared.challengeId,
+                        prepared.newDiscordUserId,
+                        clearResult.status.name,
+                    )
+                    return@thenCompose completed(DiscordVerificationWorkflowResult.RoleFailure(clearResult))
+                }
+                when (val recovered = identities.completeRecovery(prepared.challengeId, prepared.newDiscordUserId)) {
+                    is DiscordRecoveryCompletionResult.Recovered ->
+                        roles.reconcile(recovered.newLink).thenApply { reconcileResult ->
+                            recordRoleSync(recovered.newLink, DiscordRoleSyncTrigger.RECOVERY, reconcileResult)
+                            DiscordVerificationWorkflowResult.Recovered(
+                                recovered.newLink,
+                                reconcileResult,
+                                recovered.previousLink,
+                            )
+                        }
+                    DiscordRecoveryCompletionResult.Conflict ->
+                        restoreRolesAfterIdentityFailure(
+                            prepared.currentLink,
+                            DiscordRoleSyncTrigger.RECOVERY,
+                            DiscordVerificationWorkflowResult.Conflict,
+                        )
+                    DiscordRecoveryCompletionResult.Unavailable ->
+                        restoreRolesAfterIdentityFailure(
+                            prepared.currentLink,
+                            DiscordRoleSyncTrigger.RECOVERY,
+                            DiscordVerificationWorkflowResult.Unavailable,
+                        )
+                }
             }
         }
 
     private fun clearThenUnlink(link: DiscordIdentityLink): CompletableFuture<DiscordVerificationWorkflowResult> =
-        roles.clearManagedRoles(link).thenApply { clearResult ->
+        roles.clearManagedRoles(link).thenCompose { clearResult ->
             recordRoleSync(link, DiscordRoleSyncTrigger.UNLINK, clearResult)
             if (!clearResult.successful) {
-                return@thenApply DiscordVerificationWorkflowResult.RoleFailure(clearResult)
+                return@thenCompose completed(DiscordVerificationWorkflowResult.RoleFailure(clearResult))
             }
             when (val result = identities.completeUnlink(link.playerUuid, link.discordUserId)) {
                 is DiscordUnlinkResult.Unlinked -> {
                     telemetry.removeIdentity(link.playerUuid)
-                    DiscordVerificationWorkflowResult.Unlinked(result.previousLink)
+                    completed(DiscordVerificationWorkflowResult.Unlinked(result.previousLink))
                 }
-                DiscordUnlinkResult.NotLinked -> DiscordVerificationWorkflowResult.NotLinked
-                DiscordUnlinkResult.Conflict -> DiscordVerificationWorkflowResult.Conflict
-                DiscordUnlinkResult.Unavailable -> DiscordVerificationWorkflowResult.Unavailable
+                DiscordUnlinkResult.NotLinked -> completed(DiscordVerificationWorkflowResult.NotLinked)
+                DiscordUnlinkResult.Conflict ->
+                    restoreRolesAfterIdentityFailure(
+                        link,
+                        DiscordRoleSyncTrigger.UNLINK,
+                        DiscordVerificationWorkflowResult.Conflict,
+                    )
+                DiscordUnlinkResult.Unavailable ->
+                    restoreRolesAfterIdentityFailure(
+                        link,
+                        DiscordRoleSyncTrigger.UNLINK,
+                        DiscordVerificationWorkflowResult.Unavailable,
+                    )
             }
         }
+
+    private fun restoreRolesAfterIdentityFailure(
+        link: DiscordIdentityLink,
+        trigger: DiscordRoleSyncTrigger,
+        outcome: DiscordVerificationWorkflowResult,
+    ): CompletableFuture<DiscordVerificationWorkflowResult> {
+        val current = identities.findByPlayerUuid(link.playerUuid)
+        if (current?.discordUserId != link.discordUserId) return completed(outcome)
+        return roles.reconcile(current).handle { result, _ ->
+            if (result != null) recordRoleSync(current, trigger, result)
+            outcome
+        }
+    }
 
     private fun recordRoleSync(
         link: DiscordIdentityLink,
@@ -249,6 +303,7 @@ internal class DiscordVerificationService(
                 operation,
                 if (error != null || result == null) DiscordVerificationOutcome.FAILED else result.verificationOutcome(),
             )
+            if (error == null && result != null) runCatching { workflowObserver(result) }
         }
 
     private fun <T> completed(value: T): CompletableFuture<T> = CompletableFuture.completedFuture(value)
@@ -289,6 +344,7 @@ private fun DiscordVerificationWorkflowResult.verificationOutcome(): DiscordVeri
         DiscordVerificationWorkflowResult.DiscordAlreadyLinked,
         -> DiscordVerificationOutcome.ALREADY_LINKED
         DiscordVerificationWorkflowResult.NotLinked -> DiscordVerificationOutcome.NOT_LINKED
+        DiscordVerificationWorkflowResult.RecoveryCancelled -> DiscordVerificationOutcome.CONFLICT
         is DiscordVerificationWorkflowResult.RoleFailure -> DiscordVerificationOutcome.ROLE_FAILURE
         DiscordVerificationWorkflowResult.Conflict -> DiscordVerificationOutcome.CONFLICT
         DiscordVerificationWorkflowResult.Unavailable -> DiscordVerificationOutcome.UNAVAILABLE

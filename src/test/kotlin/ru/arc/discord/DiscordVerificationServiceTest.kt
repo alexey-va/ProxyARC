@@ -11,10 +11,14 @@ class DiscordVerificationServiceTest : FreeSpec({
     val oldDiscord = "1073279640912789595"
     val newDiscord = "1083092420394221699"
 
-    fun fixture(): WorkflowFixture {
+    fun fixture(
+        recoveryGuard: (DiscordChallengeCompletionResult.RecoveryPrepared) -> CompletableFuture<Boolean> = {
+            CompletableFuture.completedFuture(true)
+        },
+    ): WorkflowFixture {
         val root = Files.createTempDirectory("discord-verification-workflow")
         var now = 1_000_000L
-        val codes = ArrayDeque(listOf("ABCDEFGH", "JKLMNPQR"))
+        val codes = ArrayDeque(listOf("ABCDEFGH", "JKLMNPQR", "STUVWXYZ"))
         val identities =
             DiscordIdentityService(
                 DiscordIdentityStore(root.resolve("data/discord-identities.json")),
@@ -26,7 +30,7 @@ class DiscordVerificationServiceTest : FreeSpec({
         return WorkflowFixture(
             identities,
             roles,
-            DiscordVerificationService(identities, roles),
+            DiscordVerificationService(identities, roles, recoveryGuard = recoveryGuard),
             setNow = { now = it },
         )
     }
@@ -174,6 +178,44 @@ class DiscordVerificationServiceTest : FreeSpec({
 
         (result as DiscordVerificationWorkflowResult.Recovered).link.discordUserId shouldBe newDiscord
         fixture.roles.events shouldBe listOf("clear:$oldDiscord", "reconcile:$newDiscord")
+    }
+
+    "previous Discord can cancel recovery before roles or identity change" {
+        val fixture = fixture { CompletableFuture.completedFuture(false) }
+        val linkCode =
+            (fixture.service.issueLinkChallenge(player, "PlayerOne") as DiscordChallengeIssueResult.Issued).code
+        fixture.service.completeFromDiscord(linkCode, oldDiscord).join()
+        fixture.roles.events.clear()
+        fixture.setNow(1_061_000L)
+        val recoveryCode =
+            (fixture.service.issueRecoveryChallenge(player, "PlayerOne") as DiscordChallengeIssueResult.Issued).code
+
+        fixture.service.completeFromDiscord(recoveryCode, newDiscord).join() shouldBe
+            DiscordVerificationWorkflowResult.RecoveryCancelled
+        fixture.identities.findByPlayerUuid(player)?.discordUserId shouldBe oldDiscord
+        fixture.roles.events shouldBe emptyList()
+    }
+
+    "recovery restores old roles when the replacement becomes conflicting" {
+        val fixture = fixture()
+        val linkCode =
+            (fixture.service.issueLinkChallenge(player, "PlayerOne") as DiscordChallengeIssueResult.Issued).code
+        fixture.service.completeFromDiscord(linkCode, oldDiscord).join()
+        fixture.roles.events.clear()
+        fixture.setNow(1_061_000L)
+        val recoveryCode =
+            (fixture.service.issueRecoveryChallenge(player, "PlayerOne") as DiscordChallengeIssueResult.Issued).code
+        fixture.roles.onClear = {
+            val otherPlayer = UUID.fromString("22222222-2222-2222-2222-222222222222")
+            val otherCode =
+                (fixture.identities.issueLinkChallenge(otherPlayer, "PlayerTwo") as DiscordChallengeIssueResult.Issued).code
+            fixture.identities.completeChallenge(otherCode, newDiscord)
+        }
+
+        fixture.service.completeFromDiscord(recoveryCode, newDiscord).join() shouldBe
+            DiscordVerificationWorkflowResult.Conflict
+        fixture.identities.findByPlayerUuid(player)?.discordUserId shouldBe oldDiscord
+        fixture.roles.events shouldBe listOf("clear:$oldDiscord", "reconcile:$oldDiscord")
     }
 })
 

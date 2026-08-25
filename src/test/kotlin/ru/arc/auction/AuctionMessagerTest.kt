@@ -30,4 +30,18 @@ class AuctionMessagerTest : FreeSpec({
             messager.consume("partial", "{not-json", "spawn")
         }
     }
+
+    "sale event validation rejects spoofed player names" {
+        AuctionMessager.validSale(
+            AuctionSaleEventDto(
+                listingId = "42",
+                sellerName = "@everyone",
+                buyerName = "GrocerMC",
+                itemDisplay = "Алмаз",
+                amount = 1,
+                price = "100",
+                occurredAt = 1,
+            ),
+        ) shouldBe false
+    }
 })

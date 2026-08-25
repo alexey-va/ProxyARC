@@ -578,7 +578,9 @@ internal class DiscordIdentityService(
     companion object {
         private val log = LoggerFactory.getLogger(DiscordIdentityService::class.java)
         private const val CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-        private const val CLAIM_TTL_MS = 60_000L
+        // Must exceed the configurable old-account cancellation window (max 90 seconds)
+        // while remaining bounded after a process crash or abandoned interaction.
+        private const val CLAIM_TTL_MS = 120_000L
         private const val MAX_AUDIT_EVENTS = 2_000
         private const val MAX_RATE_WINDOWS = 10_000
         private const val MAX_CODE_COLLISION_ATTEMPTS = 8

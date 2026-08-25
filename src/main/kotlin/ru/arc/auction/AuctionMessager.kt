@@ -12,6 +12,7 @@ import java.util.concurrent.ConcurrentHashMap
 class AuctionMessager(
     @JvmField val channelPartial: String,
     @JvmField val channelAll: String,
+    @JvmField val channelSales: String = "arc.auction_sale_events",
     private val discordBotProvider: () -> DiscordBot? = { Velocity.discordBot },
 ) : ChannelListener {
 
@@ -22,6 +23,10 @@ class AuctionMessager(
     val map: MutableMap<UUID, AuctionItemDto> = ConcurrentHashMap()
 
     override fun consume(channel: String, message: String, originServer: String) {
+        if (channel == channelSales) {
+            consumeSale(message, originServer)
+            return
+        }
         if (channel == channelAll) {
             map.clear()
         }
@@ -55,5 +60,34 @@ class AuctionMessager(
         } else {
             log.debug("Skipping auction Discord update because the bot is not ready")
         }
+    }
+
+    private fun consumeSale(
+        message: String,
+        originServer: String,
+    ) {
+        val event =
+            runCatching { gson.fromJson(message, AuctionSaleEventDto::class.java) }
+                .getOrElse { error ->
+                    log.warn("Ignoring malformed auction sale event from {}", originServer, error)
+                    return
+                } ?: return
+        if (!validSale(event)) {
+            log.warn("Ignoring invalid auction sale event from {}", originServer)
+            return
+        }
+        discordBotProvider()?.notifyAuctionSold(event)
+    }
+
+    companion object {
+        internal fun validSale(event: AuctionSaleEventDto): Boolean =
+            event.listingId.length in 1..64 &&
+                PLAYER_NAME.matches(event.sellerName) &&
+                PLAYER_NAME.matches(event.buyerName) &&
+                event.itemDisplay.isNotBlank() && event.itemDisplay.length <= 200 &&
+                event.amount in 1..1_000_000 && event.price.isNotBlank() &&
+                event.price.length <= 100 && event.occurredAt >= 0
+
+        private val PLAYER_NAME = Regex("[A-Za-z0-9_]{1,16}")
     }
 }

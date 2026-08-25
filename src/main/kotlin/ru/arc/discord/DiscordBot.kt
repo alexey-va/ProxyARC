@@ -4,6 +4,7 @@ import org.slf4j.LoggerFactory
 import ru.arc.ai.IssueTicketContext
 import ru.arc.ai.tickets.ForumTicketSync
 import ru.arc.auction.AuctionItemDto
+import ru.arc.auction.AuctionSaleEventDto
 import ru.arc.config.Config
 import ru.arc.config.ProxyConfigs
 import ru.arc.core.Tasks
@@ -40,6 +41,10 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
         runCatching { DiscordChatConfig.load().also(DiscordChatConfig::validate) }
             .onFailure { log.error("Discord chat bridge configuration is invalid", it) }
             .getOrNull()
+    private val integrationConfig =
+        runCatching { DiscordIntegrationConfig.load().also(DiscordIntegrationConfig::validate) }
+            .onFailure { log.error("Discord integration configuration is invalid", it) }
+            .getOrNull()
     private val identities =
         verificationConfig?.let {
             DiscordIdentityService(
@@ -55,9 +60,43 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
                 DiscordRoleService.luckPermsProvider { Velocity.luckpermsHook },
             )
         }
+    private val integrationStore =
+        integrationConfig?.takeIf { it.enabled }?.let {
+            DiscordIntegrationStore(Velocity.requireDataFolder().resolve("data/discord-integration.json"))
+        }
+    private val notifications =
+        integrationConfig?.takeIf { it.enabled }?.let { configured ->
+            integrationStore?.takeIf { it.isAvailable() }?.let { store ->
+                DiscordNotificationService(
+                    session = session,
+                    config = configured,
+                    store = store,
+                    identityByPlayerName = { identities?.findByPlayerName(it) },
+                    identityByPlayerUuid = { identities?.findByPlayerUuid(it) },
+                )
+            }
+        }
+    private val linkProtection =
+        integrationConfig?.takeIf { it.enabled }?.let { configured ->
+            integrationStore?.takeIf { it.isAvailable() }?.let { store ->
+                notifications?.let { notifier ->
+                    DiscordLinkProtectionService(configured, notifier, store, executor)
+                }
+            }
+        }
     private val verification =
         identities?.let { identityService ->
-            roleService?.let { DiscordVerificationService(identityService, it, verificationTelemetry) }
+            roleService?.let {
+                DiscordVerificationService(
+                    identityService,
+                    it,
+                    telemetry = verificationTelemetry,
+                    workflowObserver = ::onVerificationWorkflow,
+                    recoveryGuard = { prepared ->
+                        linkProtection?.guard(prepared) ?: CompletableFuture.completedFuture(true)
+                    },
+                )
+            }
         }
     private val roleSyncCoordinator =
         verificationConfig?.let { configured ->
@@ -94,11 +133,69 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
                 identities?.findByDiscordUserId(discordUserId)?.playerName
             },
         )
-    private val feeds = DiscordFeedService(session, config, joinConfig, executor)
-    private val tickets = DiscordTicketService(session, config, executor)
+    private val feeds =
+        DiscordFeedService(
+            session,
+            config,
+            joinConfig,
+            executor,
+            statusChannelId = integrationConfig?.takeIf { it.enabled }?.statusChannelId,
+        )
+    private val presence =
+        integrationConfig?.takeIf { it.enabled }?.let { DiscordPresenceService(session, it, feeds, executor) }
+    private val gameEvents =
+        integrationConfig?.takeIf { it.enabled }?.let { configured ->
+            integrationStore?.takeIf { it.isAvailable() }?.let { store ->
+                notifications?.let { notifier ->
+                    DiscordGameEventService(
+                        session,
+                        configured,
+                        store,
+                        notifier,
+                        executor,
+                        identityByPlayerName = { identities?.findByPlayerName(it) },
+                    )
+                }
+            }
+        }
+    private val moderation =
+        notifications?.let { notifier ->
+            val messages = integrationConfig?.messages ?: return@let null
+            DiscordModerationService(
+                notifier,
+                messages,
+                playerNameByUuid = { uuid ->
+                    identities?.findByPlayerUuid(uuid)?.playerName
+                        ?: Velocity.proxyServer?.getPlayer(uuid)?.orElse(null)?.username
+                },
+            )
+        }
+    private val tickets =
+        DiscordTicketService(session, config, executor) { reporter, ticketId, url ->
+            notifications?.notifyTicketReply(reporter, ticketId, url)
+        }
     private val verificationListener =
         verificationConfig?.let { configured ->
             verification?.let { DiscordVerificationListener(configured, it) }
+        }
+    private val integrationListener =
+        integrationConfig?.takeIf { it.enabled }?.let { configured ->
+            verification?.let { verificationService ->
+                integrationStore?.takeIf { it.isAvailable() }?.let { store ->
+                    notifications?.let { notifier ->
+                        gameEvents?.let { events ->
+                            DiscordIntegrationListener(
+                                configured,
+                                verificationService,
+                                store,
+                                notifier,
+                                events,
+                                linkProtection,
+                            )
+                        }
+                    }
+                }
+            }
         }
     private val connection = DiscordConnectionService(config, session, executor)
     private val opsAdapter =
@@ -114,6 +211,12 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
                 identities.storageFailureClass(),
             )
         }
+        if (integrationStore?.isAvailable() == false) {
+            log.error(
+                "Discord integration workflows are disabled because storage could not be loaded: {}",
+                integrationStore.failureClass(),
+            )
+        }
         runCatching {
             connection.start(::activateServices)
         }.onFailure { log.error("Discord bot initialization failed", it) }
@@ -125,12 +228,19 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
             listener.registerCommands(snapshot)
             listeners += listener
         }
+        integrationListener?.let { listener ->
+            listener.registerCommands(snapshot)
+            listeners += listener
+        }
         if (verificationConfig?.enabled == true) {
             roleService?.hierarchyProblems()?.takeIf(List<String>::isNotEmpty)?.let { problems ->
                 log.error("Discord managed-role prerequisites are not met: {}", problems.joinToString(","))
             }
         }
         roleSyncCoordinator?.start()
+        presence?.start()
+        gameEvents?.start()
+        moderation?.start()
         ForumTicketSync.scheduleIfEnabled()
         return listeners
     }
@@ -139,7 +249,10 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
 
     override fun isReady(): Boolean = connection.isEnabled() && session.isReady()
 
-    fun sendChatMessage(message: String) = chat.sendChatMessage(message)
+    fun sendChatMessage(message: String) {
+        chat.sendChatMessage(message)
+        notifications?.notifyMentions(message)
+    }
 
     fun sendGeneralMessage(message: String) = chat.sendGeneralMessage(message)
 
@@ -152,6 +265,23 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
     fun updatePlayerList(players: Collection<String>) = feeds.updatePlayerList(players)
 
     fun updateAuctionItems(items: List<AuctionItemDto>) = feeds.updateAuctionItems(items)
+
+    fun notifyAuctionSold(event: AuctionSaleEventDto) {
+        notifications?.notifyAuctionSold(
+            sellerUuid = event.sellerUuid?.let { runCatching { UUID.fromString(it) }.getOrNull() },
+            sellerName = event.sellerName,
+            item = event.itemDisplay,
+            amount = event.amount,
+            price = event.price,
+            buyerName = event.buyerName,
+        )
+    }
+
+    fun notifyInvite(
+        playerName: String,
+        message: String,
+    ): CompletableFuture<Boolean> =
+        notifications?.notifyInvite(playerName, message) ?: CompletableFuture.completedFuture(false)
 
     fun sendJoinEmbed(
         playerName: String,
@@ -255,6 +385,57 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
 
     internal fun roleHierarchyProblems(): List<String> = roleService?.hierarchyProblems() ?: emptyList()
 
+    private fun onVerificationWorkflow(result: DiscordVerificationWorkflowResult) {
+        when (result) {
+            is DiscordVerificationWorkflowResult.Recovered -> {
+                val message =
+                    integrationConfig?.messages?.text(
+                        "security-link-changed",
+                        "player" to DiscordTextSafety.markdown(result.link.playerName, 16),
+                    ) ?: return
+                notifications?.notifySecurity(result.previousLink.discordUserId, message)
+                runCatching {
+                    integrationStore?.recordSecurityEvent(
+                        "link-recovered",
+                        result.previousLink.discordUserId,
+                        result.link.playerName,
+                        result.link.discordUserId,
+                    )
+                }.onFailure { error ->
+                    log.warn("Could not audit recovered Discord link: {}", error.javaClass.simpleName)
+                }
+                gameEvents?.migrateParticipant(result.previousLink.discordUserId, result.link.discordUserId)
+                    ?.exceptionally { error ->
+                        log.warn("Could not migrate Discord event participation after recovery: {}", error.javaClass.simpleName)
+                        null
+                    }
+            }
+            is DiscordVerificationWorkflowResult.Unlinked -> {
+                val message =
+                    integrationConfig?.messages?.text(
+                        "security-unlinked",
+                        "player" to DiscordTextSafety.markdown(result.previousLink.playerName, 16),
+                    ) ?: return
+                notifications?.notifySecurity(result.previousLink.discordUserId, message)
+                runCatching {
+                    integrationStore?.recordSecurityEvent(
+                        "identity-unlinked",
+                        result.previousLink.discordUserId,
+                        result.previousLink.playerName,
+                    )
+                }.onFailure { error ->
+                    log.warn("Could not audit unlinked Discord identity: {}", error.javaClass.simpleName)
+                }
+                gameEvents?.removeParticipant(result.previousLink.discordUserId)
+                    ?.exceptionally { error ->
+                        log.warn("Could not remove Discord event participation after unlink: {}", error.javaClass.simpleName)
+                        null
+                    }
+            }
+            else -> Unit
+        }
+    }
+
     override fun isChannelAllowed(
         channelId: String,
         allowedGuildIds: Set<String>,
@@ -290,6 +471,10 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
     @Synchronized
     override fun close() {
         ForumTicketSync.stop()
+        moderation?.close()
+        linkProtection?.close()
+        gameEvents?.close()
+        presence?.close()
         roleSyncCoordinator?.close()
         feeds.close()
         cleaner.close()

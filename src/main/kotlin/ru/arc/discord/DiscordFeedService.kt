@@ -19,6 +19,7 @@ internal class DiscordFeedService(
     private val config: Config,
     private val joinConfig: Config,
     private val executor: ScheduledExecutorService,
+    private val statusChannelId: String? = null,
 ) : AutoCloseable {
     @Volatile
     private var lastPublishedSignature: String? = null
@@ -64,16 +65,26 @@ internal class DiscordFeedService(
     }
 
     fun refreshPlayerListFromProxy() {
-        updatePlayerList(Velocity.plugin?.onlinePlayerNames() ?: return)
+        val proxy = Velocity.proxyServer ?: return
+        updateNetworkStatus(DiscordNetworkSnapshot.capture(proxy))
     }
 
     fun updatePlayerList(players: Collection<String>) {
-        if (session.snapshot()?.channels?.playerList == null) return
+        updateNetworkStatus(
+            DiscordNetworkSnapshot(
+                players.map { DiscordOnlinePlayer(it, null) },
+                emptySet(),
+            ),
+        )
+    }
+
+    fun updateNetworkStatus(snapshot: DiscordNetworkSnapshot) {
+        if (playerListChannel() == null) return
         val now = System.currentTimeMillis()
         if (now < playerListRateLimitUntilMs) return
-        val signature = playerListSignature(players)
+        val signature = networkSignature(snapshot)
         if (!shouldUpdatePlayerList(signature, lastPublishedSignature, lastSuccessfulPublishAtMs, now)) return
-        publishPlayerList(players, signature, attempt = 0)
+        publishPlayerList(snapshot, signature, attempt = 0)
     }
 
     fun sendJoinEmbed(
@@ -105,30 +116,44 @@ internal class DiscordFeedService(
             .replace("%expire%", Utils.formatTime(item.expire - System.currentTimeMillis()))
             .replace("%category%", item.category ?: "")
 
-    private fun buildPlayerListEmbed(players: Collection<String>): MessageEmbed {
+    private fun buildPlayerListEmbed(snapshot: DiscordNetworkSnapshot): MessageEmbed {
         val maxPlayers = config.integer("player-list.max-players", 100)
         val author =
             config.string("player-list.title", "Игроки на сервере (%amount%/%max%)")
-                .replace("%amount%", players.size.toString())
+                .replace("%amount%", snapshot.online.toString())
                 .replace("%max%", maxPlayers.toString())
-        return EmbedBuilder()
+        val builder = EmbedBuilder()
             .setColor(Color.GREEN)
             .setAuthor(author)
-            .setDescription(players.sorted().joinToString("\n"))
-            .setTimestamp(OffsetDateTime.now())
-            .build()
+        if (snapshot.players.isEmpty()) {
+            builder.setDescription(config.string("player-list.empty", "Сейчас на серверах никого нет."))
+        } else {
+            val grouped = snapshot.players.groupBy { it.server?.ifBlank { null } ?: "подключение" }.toSortedMap()
+            grouped.forEach { (server, players) ->
+                builder.addField(
+                    config.string("player-list.server-title", "%server% • %amount%")
+                        .replace("%server%", server)
+                        .replace("%amount%", players.size.toString()),
+                    players.joinToString("\n") { it.name }.take(1_024),
+                    true,
+                )
+            }
+        }
+        return builder.setTimestamp(OffsetDateTime.now()).build()
     }
 
     private fun publishPlayerList(
-        players: Collection<String>,
+        snapshot: DiscordNetworkSnapshot,
         signature: String,
         attempt: Int,
     ) {
         if (attempt == 0) cancelPendingRetry()
-        val channel = session.snapshot()?.channels?.playerList ?: return
-        val embed = buildPlayerListEmbed(players)
-        val action = runCatching { channel.editMessageEmbedsById(channel.latestMessageId, embed) }
-            .getOrElse { channel.sendMessageEmbeds(embed) }
+        val channel = playerListChannel() ?: return
+        val embed = buildPlayerListEmbed(snapshot)
+        val latestMessageId = channel.latestMessageId
+        val action =
+            if (latestMessageId == "0") channel.sendMessageEmbeds(embed)
+            else channel.editMessageEmbedsById(latestMessageId, embed)
         action.queue(
             {
                 lastPublishedSignature = signature
@@ -157,12 +182,13 @@ internal class DiscordFeedService(
                 executor.schedule(
                     {
                         if (generation != retryGeneration.get()) return@schedule
-                        val players = Velocity.plugin?.onlinePlayerNames() ?: return@schedule
-                        val current = playerListSignature(players)
+                        val proxy = Velocity.proxyServer ?: return@schedule
+                        val players = DiscordNetworkSnapshot.capture(proxy)
+                        val current = networkSignature(players)
                         if (current == signature) {
                             publishPlayerList(players, current, attempt + 1)
                         } else {
-                            updatePlayerList(players)
+                            updateNetworkStatus(players)
                         }
                     },
                     delay,
@@ -214,6 +240,10 @@ internal class DiscordFeedService(
         log.warn("Failed to publish auction list", error)
     }
 
+    private fun playerListChannel() =
+        statusChannelId?.let { session.jda()?.getTextChannelById(it) }
+            ?: session.snapshot()?.channels?.playerList
+
     override fun close() {
         cancelPendingRetry()
     }
@@ -227,6 +257,11 @@ internal class DiscordFeedService(
 
         internal fun playerListSignature(players: Collection<String>): String =
             players.sorted().joinToString("\n")
+
+        internal fun networkSignature(snapshot: DiscordNetworkSnapshot): String =
+            snapshot.players
+                .sortedWith(compareBy<DiscordOnlinePlayer> { it.server.orEmpty() }.thenBy { it.name.lowercase() })
+                .joinToString("\n") { "${it.server.orEmpty()}\u0000${it.name}" }
 
         internal fun shouldUpdatePlayerList(
             signature: String,

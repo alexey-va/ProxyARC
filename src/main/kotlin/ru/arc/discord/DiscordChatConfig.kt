@@ -11,13 +11,20 @@ internal class DiscordChatConfig(
     private val config: Config,
 ) {
     val minecraftFormat: String get() = config.string("formats.minecraft", "").trim()
+    val minecraftReplyFormat: String get() =
+        config.string(
+            "formats.minecraft-reply",
+            "<white></white> <dark_gray>| <gray>%player_name% <hover:show_text:'<gray>%reply_name%: %reply_preview%'><dark_gray>←</dark_gray></hover> <white>%message%",
+        ).trim()
     val telegramFormat: String get() = config.string("formats.telegram", "").trim()
 
     fun validate() {
         validateFormat("formats.minecraft", minecraftFormat)
         validateFormat("formats.telegram", telegramFormat)
+        validateReplyFormat(minecraftReplyFormat)
         runCatching {
             minecraftMessage("PlayerName", Component.text("message"))
+            minecraftReplyMessage("PlayerName", "Other", "preview", Component.text("message"))
         }.getOrElse { error ->
             throw IllegalArgumentException("formats.minecraft must be valid MiniMessage", error)
         }
@@ -32,6 +39,24 @@ internal class DiscordChatConfig(
                 .replace(PLAYER_NAME_TOKEN, PLAYER_NAME_TAG)
                 .replace(MESSAGE_TOKEN, MESSAGE_TAG),
             Placeholder.unparsed("player_name", playerName),
+            Placeholder.component("message", message),
+        )
+
+    fun minecraftReplyMessage(
+        playerName: String,
+        replyName: String,
+        replyPreview: String,
+        message: Component,
+    ): Component =
+        MiniMessage.miniMessage().deserialize(
+            minecraftReplyFormat
+                .replace(PLAYER_NAME_TOKEN, PLAYER_NAME_TAG)
+                .replace(REPLY_NAME_TOKEN, REPLY_NAME_TAG)
+                .replace(REPLY_PREVIEW_TOKEN, REPLY_PREVIEW_TAG)
+                .replace(MESSAGE_TOKEN, MESSAGE_TAG),
+            Placeholder.unparsed("player_name", playerName),
+            Placeholder.unparsed("reply_name", replyName),
+            Placeholder.unparsed("reply_preview", replyPreview),
             Placeholder.component("message", message),
         )
 
@@ -57,11 +82,24 @@ internal class DiscordChatConfig(
         require(format.countToken(MESSAGE_TOKEN) == 1) { "$path must contain %message% exactly once" }
     }
 
+    private fun validateReplyFormat(format: String) {
+        require(format.isNotBlank()) { "formats.minecraft-reply must not be blank" }
+        require(format.length <= MAX_FORMAT_LENGTH) { "formats.minecraft-reply must not exceed $MAX_FORMAT_LENGTH characters" }
+        require('\n' !in format && '\r' !in format) { "formats.minecraft-reply must be a single line" }
+        listOf(PLAYER_NAME_TOKEN, REPLY_NAME_TOKEN, REPLY_PREVIEW_TOKEN, MESSAGE_TOKEN).forEach { token ->
+            require(format.countToken(token) == 1) { "formats.minecraft-reply must contain $token exactly once" }
+        }
+    }
+
     companion object {
         private const val PLAYER_NAME_TOKEN = "%player_name%"
         private const val MESSAGE_TOKEN = "%message%"
+        private const val REPLY_NAME_TOKEN = "%reply_name%"
+        private const val REPLY_PREVIEW_TOKEN = "%reply_preview%"
         private const val PLAYER_NAME_TAG = "<player_name>"
         private const val MESSAGE_TAG = "<message>"
+        private const val REPLY_NAME_TAG = "<reply_name>"
+        private const val REPLY_PREVIEW_TAG = "<reply_preview>"
         private const val MAX_FORMAT_LENGTH = 512
         private val FORMAT_TOKEN = Regex("%(?:player_name|message)%")
 

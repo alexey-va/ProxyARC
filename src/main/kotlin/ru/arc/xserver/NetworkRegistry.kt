@@ -34,6 +34,7 @@ class NetworkRegistry(
             auctionMessager = auction
             redis.registerChannelUnique(auction.channelPartial, auction)
             redis.registerChannelUnique(auction.channelAll, auction)
+            redis.registerChannelUnique(auction.channelSales, auction)
 
             val resourcePackListener =
                 ResourcePackHashRefreshListener(
@@ -114,6 +115,7 @@ class NetworkRegistry(
         auctionMessager?.let { auction ->
             redis.unregisterChannel(auction.channelPartial, auction)
             redis.unregisterChannel(auction.channelAll, auction)
+            redis.unregisterChannel(auction.channelSales, auction)
         }
         auctionMessager = null
 

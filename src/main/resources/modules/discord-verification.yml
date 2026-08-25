@@ -171,6 +171,7 @@ messages:
     minecraft-already-linked: "Этот аккаунт Minecraft уже связан. Для переноса используйте /verify recover на сервере."
     discord-already-linked: "Этот Discord уже связан с другим аккаунтом Minecraft."
     not-linked: "Аккаунт не связан."
+    recovery-cancelled: "Перенос привязки отменён старым Discord-аккаунтом."
     role-failure: "Операция остановлена: бот пока не может безопасно изменить роли."
     conflict: "Состояние аккаунта изменилось. Получите новый код и повторите операцию."
     unavailable: "Проверка временно недоступна. Данные не изменены."

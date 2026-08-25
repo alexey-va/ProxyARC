@@ -47,7 +47,21 @@ internal class DiscordChatService(
         if (messageText.isBlank()) return
         log.info("Discord chat relay from user={} chars={}", event.author.id, messageText.length)
 
-        val component = configured.minecraftMessage(author, codec.minecraftBody(messageText))
+        val referenced = event.message.referencedMessage
+        val component =
+            if (referenced == null) {
+                configured.minecraftMessage(author, codec.minecraftBody(messageText))
+            } else {
+                val replyAuthor =
+                    identityResolver.resolve(
+                        discordUserId = referenced.author.id,
+                        discordDisplayName = referenced.member?.effectiveName ?: referenced.author.effectiveName,
+                    )
+                val preview =
+                    DiscordTextSafety.plain(codec.discordToMinecraft(referenced), REPLY_PREVIEW_LENGTH)
+                        .ifBlank { "вложение" }
+                configured.minecraftReplyMessage(author, replyAuthor, preview, codec.minecraftBody(messageText))
+            }
         Velocity.plugin?.sendMessageToAll(component)
 
         Velocity.telegramBot?.sendChatMessage(
@@ -55,7 +69,6 @@ internal class DiscordChatService(
         )
 
         val proxy = Velocity.proxyServer ?: return
-        val referenced = event.message.referencedMessage
         val botId = event.jda.selfUser.id
         ChatIngress.onDiscordInbound(
             proxyServer = proxy,
@@ -103,6 +116,7 @@ internal class DiscordChatService(
     companion object {
         private val log = LoggerFactory.getLogger(DiscordChatService::class.java)
         private const val DISCORD_MESSAGE_LIMIT = 2_000
+        private const val REPLY_PREVIEW_LENGTH = 80
 
         internal fun splitMessage(message: String): List<String> {
             val remaining = ArrayDeque(message.trim().lines())

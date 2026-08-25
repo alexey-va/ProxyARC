@@ -138,6 +138,7 @@ internal class DiscordVerificationListener(
             DiscordVerificationWorkflowResult.DiscordAlreadyLinked ->
                 messages.discord("discord-already-linked")
             DiscordVerificationWorkflowResult.NotLinked -> messages.discord("not-linked")
+            DiscordVerificationWorkflowResult.RecoveryCancelled -> messages.discord("recovery-cancelled")
             is DiscordVerificationWorkflowResult.RoleFailure ->
                 messages.discord("role-failure")
             DiscordVerificationWorkflowResult.Conflict ->

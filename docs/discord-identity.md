@@ -31,6 +31,13 @@ guild session.
 | `DiscordVerificationTelemetry` | bounded diagnostics and aggregate metrics without identity labels |
 | `DiscordVerificationAdminCommand` | permission-gated status, manual sync, and fail-closed unlink |
 | `DiscordFeedService` | join, player-list, and auction publications |
+| `DiscordIntegrationListener` | `/account`, `/online`, `/server`, `/player`, `/notifications`, `/invite`, `/event`, and buttons |
+| `DiscordIntegrationStore` | atomic opt-in preferences, recovery requests, event state, and bounded audit |
+| `DiscordNotificationService` | rate-bounded personal DMs and staff alerts with mentions disabled |
+| `DiscordLinkProtectionService` | delayed account-link transfer with cancellation by the previous Discord |
+| `DiscordModerationService` | read-only LiteBans event context and notification bridge |
+| `DiscordGameEventService` | announcements, participation/reminder state, and exact event-role changes |
+| `DiscordPresenceService` | bot activity plus the server-aware online dashboard heartbeat |
 | `DiscordBot` | thin compatibility facade and service wiring |
 
 ## Player flow
@@ -46,10 +53,42 @@ guild session.
    Discord's member hierarchy permits it.
 5. Repeating the same verification is idempotent and retries reconciliation.
 
-`/verify recover` issues a recovery challenge for an already linked UUID.
-Recovery clears managed roles from the previous Discord member before replacing
-the snowflake. `/verify unlink confirm` and Discord `/unlink confirm:true`
+`/verify recover` issues a recovery challenge for an already linked UUID. The
+new Discord claim waits for the configured protection delay. The previously
+linked Discord must successfully receive a private cancel button; a failed DM
+delivery cancels the transfer and alerts staff. Cancellation releases the
+claim before any role or identity mutation. Only after that window does
+recovery clear managed roles from the previous Discord member and replace the
+snowflake. Active event participation is migrated to the new Discord id; unlink
+removes it. Both the pending transfer and its outcome are audited.
+`/verify unlink confirm` and Discord `/unlink confirm:true`
 clear managed roles before deleting the link.
+
+## Player integration commands
+
+- `/account` is an ephemeral identity dashboard with the Minecraft identity,
+  current backend, link date, Discord roles and last sync result. Its buttons
+  reuse the same authoritative reconciler and fail-closed unlink workflow.
+- `/online`, `/server [name]`, and `/player <name>` expose only public network
+  presence and verification state. They never reveal UUIDs or Discord ids.
+- `/notifications` owns six independently opt-in DM categories: mentions,
+  auction sales, ticket replies, punishment changes, events, and invitations.
+  Defaults are all off and per-user delivery is rate bounded.
+- `/invite <player>` sends a fixed, non-user-authored server invitation only
+  from a linked player who is currently online, and only when the linked target
+  explicitly enabled invitation DMs.
+- The `Не могу войти` account action creates a short-lived, staff-reviewed
+  LimboAuth request in the private alerts channel. ProxyARC deliberately does
+  not execute SQL, delete an auth row, or run a password-reset command.
+- `/event` is Discord-permission-gated. A created event publishes in the exact
+  configured channel, gives verified users join/leave buttons, reconciles one
+  exact no-permission participant role, sends opt-in reminders, removes the
+  temporary participant role on completion, and assigns the configured winner
+  role to a verified winner.
+
+The online dashboard now groups players by their actual Velocity backend. Bot
+presence and dashboard refresh from one live proxy snapshot, so `/online`,
+`/server`, and the channel panel use the same state.
 
 ## Persistence and failure semantics
 
@@ -58,6 +97,12 @@ mutation writes a complete schema-versioned snapshot to a sibling temporary
 file, forces it to storage, and atomically replaces the old snapshot where the
 filesystem supports it. Link state, pending challenges, rate windows, and a
 bounded audit trail commit together.
+
+Integration-owned state is separately stored in
+`plugins/proxyarc/data/discord-integration.json` with the same atomic replace,
+owner-only permission, schema validation, corruption fail-closed behavior and
+bounded audit rules. Splitting the files prevents a preferences or event-state
+problem from weakening identity uniqueness.
 
 A corrupt or unreadable snapshot disables identity mutation instead of starting
 from an empty map. Role or nickname failure never rolls back an already committed
@@ -136,10 +181,36 @@ click action.
 
 Player-facing inbound bridge templates are owned by the tracked
 `modules/discord-chat.yml`, separate from the token-bearing `discord.yml`.
-`formats.minecraft` is MiniMessage and `formats.telegram` is plain text; both
+`formats.minecraft` and `formats.minecraft-reply` are MiniMessage, while
+`formats.telegram` is plain text. The reply template contains the canonical
+linked reply author and a bounded plain-text preview. The base templates
 must contain `%player_name%` and `%message%` exactly once. Discord content is
 inserted as an Adventure component or an unparsed value, so user text cannot
 become MiniMessage markup.
+
+Attachments become named clickable URLs, stickers and custom emoji retain
+readable names, Discord user/role/channel mentions become bounded visible
+labels, and direct or Markdown links become Adventure click actions. Outbound
+Minecraft tags resolve only exact linked players and exact guild entities;
+allowed mentions remain disabled at the send boundary, while opted-in player
+mentions are delivered privately instead of enabling mass pings.
+
+All integration routing, role ids, heartbeat/reminder intervals, rate limits,
+command descriptions, button labels and player-facing text live in tracked
+`modules/discord-integration.yml`. Token/proxy connection settings remain in
+the deployment-owned `discord.yml`.
+
+## Auction and moderation events
+
+ARC listens for the completed zAuctionHouse `PURCHASED` transition and emits a
+typed, validated `arc.auction_sale_events` Redis message. ProxyARC rejects
+malformed ids, names, sizes and text bounds before looking up the seller's
+verified identity. It never guesses that a disappeared listing was sold.
+
+LiteBans integration subscribes only to the supported event API. It can post
+bounded staff context and opt-in personal state changes, but it exposes no ban,
+mute, kick or pardon Discord command and never accepts moderation targets from
+untrusted chat text.
 
 ## Verification
 

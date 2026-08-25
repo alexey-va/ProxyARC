@@ -347,6 +347,7 @@ internal class DiscordVerificationMessages(
                 "minecraft-already-linked",
                 "discord-already-linked",
                 "not-linked",
+                "recovery-cancelled",
                 "role-failure",
                 "conflict",
                 "unavailable",

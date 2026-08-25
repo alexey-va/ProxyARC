@@ -1,0 +1,145 @@
+# Account commands, opt-in notifications, moderation alerts, presence and game events.
+# Runtime ids are intentionally unset in the bundled default.
+enabled: false
+guild-id: "none"
+
+channels:
+  status: "none"
+  alerts: "none"
+  announcements: "none"
+
+presence:
+  enabled: true
+  format: "%online% игроков • play.rus-crafting.ru"
+  refresh-seconds: 60
+
+notifications:
+  # Per-user categories are opt-in and start disabled.
+  max-per-minute: 8
+
+events:
+  participant-role-id: "none"
+  winner-role-id: "none"
+  reminder-minutes:
+    - "60"
+    - "15"
+
+recovery:
+  # Creates a bounded staff-reviewed LimboAuth request; never changes the DB itself.
+  request-ttl-seconds: 1800
+  # A Discord-link transfer waits so the previously linked account can cancel it.
+  link-protection-delay-seconds: 60
+
+messages:
+  commands:
+    account: "Показать и синхронизировать игровой аккаунт"
+    online: "Показать игроков онлайн"
+    server: "Показать состояние игрового сервера"
+    server-option: "Сервер: spawn, survival, parkour, end или etd"
+    player: "Найти игрока RusCrafting"
+    player-option: "Игровой ник"
+    notifications: "Настроить личные уведомления"
+    invite: "Пригласить игрока на свой сервер"
+    invite-player: "Игровой ник получателя"
+    event: "Управлять игровым событием"
+    event-action: "Действие: create, finish или cancel"
+    event-name: "Название события"
+    event-description: "Короткое описание"
+    event-start: "Начало: ГГГГ-ММ-ДД ЧЧ:ММ (MSK)"
+    event-winner: "Игровой ник победителя"
+
+  not-linked: "Сначала свяжите аккаунт командой `/verify` на игровом сервере."
+  account-title: "Аккаунт RusCrafting"
+  account-body: "Minecraft: **%player%**\nСервер: **%server%**\nПривязан: <t:%linked_at%:D>\nРоли: **%roles%**\nСинхронизация: **%sync%**"
+  account-sync: "Синхронизировать"
+  account-unlink: "Отвязать"
+  account-recovery: "Не могу войти"
+  account-synced: "Роли и игровой ник синхронизированы."
+  account-sync-failed: "Синхронизация не выполнена: %reason%."
+  account-unlink-confirm: "Нажмите ещё раз, чтобы отвязать аккаунт и снять управляемые роли."
+  account-unlinked: "Аккаунт отвязан, управляемые роли сняты."
+  account-operation-failed: "Операция не выполнена. Данные аккаунта сохранены."
+
+  online-title: "Сейчас на RusCrafting"
+  online-empty: "Сейчас на серверах никого нет."
+  server-not-found: "Сервер `%server%` не найден."
+  player-not-found: "Игрок `%player%` не найден."
+  player-body: "Игрок: **%player%**\nСостояние: **%status%**\nСервер: **%server%**\nDiscord: **%verified%**"
+  label-online: "в сети"
+  label-offline: "не в сети"
+  label-connecting: "подключение"
+  label-none: "нет"
+  label-nobody: "никого"
+  label-not-specified: "не указан"
+  label-verified: "подтверждён"
+  label-unverified: "не подтверждён"
+  sync-status:
+    never: "ещё не запускалась"
+    updated: "обновлено"
+    unchanged: "актуально"
+    not_ready: "Discord не готов"
+    member_not_found: "участник не найден"
+    config_error: "ошибка настройки"
+    hierarchy_blocked: "мешает иерархия ролей"
+    provider_unavailable: "LuckPerms недоступен"
+    failed: "ошибка"
+  online-server-block: "**%server% • %count%**\n%players%"
+  server-list-item: "**%server%** — %count% онлайн"
+  server-body: "## %server%\nОнлайн: **%count%**\n%players%"
+
+  notifications-title: "Личные уведомления"
+  notifications-body: "Нажмите кнопку, чтобы включить или выключить уведомление. Все категории изначально выключены."
+  notification-mentions: "Упоминания"
+  notification-auction: "Продажи"
+  notification-tickets: "Ответы по багам"
+  notification-punishments: "Наказания"
+  notification-events: "События"
+  notification-invites: "Приглашения"
+  notification-enabled: "вкл."
+  notification-disabled: "выкл."
+  invite-body: "Игрок **%sender%** приглашает вас на сервер **%server%**."
+  invite-sent: "Приглашение доставлено."
+  invite-unavailable: "Приглашение не доставлено: игрок не привязан, отключил этот тип уведомлений или недоступен в Discord."
+  invite-sender-offline: "Чтобы приглашать игроков, сначала зайдите на игровой сервер."
+
+  recovery-created: "Заявка **%request%** создана на %minutes% мин. Она не сбрасывает пароль автоматически: администрация проверит её и выполнит защищённый сброс LimboAuth."
+  recovery-active: "У вас уже есть активная заявка **%request%**."
+  recovery-alert: "Запрос восстановления LimboAuth\nИгрок: **%player%**\nDiscord: <@%discord%>\nЗаявка: `%request%`\nИстекает: <t:%expires_at%:R>"
+
+  event-permission: "Для управления событиями нужно право «Управлять событиями»."
+  event-action-help: "Действие: `create`, `finish` или `cancel`."
+  event-create-help: "Для `create` укажите `name`, `description` и `start` в формате `2026-08-26 20:00` (MSK)."
+  event-winner-help: "Для `finish` укажите игровой ник в поле `winner`."
+  event-created: "Событие **%event%** опубликовано."
+  event-none: "Активного события нет."
+  event-joined: "Вы участвуете в событии **%event%**."
+  event-left: "Вы больше не участвуете в событии **%event%**."
+  event-finished: "Событие **%event%** завершено."
+  event-finished-with-warnings: "Событие **%event%** закрыто, но Discord не выполнил операций: **%failures%**. Проверьте роли вручную."
+  event-cancelled: "Событие **%event%** отменено."
+  event-join: "Участвовать"
+  event-leave: "Не участвую"
+  event-announcement: "## %event%\n%description%\n\nНачало: <t:%starts_at%:F> — <t:%starts_at%:R>\nУчастников: **%participants%**"
+  event-reminder: "Событие **%event%** начнётся <t:%starts_at%:R>."
+  event-result: "## %event% — итоги\nПобедитель: **%winner%**"
+
+  security-link-changed: "Привязка аккаунта **%player%** перенесена на другой Discord. Если это были не вы, немедленно сообщите администрации RusCrafting."
+  security-link-pending: "Запрошен перенос привязки аккаунта **%player%** на другой Discord. Если это не вы, отмените перенос в течение %seconds% сек."
+  security-link-cancel: "Отменить перенос"
+  security-link-cancelled: "Перенос привязки отменён. Старый Discord остаётся связан с аккаунтом."
+  security-link-cancel-missed: "Этот запрос уже завершён или отменён."
+  security-link-delivery-failed-alert: "Перенос Discord-привязки **%player%** отменён: старому аккаунту не доставлена кнопка подтверждения."
+  security-link-cancelled-alert: "Перенос Discord-привязки **%player%** отменён старым аккаунтом."
+  security-unlinked: "Discord был отвязан от аккаунта **%player%**. Если это были не вы, немедленно сообщите администрации RusCrafting."
+  moderation-status-issued: "выдано"
+  moderation-status-expired: "истекло"
+  moderation-status-removed: "снято"
+  moderation-duration-permanent: " (навсегда)"
+  moderation-duration-until: " • до <t:%ends_at%:F>"
+  moderation-executor: " • модератор: **%executor%**"
+  moderation-alert: "Модерация: **%type%** %status% для **%player%**%duration%%moderator%"
+  mention-dm: "Вас упомянули в игровом чате:\n> %message%"
+  auction-sold-dm: "На аукционе продан **%item%** × %amount% за **%price%**. Покупатель: **%buyer%**."
+  ticket-reply-dm: "В заявке **%ticket%** появился ответ. Открыть: %url%"
+  punishment-dm: "Наказание **%type%** для **%player%**: %status%."
+  invite-dm: "Вас пригласили: %message%"

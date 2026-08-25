@@ -21,6 +21,7 @@ internal class DiscordTicketService(
     private val session: DiscordSession,
     private val config: Config,
     private val executor: ExecutorService,
+    private val replyNotifier: (reporter: String, ticketId: String, url: String) -> Unit = { _, _, _ -> },
 ) {
     fun requestForumSync() {
         if (executor.isShutdown) return
@@ -232,6 +233,8 @@ internal class DiscordTicketService(
                                 "url" to thread.jumpUrl,
                                 "ticketStatus" to updated.status,
                             )
+                        runCatching { replyNotifier(ticket.reporter, ticket.ticketId, thread.jumpUrl) }
+                            .onFailure { log.debug("Ticket reply notification failed", it) }
                         if (statusUpdate == "closed") {
                             thread.manager.setArchived(true).queue(
                                 { future.complete(result) },
