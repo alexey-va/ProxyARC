@@ -62,7 +62,16 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
                 session.jda()?.getTextChannelById(channelId)?.iterableHistory
             },
         )
-    private val chat = DiscordChatService(session, config, codec, cleaner)
+    private val chat =
+        DiscordChatService(
+            session,
+            config,
+            codec,
+            cleaner,
+            DiscordChatIdentityResolver { discordUserId ->
+                identities?.findByDiscordUserId(discordUserId)?.playerName
+            },
+        )
     private val feeds = DiscordFeedService(session, config, joinConfig, executor)
     private val tickets = DiscordTicketService(session, config, executor)
     private val verificationListener =

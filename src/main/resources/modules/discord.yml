@@ -20,7 +20,7 @@ issue-tickets:
   title-prefix: ""
   color: "#ff6600"
 
-chat-format: "<blue>D <gray>%player_name% <dark_gray>» <white>%message%"
+chat-format: "<blue>D <dark_gray>| <gray>%player_name% <dark_gray>» <white>%message%"
 telegram-format: "**%player_name%** » %message%"
 
 player-list:
