@@ -9,13 +9,15 @@ import net.kyori.adventure.text.event.ClickEvent
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import java.nio.file.Files
 
 class VerifyCommandTest : FreeSpec({
     val plain = PlainTextComponentSerializer.plainText()
     val inviteUrl = "https://discord.gg/TJUXMGJD9q"
 
     "verification code is one isolated and actionable chat block" {
-        val message = VerifyCommand.challengeMessage("ABCD1234", expiresInMinutes = 10, recovery = false, inviteUrl)
+        val messages = verificationConfig(Files.createTempDirectory("verify-command-message")).messages
+        val message = messages.challenge("ABCD1234", expiresInMinutes = 10, recovery = false)
         val rendered = plain.serialize(message)
 
         rendered shouldBe
@@ -36,22 +38,37 @@ class VerifyCommandTest : FreeSpec({
         val code = message.descendants().filterIsInstance<TextComponent>().single { it.content() == "ABCD1234" }
         code.color() shouldBe TextColor.color(0xFFACD5)
         code.hasDecoration(TextDecoration.BOLD) shouldBe true
-        code.clickEvent()?.action() shouldBe ClickEvent.Action.COPY_TO_CLIPBOARD
-        code.clickEvent()?.value() shouldBe "ABCD1234"
+        val codeClickOwner =
+            message.descendants().first {
+                plain.serialize(it).contains("ABCD1234") &&
+                    it.clickEvent()?.action() == ClickEvent.Action.COPY_TO_CLIPBOARD
+            }
+        codeClickOwner.clickEvent()?.action() shouldBe ClickEvent.Action.COPY_TO_CLIPBOARD
+        codeClickOwner.clickEvent()?.value() shouldBe "ABCD1234"
 
-        val codeRow = message.descendants().filterIsInstance<TextComponent>().single { it.content() == "Код для Discord: " }
+        val codeRow =
+            message.descendants().first {
+                plain.serialize(it).contains("Код для Discord: ABCD1234") &&
+                    it.clickEvent()?.action() == ClickEvent.Action.COPY_TO_CLIPBOARD
+            }
         codeRow.clickEvent()?.action() shouldBe ClickEvent.Action.COPY_TO_CLIPBOARD
         codeRow.clickEvent()?.value() shouldBe "ABCD1234"
 
         val invite = message.descendants().filterIsInstance<TextComponent>().single { it.content() == "Открыть Discord RusCrafting" }
         invite.hasDecoration(TextDecoration.BOLD) shouldBe true
         invite.hasDecoration(TextDecoration.UNDERLINED) shouldBe true
-        invite.clickEvent()?.action() shouldBe ClickEvent.Action.OPEN_URL
-        invite.clickEvent()?.value() shouldBe inviteUrl
+        val inviteClickOwner =
+            message.descendants().first {
+                plain.serialize(it).contains("Открыть Discord RusCrafting") &&
+                    it.clickEvent()?.action() == ClickEvent.Action.OPEN_URL
+            }
+        inviteClickOwner.clickEvent()?.action() shouldBe ClickEvent.Action.OPEN_URL
+        inviteClickOwner.clickEvent()?.value() shouldBe inviteUrl
     }
 
     "recovery block names the different operation and keeps Russian minute forms" {
-        plain.serialize(VerifyCommand.challengeMessage("ZXCV5678", 1, recovery = true, inviteUrl)) shouldBe
+        val messages = verificationConfig(Files.createTempDirectory("verify-recovery-message")).messages
+        plain.serialize(messages.challenge("ZXCV5678", 1, recovery = true)) shouldBe
             "\n" +
             "  Перенос привязки Discord\n" +
             "\n" +
@@ -63,6 +80,25 @@ class VerifyCommandTest : FreeSpec({
             "  В поле code вставьте скопированный код.\n" +
             "\n" +
             "  Код действует 1 минуту.\n"
+    }
+
+    "compact Minecraft and Discord formats come from configuration" {
+        val config =
+            verificationConfig(
+                Files.createTempDirectory("verify-custom-messages"),
+                messageOverrides =
+                    mapOf(
+                        "messages.minecraft.format" to "<identity> | <message>",
+                        "messages.minecraft.status-linked" to "Игрок <player_name>",
+                        "messages.discord.format" to "[%identity%] %message%",
+                        "messages.discord.verified" to "OK %player_name%",
+                    ),
+            )
+
+        plain.serialize(config.messages.minecraft("status-linked", "player_name" to "GrocerMC")) shouldBe
+            "Discord | Игрок GrocerMC"
+        config.messages.discord("verified", "player_name" to "GrocerMC") shouldBe
+            "[Discord] OK GrocerMC"
     }
 })
 

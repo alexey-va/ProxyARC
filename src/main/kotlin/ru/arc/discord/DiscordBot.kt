@@ -190,6 +190,8 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
 
     internal fun verificationInviteUrl(): String? = verificationConfig?.inviteUrl
 
+    internal fun verificationMessages(): DiscordVerificationMessages? = verificationConfig?.messages
+
     internal fun issueLinkChallenge(
         playerUuid: UUID,
         playerName: String,

@@ -69,4 +69,14 @@ class DiscordVerificationConfigTest : FreeSpec({
             DiscordVerificationConfig.validInviteUrl(candidate) shouldBe false
         }
     }
+
+    "rejects a missing player-facing message key" {
+        val root = Files.createTempDirectory("discord-verification-message-key")
+        shouldThrow<IllegalArgumentException> {
+            verificationConfig(
+                root,
+                messageOverrides = mapOf("messages.discord.verified" to ""),
+            )
+        }
+    }
 })

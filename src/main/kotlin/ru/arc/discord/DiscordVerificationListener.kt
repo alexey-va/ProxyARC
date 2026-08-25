@@ -11,6 +11,8 @@ internal class DiscordVerificationListener(
     private val config: DiscordVerificationConfig,
     private val verification: DiscordVerificationService,
 ) : ListenerAdapter() {
+    private val messages = config.messages
+
     fun registerCommands(snapshot: DiscordSessionSnapshot) {
         if (!config.enabled) return
         val guild = snapshot.jda.getGuildById(config.guildId)
@@ -19,15 +21,25 @@ internal class DiscordVerificationListener(
             return
         }
         guild.upsertCommand(
-            Commands.slash("verify", "Связать Discord с аккаунтом Minecraft")
-                .addOption(OptionType.STRING, "code", "Одноразовый код из команды /verify", false),
+            Commands.slash("verify", messages.discordCommandDescription("verify-description"))
+                .addOption(
+                    OptionType.STRING,
+                    "code",
+                    messages.discordCommandDescription("verify-code-description"),
+                    false,
+                ),
         ).queue(
             { log.info("Discord /verify command registered") },
             { error -> log.error("Could not register Discord /verify command", error) },
         )
         guild.upsertCommand(
-            Commands.slash("unlink", "Отвязать аккаунт Minecraft")
-                .addOption(OptionType.BOOLEAN, "confirm", "Подтвердить отвязку", true),
+            Commands.slash("unlink", messages.discordCommandDescription("unlink-description"))
+                .addOption(
+                    OptionType.BOOLEAN,
+                    "confirm",
+                    messages.discordCommandDescription("unlink-confirm-description"),
+                    true,
+                ),
         ).queue(
             { log.info("Discord /unlink command registered") },
             { error -> log.error("Could not register Discord /unlink command", error) },
@@ -46,7 +58,7 @@ internal class DiscordVerificationListener(
         val code = event.getOption("code")?.asString?.trim()
         if (code.isNullOrEmpty()) {
             if (!verification.isAvailable()) {
-                event.reply("Discord • Проверка временно недоступна. Данные сохранены.")
+                event.reply(messages.discord("verification-unavailable-saved"))
                     .setEphemeral(true)
                     .queue()
                 return
@@ -54,9 +66,9 @@ internal class DiscordVerificationListener(
             val link = verification.findByDiscordUserId(event.user.id)
             val text =
                 if (link == null) {
-                    "Discord • Аккаунт не связан. Зайдите на сервер и получите код командой /verify."
+                    messages.discord("status-not-linked")
                 } else {
-                    "Discord • Связан аккаунт Minecraft: ${link.playerName}."
+                    messages.discord("status-linked", "player_name" to link.playerName)
                 }
             event.reply(text).setEphemeral(true).queue()
             return
@@ -66,7 +78,7 @@ internal class DiscordVerificationListener(
                 val message =
                     if (error != null) {
                         log.warn("Discord verification workflow failed: {}", error.javaClass.simpleName)
-                        "Discord • Не удалось завершить проверку. Попробуйте ещё раз позже."
+                        messages.discord("verify-failed")
                     } else {
                         resultMessage(result)
                     }
@@ -77,7 +89,7 @@ internal class DiscordVerificationListener(
 
     private fun handleUnlink(event: SlashCommandInteractionEvent) {
         if (event.getOption("confirm")?.asBoolean != true) {
-            event.reply("Discord • Отвязка отменена.").setEphemeral(true).queue()
+            event.reply(messages.discord("unlink-cancelled")).setEphemeral(true).queue()
             return
         }
         event.deferReply(true).queue { hook ->
@@ -85,7 +97,7 @@ internal class DiscordVerificationListener(
                 val message =
                     if (error != null) {
                         log.warn("Discord unlink workflow failed: {}", error.javaClass.simpleName)
-                        "Discord • Не удалось отвязать аккаунт. Попробуйте ещё раз позже."
+                        messages.discord("unlink-failed")
                     } else {
                         resultMessage(result)
                     }
@@ -99,41 +111,39 @@ internal class DiscordVerificationListener(
             is DiscordVerificationWorkflowResult.Verified ->
                 if (result.reconciliation.successful) {
                     if (result.reconciliation.nicknameSkipped) {
-                        "Discord • Аккаунт Minecraft ${result.link.playerName} подтверждён. " +
-                            "Роли синхронизированы. Ник не изменён: участник выше бота в Discord."
+                        messages.discord("verified-nickname-skipped", "player_name" to result.link.playerName)
                     } else {
-                        "Discord • Аккаунт Minecraft ${result.link.playerName} подтверждён. Роли и ник синхронизированы."
+                        messages.discord("verified", "player_name" to result.link.playerName)
                     }
                 } else {
-                    "Discord • Связь с ${result.link.playerName} сохранена, но роли пока не синхронизированы."
+                    messages.discord("verified-role-sync-failed", "player_name" to result.link.playerName)
                 }
             is DiscordVerificationWorkflowResult.Recovered ->
                 if (result.reconciliation.successful) {
                     if (result.reconciliation.nicknameSkipped) {
-                        "Discord • Доступ к аккаунту ${result.link.playerName} восстановлен. " +
-                            "Роли синхронизированы, ник не изменён из-за иерархии Discord."
+                        messages.discord("recovered-nickname-skipped", "player_name" to result.link.playerName)
                     } else {
-                        "Discord • Доступ к аккаунту ${result.link.playerName} восстановлен."
+                        messages.discord("recovered", "player_name" to result.link.playerName)
                     }
                 } else {
-                    "Discord • Доступ к ${result.link.playerName} восстановлен, но роли пока не синхронизированы."
+                    messages.discord("recovered-role-sync-failed", "player_name" to result.link.playerName)
                 }
-            is DiscordVerificationWorkflowResult.Unlinked -> "Discord • Аккаунт отвязан. Управляемые роли сняты."
+            is DiscordVerificationWorkflowResult.Unlinked -> messages.discord("unlinked")
             is DiscordVerificationWorkflowResult.RateLimited ->
-                "Discord • Слишком много попыток. Повторите через ${retryMinutes(result.retryAt)} мин."
+                messages.discord("rate-limited", "minutes" to retryMinutes(result.retryAt).toString())
             DiscordVerificationWorkflowResult.InvalidOrExpired ->
-                "Discord • Код неверный или уже истёк. Получите новый код на сервере."
+                messages.discord("invalid-or-expired")
             DiscordVerificationWorkflowResult.MinecraftAlreadyLinked ->
-                "Discord • Этот аккаунт Minecraft уже связан. Для переноса используйте /verify recover на сервере."
+                messages.discord("minecraft-already-linked")
             DiscordVerificationWorkflowResult.DiscordAlreadyLinked ->
-                "Discord • Этот Discord уже связан с другим аккаунтом Minecraft."
-            DiscordVerificationWorkflowResult.NotLinked -> "Discord • Аккаунт не связан."
+                messages.discord("discord-already-linked")
+            DiscordVerificationWorkflowResult.NotLinked -> messages.discord("not-linked")
             is DiscordVerificationWorkflowResult.RoleFailure ->
-                "Discord • Операция остановлена: бот пока не может безопасно изменить роли."
+                messages.discord("role-failure")
             DiscordVerificationWorkflowResult.Conflict ->
-                "Discord • Состояние аккаунта изменилось. Получите новый код и повторите операцию."
+                messages.discord("conflict")
             DiscordVerificationWorkflowResult.Unavailable ->
-                "Discord • Проверка временно недоступна. Данные не изменены."
+                messages.discord("unavailable")
         }
 
     private fun retryMinutes(retryAt: Long): Long =

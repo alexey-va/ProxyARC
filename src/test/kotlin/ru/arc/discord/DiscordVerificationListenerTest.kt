@@ -10,7 +10,14 @@ class DiscordVerificationListenerTest : FreeSpec({
     "successful role sync explains when Discord hierarchy prevents only the nickname" {
         val listener =
             DiscordVerificationListener(
-                verificationConfig(Files.createTempDirectory("discord-verification-listener")),
+                verificationConfig(
+                    Files.createTempDirectory("discord-verification-listener"),
+                    messageOverrides =
+                        mapOf(
+                            "messages.discord.verified-nickname-skipped" to
+                                "Подтверждён %player_name%; ник пропущен.",
+                        ),
+                ),
                 mockk(),
             )
         val result =
@@ -26,8 +33,6 @@ class DiscordVerificationListenerTest : FreeSpec({
                     ),
             )
 
-        listener.resultMessage(result) shouldBe
-            "Discord • Аккаунт Minecraft GrocerMC подтверждён. " +
-                "Роли синхронизированы. Ник не изменён: участник выше бота в Discord."
+        listener.resultMessage(result) shouldBe "Discord • Подтверждён GrocerMC; ник пропущен."
     }
 })

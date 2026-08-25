@@ -43,8 +43,9 @@ internal class DiscordVerificationConfig(
     val nicknameEnabled: Boolean get() = config.bool("roles.nickname-enabled", true)
     val nicknameFormat: String get() = config.string("roles.nickname-format", "%player_name%").trim()
     val syncIntervalSeconds: Long get() = config.longValue("sync.interval-seconds", 300L)
-    val messageIdentity: String get() = config.string("messages.identity", "Discord").trim().take(24)
-    val inviteUrl: String get() = config.string("messages.invite-url", "").trim()
+    val messages = DiscordVerificationMessages(config)
+    val messageIdentity: String get() = messages.identity
+    val inviteUrl: String get() = messages.inviteUrl
 
     val policyRules: List<DiscordRolePolicyRule>
         get() = POLICY_NAMES.mapNotNull(::policyRule)
@@ -75,6 +76,7 @@ internal class DiscordVerificationConfig(
             "roles.nickname-format must contain %player_name%"
         }
         require(nicknameFormat.length <= 64) { "roles.nickname-format must not exceed 64 characters" }
+        messages.validate(requireInviteUrl = enabled)
         if (!enabled) return
 
         require(validSnowflake(guildId)) { "guild-id must be a Discord snowflake" }
@@ -83,10 +85,6 @@ internal class DiscordVerificationConfig(
         require(allowedBackends.isNotEmpty()) { "allowed-backends must not be empty" }
         require(allowedBackends.none(DENIED_AUTH_BACKENDS::contains)) {
             "allowed-backends must not contain an authentication backend"
-        }
-        require(messageIdentity.isNotBlank()) { "messages.identity must not be blank" }
-        require(validInviteUrl(inviteUrl)) {
-            "messages.invite-url must be a direct HTTPS discord.gg or discord.com/invite URL"
         }
         require(policyRules.size == POLICY_NAMES.size) {
             "all role policies must configure a valid role id"
