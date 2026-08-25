@@ -27,6 +27,7 @@ internal class DiscordFeedService(
     private var lastSuccessfulPublishAtMs: Long = 0
     @Volatile
     private var playerListRateLimitUntilMs: Long = 0
+    private val statusPublishGate = DiscordStatusPublishGate<DiscordNetworkSnapshot>()
     private val retryGeneration = AtomicInteger(0)
     @Volatile
     private var retryFuture: ScheduledFuture<*>? = null
@@ -78,13 +79,31 @@ internal class DiscordFeedService(
         )
     }
 
-    fun updateNetworkStatus(snapshot: DiscordNetworkSnapshot) {
+    fun updateNetworkStatus(snapshot: DiscordNetworkSnapshot) = updateNetworkStatus(snapshot, attempt = 0)
+
+    private fun updateNetworkStatus(
+        snapshot: DiscordNetworkSnapshot,
+        attempt: Int,
+    ) {
         if (playerListChannel() == null) return
+        val selected = statusPublishGate.offer(snapshot) ?: return
+        processAcquiredNetworkStatus(selected, attempt)
+    }
+
+    private fun processAcquiredNetworkStatus(
+        snapshot: DiscordNetworkSnapshot,
+        attempt: Int,
+    ) {
         val now = System.currentTimeMillis()
-        if (now < playerListRateLimitUntilMs) return
         val signature = networkSignature(snapshot)
-        if (!shouldUpdatePlayerList(signature, lastPublishedSignature, lastSuccessfulPublishAtMs, now)) return
-        publishPlayerList(snapshot, signature, attempt = 0)
+        if (
+            now < playerListRateLimitUntilMs ||
+            !shouldUpdatePlayerList(signature, lastPublishedSignature, lastSuccessfulPublishAtMs, now)
+        ) {
+            releaseStatusPublishSlot()
+            return
+        }
+        publishPlayerList(snapshot, signature, attempt)
     }
 
     fun sendJoinEmbed(
@@ -148,7 +167,11 @@ internal class DiscordFeedService(
         attempt: Int,
     ) {
         if (attempt == 0) cancelPendingRetry()
-        val channel = playerListChannel() ?: return
+        val channel = playerListChannel()
+        if (channel == null) {
+            releaseStatusPublishSlot()
+            return
+        }
         val embed = buildPlayerListEmbed(snapshot)
         val latestMessageId = channel.latestMessageId
         val action =
@@ -159,8 +182,12 @@ internal class DiscordFeedService(
                 lastPublishedSignature = signature
                 lastSuccessfulPublishAtMs = System.currentTimeMillis()
                 cancelPendingRetry()
+                releaseStatusPublishSlot()
             },
-            { error -> scheduleRetry(signature, attempt, error) },
+            { error ->
+                scheduleRetry(signature, attempt, error)
+                statusPublishGate.abandon()
+            },
         )
     }
 
@@ -186,7 +213,7 @@ internal class DiscordFeedService(
                         val players = DiscordNetworkSnapshot.capture(proxy)
                         val current = networkSignature(players)
                         if (current == signature) {
-                            publishPlayerList(players, current, attempt + 1)
+                            updateNetworkStatus(players, attempt + 1)
                         } else {
                             updateNetworkStatus(players)
                         }
@@ -195,6 +222,12 @@ internal class DiscordFeedService(
                     TimeUnit.MILLISECONDS,
                 )
             }.getOrNull()
+    }
+
+    private fun releaseStatusPublishSlot() {
+        val pending = statusPublishGate.complete()
+        if (pending == null) return
+        runCatching { executor.execute { processAcquiredNetworkStatus(pending, attempt = 0) } }
     }
 
     private fun cancelPendingRetry() {
@@ -245,6 +278,7 @@ internal class DiscordFeedService(
             ?: session.snapshot()?.channels?.playerList
 
     override fun close() {
+        statusPublishGate.abandon()
         cancelPendingRetry()
     }
 
@@ -270,5 +304,36 @@ internal class DiscordFeedService(
             nowMs: Long,
             heartbeatMs: Long = PLAYER_LIST_HEARTBEAT_MS,
         ): Boolean = signature != lastPublished || nowMs - lastSuccessfulAtMs >= heartbeatMs
+    }
+}
+
+/** Keeps at most one Discord status mutation in flight and coalesces bursts to the latest snapshot. */
+internal class DiscordStatusPublishGate<T> {
+    private var inFlight = false
+    private var pending: T? = null
+
+    @Synchronized
+    fun offer(value: T): T? {
+        if (inFlight) {
+            pending = value
+            return null
+        }
+        inFlight = true
+        return value
+    }
+
+    @Synchronized
+    fun complete(): T? {
+        if (!inFlight) return null
+        val next = pending
+        pending = null
+        if (next == null) inFlight = false
+        return next
+    }
+
+    @Synchronized
+    fun abandon() {
+        inFlight = false
+        pending = null
     }
 }

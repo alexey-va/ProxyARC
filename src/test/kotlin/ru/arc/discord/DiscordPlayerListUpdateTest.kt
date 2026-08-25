@@ -36,4 +36,38 @@ class DiscordPlayerListUpdateTest : FreeSpec({
             DiscordBot.shouldUpdatePlayerList("a", null, 0, 1, heartbeatMs) shouldBe true
         }
     }
+
+    "status updates are single-flight" - {
+        "should retain only the latest snapshot while Discord edit is pending" {
+            val gate = DiscordStatusPublishGate<String>()
+
+            gate.offer("spawn") shouldBe "spawn"
+            gate.offer("survival") shouldBe null
+            gate.offer("parkour") shouldBe null
+
+            gate.complete() shouldBe "parkour"
+            gate.offer("end") shouldBe null
+            gate.complete() shouldBe "end"
+            gate.complete() shouldBe null
+            gate.offer("parkour") shouldBe "parkour"
+        }
+
+        "should release the slot when there is no pending snapshot" {
+            val gate = DiscordStatusPublishGate<String>()
+
+            gate.offer("spawn") shouldBe "spawn"
+            gate.complete() shouldBe null
+            gate.offer("survival") shouldBe "survival"
+        }
+
+        "should discard stale pending state after a failed request" {
+            val gate = DiscordStatusPublishGate<String>()
+
+            gate.offer("spawn") shouldBe "spawn"
+            gate.offer("survival") shouldBe null
+            gate.abandon()
+
+            gate.offer("parkour") shouldBe "parkour"
+        }
+    }
 })
