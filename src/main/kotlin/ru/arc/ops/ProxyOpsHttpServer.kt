@@ -5,6 +5,14 @@ import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import org.slf4j.LoggerFactory
 import ru.arc.ai.routing.survey.BugSurveySessionStore
+import ru.arc.core.ModuleRegistry
+import ru.arc.core.moduleRuntimeHealth
+import ru.arc.discord.DiscordIdentityStore
+import ru.arc.discord.DiscordIntegrationStore
+import ru.arc.observability.RuntimeHealthContribution
+import ru.arc.observability.RuntimeHealthProvider
+import ru.arc.observability.RuntimeHealthRegistry
+import ru.arc.observability.StructuredRuntimeHealthLine
 import ru.arc.velocity.Velocity
 import java.net.InetSocketAddress
 import java.net.URLDecoder
@@ -94,6 +102,8 @@ class ProxyOpsHttpServer(
         when {
             path.isEmpty() && method == "GET" ->
                 respond(exchange, 200, ProxyOpsJson.ok("routes" to routes(cfg)))
+            path == "health" && method == "GET" ->
+                respond(exchange, 200, healthJson())
             path == "assistant/status" && method == "GET" ->
                 respond(exchange, 200, statusJson())
             path == "assistant/simulate" && method == "POST" ->
@@ -647,9 +657,29 @@ class ProxyOpsHttpServer(
         )
     }
 
+    private fun healthJson(): String {
+        val snapshot = ProxyRuntimeHealth.snapshot()
+        val fields = linkedMapOf<String, Any?>()
+        fields.putAll(snapshot.asMap())
+        fields["serverName"] = Velocity.serverName
+        fields["online"] = Velocity.proxyServer?.playerCount ?: 0
+        fields["modules"] =
+            ModuleRegistry.getRuntimeStatuses().map { status ->
+                linkedMapOf(
+                    "name" to status.name,
+                    "ready" to status.ready,
+                    "failures" to status.failures,
+                    "initDurationMs" to status.initDurationMs,
+                    "reloadDurationMs" to status.reloadDurationMs,
+                )
+            }
+        return ProxyOpsJson.ok(*fields.map { it.key to it.value }.toTypedArray())
+    }
+
     private fun routes(cfg: ProxyOpsHttpConfig): List<String> =
         buildList {
             add("GET /ops/")
+            add("GET /ops/health")
             add("GET /ops/assistant/status")
             if (cfg.simulateEnabled) add("POST /ops/assistant/simulate")
             if (cfg.simulateEnabled) add("POST /ops/assistant/preview")
@@ -948,5 +978,31 @@ class ProxyOpsHttpServer(
         private const val DISCORD_MESSAGE_MAX_LENGTH = 2_000
         private const val DISCORD_REQUEST_TIMEOUT_SECONDS = 15L
         private const val MAX_REQUEST_BODY_BYTES = 12 * 1024 * 1024
+    }
+}
+
+internal object ProxyRuntimeHealth : RuntimeHealthProvider {
+    private val renderer = StructuredRuntimeHealthLine()
+    private val registry =
+        RuntimeHealthRegistry("proxyarc").apply {
+            register("runtime", ::runtimeContribution)
+            markReady()
+        }
+
+    override fun snapshot() = registry.snapshot()
+
+    fun line(): String = renderer.line(snapshot())
+
+    private fun runtimeContribution(): RuntimeHealthContribution {
+        val modules = moduleRuntimeHealth(ModuleRegistry.getRuntimeStatuses())
+        return modules.copy(
+            schemas =
+                modules.schemas +
+                    mapOf(
+                        "discord_identity" to DiscordIdentityStore.CURRENT_SCHEMA_VERSION,
+                        "discord_integration" to DiscordIntegrationStore.CURRENT_SCHEMA_VERSION,
+                    ),
+            dependencies = modules.dependencies + ("redis" to (Velocity.redisManager?.isConnected() == true)),
+        )
     }
 }

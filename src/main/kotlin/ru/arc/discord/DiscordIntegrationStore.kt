@@ -340,7 +340,7 @@ internal class DiscordIntegrationStore(
 
     companion object {
         private val log = LoggerFactory.getLogger(DiscordIntegrationStore::class.java)
-        private const val CURRENT_SCHEMA_VERSION = 1
+        const val CURRENT_SCHEMA_VERSION = 1
         private const val MAX_AUDIT = 2_000
         private const val MAX_EVENTS = 100
         const val STATUS_PENDING = "pending"

@@ -14,6 +14,22 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executors
 
 class ProxyOpsHttpServerTest : FreeSpec({
+    "runtime health is authenticated and exposes the agent-readable contract" {
+        val fixture = discordServer("")
+
+        val response = fixture.request("GET", "/ops/health")
+        val health = ObjectMapper().readTree(response.body())
+
+        response.statusCode() shouldBe 200
+        health["component"].asText() shouldBe "proxyarc"
+        health.has("ready") shouldBe true
+        health.has("recoveryBacklog") shouldBe true
+        health.has("activeLeases") shouldBe true
+        health["schemas"].has("runtime.module_runtime") shouldBe true
+        health["modules"].isArray shouldBe true
+        fixture.close()
+    }
+
     "Discord ops are deny-by-default" {
         val directory = Files.createTempDirectory("proxyarc-ops-config-")
         Files.writeString(directory.resolve("ops-http.yml"), "enabled: true")
