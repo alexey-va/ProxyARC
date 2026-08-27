@@ -1,15 +1,21 @@
 rootProject.name = "ProxyARC"
 
-val arcCoreDir = sequenceOf(
-    file("../arc-core"),
-    file("../../IdeaProjects/arc-core"),
-).firstOrNull { it.resolve("settings.gradle.kts").isFile }
-    ?: error(
-        """
-        arc-core not found. Clone https://github.com/alexey-va/arc-core next to ProxyARC:
-          mcserver:  git submodule add ... arc-core  (../arc-core from ProxyARC)
-          IdeaProjects: clone to ~/IdeaProjects/arc-core
-        """.trimIndent(),
-    )
-
-includeBuild(arcCoreDir)
+providers.gradleProperty("arcCoreDir").orNull?.let(::file)?.let { arcCoreDir ->
+    require(arcCoreDir.resolve("settings.gradle.kts").isFile) {
+        "arcCoreDir must point to an arc-core checkout"
+    }
+    includeBuild(arcCoreDir) {
+        dependencySubstitution {
+            listOf(
+                "arc-core",
+                "arc-core-ai",
+                "arc-core-logging",
+                "arc-core-metrics",
+                "arc-core-redis",
+                "arc-core-velocity",
+            ).forEach { artifact ->
+                substitute(module("ru.ruscrafting.arc:$artifact")).using(project(":$artifact"))
+            }
+        }
+    }
+}

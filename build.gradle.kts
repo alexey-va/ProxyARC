@@ -13,6 +13,9 @@ kotlin { jvmToolchain(25) }
 
 repositories {
     mavenLocal()
+    maven("https://repo.rus-crafting.ru/grocermc/") {
+        content { includeGroup("ru.ruscrafting.arc") }
+    }
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://s01.oss.sonatype.org/content/repositories/snapshots/")
     maven("https://repo.minebench.de/")
@@ -21,12 +24,12 @@ repositories {
 }
 
 dependencies {
-    implementation("ru.arc:arc-core:1.0-SNAPSHOT")
-    implementation("ru.arc:arc-core-logging:1.0-SNAPSHOT")
-    implementation("ru.arc:arc-core-metrics:1.0-SNAPSHOT")
-    implementation("ru.arc:arc-core-redis:1.0-SNAPSHOT")
-    implementation("ru.arc:arc-core-velocity:1.0-SNAPSHOT")
-    implementation("ru.arc:arc-core-ai:1.0-SNAPSHOT")
+    implementation("ru.ruscrafting.arc:arc-core:2.0.0")
+    implementation("ru.ruscrafting.arc:arc-core-logging:2.0.0")
+    implementation("ru.ruscrafting.arc:arc-core-metrics:2.0.0")
+    implementation("ru.ruscrafting.arc:arc-core-redis:2.0.0")
+    implementation("ru.ruscrafting.arc:arc-core-velocity:2.0.0")
+    implementation("ru.ruscrafting.arc:arc-core-ai:2.0.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.10.2")
 
