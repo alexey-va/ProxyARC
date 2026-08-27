@@ -16,14 +16,14 @@
 ```bash
 export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-25.jdk/Contents/Home
 ./gradlew build          # → ztarget/ProxyARC.jar
-cd ~/mcserver && ./scripts/mc proxyarc --fast
+cd ~/RusCrafting/ruscrafting-ops && ./scripts/mc proxyarc --fast
 ```
 
 ## Runtime configs
 
-`~/mcserver/velocity/plugins/proxyarc/` — `modules/*.yml`, `prompts/chat.txt`
+`~/RusCrafting/ruscrafting-ops/velocity/plugins/proxyarc/` — `modules/*.yml`, `prompts/chat.txt`
 
-See [`~/mcserver/velocity/AGENTS.md`](../../velocity/AGENTS.md).
+See [`~/RusCrafting/ruscrafting-ops/velocity/AGENTS.md`](https://github.com/alexey-va/ruscrafting-ops/blob/main/velocity/AGENTS.md).
 
 ## Dependencies
 
