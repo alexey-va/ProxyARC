@@ -3,6 +3,7 @@ package ru.arc.discord
 import net.dv8tion.jda.api.EmbedBuilder
 import net.dv8tion.jda.api.JDA
 import net.dv8tion.jda.api.Permission
+import net.dv8tion.jda.api.Region
 import net.dv8tion.jda.api.entities.Member
 import net.dv8tion.jda.api.entities.Message
 import net.dv8tion.jda.api.entities.Role
@@ -11,11 +12,13 @@ import net.dv8tion.jda.api.entities.Icon
 import net.dv8tion.jda.api.entities.Invite
 import net.dv8tion.jda.api.entities.UserSnowflake
 import net.dv8tion.jda.api.entities.channel.attribute.ICategorizableChannel
+import net.dv8tion.jda.api.entities.channel.attribute.ICopyableChannel
 import net.dv8tion.jda.api.entities.channel.attribute.IPermissionContainer
 import net.dv8tion.jda.api.entities.channel.attribute.IPositionableChannel
 import net.dv8tion.jda.api.entities.channel.attribute.IPostContainer
 import net.dv8tion.jda.api.entities.channel.attribute.IThreadContainer
 import net.dv8tion.jda.api.entities.channel.attribute.IInviteContainer
+import net.dv8tion.jda.api.entities.channel.ChannelType
 import net.dv8tion.jda.api.entities.channel.concrete.Category
 import net.dv8tion.jda.api.entities.channel.concrete.ForumChannel
 import net.dv8tion.jda.api.entities.channel.concrete.MediaChannel
@@ -24,8 +27,11 @@ import net.dv8tion.jda.api.entities.channel.concrete.StageChannel
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel
 import net.dv8tion.jda.api.entities.channel.concrete.ThreadChannel
 import net.dv8tion.jda.api.entities.channel.concrete.VoiceChannel
+import net.dv8tion.jda.api.entities.channel.forums.ForumTagSnowflake
 import net.dv8tion.jda.api.entities.channel.middleman.GuildChannel
 import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel
+import net.dv8tion.jda.api.entities.channel.middleman.AudioChannel
+import net.dv8tion.jda.api.entities.guild.SystemChannelFlag
 import net.dv8tion.jda.api.requests.restaction.AuditableRestAction
 import net.dv8tion.jda.api.utils.FileUpload
 import net.dv8tion.jda.api.utils.messages.MessageCreateBuilder
@@ -99,6 +105,40 @@ internal class DiscordOpsAdapter(
                     )
                 }
         return mapOf("ready" to true, "count" to guilds.size, "guilds" to guilds)
+    }
+
+    override fun readCapabilities(guildId: String): Map<String, Any?> {
+        val guild = requireGuild(guildId)
+        val self = guild.selfMember
+        val highestRole = self.roles.maxByOrNull(Role::getPosition)
+        return mapOf(
+            "guildId" to guild.id,
+            "bot" to
+                mapOf(
+                    "id" to self.id,
+                    "name" to self.effectiveName,
+                    "administrator" to self.hasPermission(Permission.ADMINISTRATOR),
+                    "permissions" to self.permissions.map(Permission::name).sorted(),
+                    "highestRole" to highestRole?.let(::rolePayload),
+                ),
+            "supported" to
+                mapOf(
+                    "channelTypes" to SUPPORTED_CHANNEL_TYPES.sorted(),
+                    "messageOperations" to DiscordMessageMutation.entries.map { it.name.lowercase() },
+                    "threadOperations" to DiscordThreadMutation.entries.map { it.name.lowercase() },
+                    "channelOperations" to DiscordChannelMutation.entries.map { it.name.lowercase() },
+                    "roleOperations" to DiscordRoleMutation.entries.map { it.name.lowercase() },
+                    "memberOperations" to DiscordMemberMutation.entries.map { it.name.lowercase() },
+                    "guildOperations" to DiscordGuildMutation.entries.map { it.name.lowercase() },
+                    "inviteOperations" to DiscordInviteMutation.entries.map { it.name.lowercase() },
+                ),
+            "limits" to
+                listOf(
+                    "guild ownership, billing, boosts, application settings and bot token are outside guild admin ops",
+                    "role and member mutations remain subject to Discord role hierarchy",
+                    "community-only and boost-only settings remain subject to Discord guild features",
+                ),
+        )
     }
 
     override fun listChannels(
@@ -227,6 +267,14 @@ internal class DiscordOpsAdapter(
             DiscordMessageMutation.DELETE -> withMessage(channel, requireMessageId(request)) { message ->
                 reason(message.delete(), request.reason).submit()
             }
+            DiscordMessageMutation.BULK_DELETE -> {
+                require(request.messageIds.size in 2..100) { "bulk delete requires 2..100 messageIds" }
+                channel.deleteMessagesByIds(request.messageIds).submit()
+            }
+            DiscordMessageMutation.CROSSPOST -> {
+                val news = channel as? NewsChannel ?: error("crosspost requires an announcement channel")
+                news.crosspostMessageById(requireMessageId(request)).submit().thenApply(::messageMutationPayload)
+            }
             DiscordMessageMutation.REACTION_ADD -> withMessage(channel, requireMessageId(request)) { message ->
                 message.addReaction(Emoji.fromFormatted(requireEmoji(request))).submit()
             }
@@ -257,11 +305,23 @@ internal class DiscordOpsAdapter(
             DiscordThreadMutation.CREATE -> createThread(request)
             DiscordThreadMutation.FORUM_POST -> createForumPost(request)
             DiscordThreadMutation.UPDATE -> updateThread(request)
+            DiscordThreadMutation.DELETE -> mutateExistingThread(request) { thread -> reason(thread.delete(), request.reason).submit() }
+            DiscordThreadMutation.JOIN -> mutateExistingThread(request) { thread -> thread.join().submit() }
+            DiscordThreadMutation.LEAVE -> mutateExistingThread(request) { thread -> thread.leave().submit() }
+            DiscordThreadMutation.MEMBER_ADD ->
+                mutateExistingThread(request) { thread ->
+                    thread.addThreadMemberById(request.userId ?: error("userId required")).submit()
+                }
+            DiscordThreadMutation.MEMBER_REMOVE ->
+                mutateExistingThread(request) { thread ->
+                    thread.removeThreadMemberById(request.userId ?: error("userId required")).submit()
+                }
         }
 
     override fun mutateChannel(request: DiscordChannelMutationRequest): CompletableFuture<Map<String, Any?>> =
         when (request.operation) {
             DiscordChannelMutation.CREATE -> createChannel(request)
+            DiscordChannelMutation.COPY -> copyChannel(request)
             DiscordChannelMutation.UPDATE -> updateChannel(request)
             DiscordChannelMutation.DELETE -> deleteChannel(request)
         }
@@ -294,6 +354,9 @@ internal class DiscordOpsAdapter(
                     reason(guild.mute(user, request.enabled ?: error("enabled required")), request.reason).submit()
                 DiscordMemberMutation.DEAFEN ->
                     reason(guild.deafen(user, request.enabled ?: error("enabled required")), request.reason).submit()
+                DiscordMemberMutation.MOVE ->
+                    guild.moveVoiceMember(user, requireAudioChannel(guild, request.channelId)).submit()
+                DiscordMemberMutation.DISCONNECT -> guild.kickVoiceMember(user).submit()
                 DiscordMemberMutation.KICK -> reason(guild.kick(user), request.reason).submit()
                 DiscordMemberMutation.BAN ->
                     reason(
@@ -320,6 +383,20 @@ internal class DiscordOpsAdapter(
         if (request.removeIcon == true) manager.setIcon(null)
         request.bannerDataBase64?.let { manager.setBanner(Icon.from(Base64.getDecoder().decode(it))) }
         if (request.removeBanner == true) manager.setBanner(null)
+        request.splashDataBase64?.let { manager.setSplash(Icon.from(Base64.getDecoder().decode(it))) }
+        if (request.removeSplash == true) manager.setSplash(null)
+        request.afkChannelId?.let { manager.setAfkChannel(requireVoiceChannel(guild, it)) }
+        if (request.clearAfkChannel == true) manager.setAfkChannel(null)
+        request.afkTimeoutSeconds?.let { manager.setAfkTimeout(Guild.Timeout.fromKey(it)) }
+        request.systemChannelId?.let { manager.setSystemChannel(requireTextChannel(guild, it)) }
+        if (request.clearSystemChannel == true) manager.setSystemChannel(null)
+        request.rulesChannelId?.let { manager.setRulesChannel(requireTextChannel(guild, it)) }
+        if (request.clearRulesChannel == true) manager.setRulesChannel(null)
+        request.communityUpdatesChannelId?.let { manager.setCommunityUpdatesChannel(requireTextChannel(guild, it)) }
+        if (request.clearCommunityUpdatesChannel == true) manager.setCommunityUpdatesChannel(null)
+        request.safetyAlertsChannelId?.let { manager.setSafetyAlertsChannel(requireTextChannel(guild, it)) }
+        if (request.clearSafetyAlertsChannel == true) manager.setSafetyAlertsChannel(null)
+        request.systemChannelFlags?.let { flags -> manager.setSystemChannelFlags(flags.map(::systemChannelFlag)) }
         request.verificationLevel?.let { manager.setVerificationLevel(enumValue(it)) }
         request.defaultNotificationLevel?.let { manager.setDefaultNotificationLevel(enumValue(it)) }
         request.explicitContentLevel?.let { manager.setExplicitContentLevel(enumValue(it)) }
@@ -409,6 +486,9 @@ internal class DiscordOpsAdapter(
         val action =
             request.starterMessageId?.let { container.createThreadChannel(name, it) }
                 ?: container.createThreadChannel(name)
+        request.autoArchiveMinutes?.let { action.setAutoArchiveDuration(ThreadChannel.AutoArchiveDuration.fromKey(it)) }
+        request.slowmodeSeconds?.let(action::setSlowmode)
+        request.invitable?.let(action::setInvitable)
         request.reason?.takeIf(String::isNotBlank)?.let(action::reason)
         return action.submit().thenApply { thread ->
             mapOf("operation" to "create", "thread" to channelPayload(thread, aliasesFor(thread.id)))
@@ -421,6 +501,9 @@ internal class DiscordOpsAdapter(
         val name = request.name?.trim().orEmpty().ifBlank { error("post name required") }
         val (data, uploads) = createMessageData(request.content, request.embeds, request.attachments)
         val action = container.createForumPost(name, data)
+        request.autoArchiveMinutes?.let { action.setAutoArchiveDuration(ThreadChannel.AutoArchiveDuration.fromKey(it)) }
+        request.slowmodeSeconds?.let(action::setSlowmode)
+        request.appliedTagIds?.let { ids -> action.setTags(ids.map(ForumTagSnowflake::fromId)) }
         return action.submit()
             .whenComplete { _, _ -> uploads.forEach(FileUpload::close) }
             .thenApply { post ->
@@ -440,9 +523,24 @@ internal class DiscordOpsAdapter(
         request.archived?.let(manager::setArchived)
         request.locked?.let(manager::setLocked)
         request.pinned?.let(manager::setPinned)
+        request.invitable?.let(manager::setInvitable)
+        request.slowmodeSeconds?.let(manager::setSlowmode)
+        request.autoArchiveMinutes?.let { manager.setAutoArchiveDuration(ThreadChannel.AutoArchiveDuration.fromKey(it)) }
+        request.appliedTagIds?.let { ids -> manager.setAppliedTags(ids.map(ForumTagSnowflake::fromId)) }
         request.reason?.takeIf(String::isNotBlank)?.let(manager::reason)
         return manager.submit().thenApply {
             mapOf("operation" to "update", "thread" to channelPayload(thread, aliasesFor(thread.id)))
+        }
+    }
+
+    private fun mutateExistingThread(
+        request: DiscordThreadMutationRequest,
+        mutation: (ThreadChannel) -> CompletableFuture<*>,
+    ): CompletableFuture<Map<String, Any?>> {
+        val id = request.threadId ?: request.channelId
+        val thread = jda().getThreadChannelById(id) ?: error("Discord thread not found: $id")
+        return mutation(thread).thenApply {
+            mutationResult(request.operation.name.lowercase(), thread.id, request.userId)
         }
     }
 
@@ -466,17 +564,44 @@ internal class DiscordOpsAdapter(
             action.setParent(parent)
         }
         request.position?.let(action::setPosition)
+        if (type != "category") request.nsfw?.let(action::setNSFW)
         if (type in MESSAGE_CONTAINER_TYPES) {
             request.topic?.let(action::setTopic)
-            request.nsfw?.let(action::setNSFW)
-            request.slowmodeSeconds?.let(action::setSlowmode)
+            request.defaultThreadSlowmodeSeconds?.let(action::setDefaultThreadSlowmode)
         }
+        if (type != "category") request.slowmodeSeconds?.let(action::setSlowmode)
         if (type in setOf("voice", "stage")) request.bitrate?.let(action::setBitrate)
         if (type == "voice") request.userLimit?.let(action::setUserlimit)
+        if (type in setOf("voice", "stage")) request.region?.let { action.setRegion(parseRegion(it)) }
         applyPermissionOverrides(action, request.permissionOverrides)
         request.reason?.takeIf(String::isNotBlank)?.let(action::reason)
         return action.submit().thenApply { channel ->
             mapOf("operation" to "create", "channel" to channelPayload(channel, aliasesFor(channel.id)))
+        }
+    }
+
+    private fun copyChannel(request: DiscordChannelMutationRequest): CompletableFuture<Map<String, Any?>> {
+        val channelId = request.channelId ?: error("channelId required")
+        val source = requireGuildChannel(channelId)
+        require(source.guild.id == request.guildId) { "channel does not belong to guild" }
+        val copyable = source as? ICopyableChannel ?: error("channel type does not support copying: ${source.type}")
+        val action = copyable.createCopy()
+        request.name?.let(action::setName)
+        request.parentCategoryId?.let { action.setParent(requireCategory(request.guildId, it)) }
+        if (request.clearParent == true) action.setParent(null)
+        request.position?.let(action::setPosition)
+        request.topic?.let(action::setTopic)
+        request.nsfw?.let(action::setNSFW)
+        request.slowmodeSeconds?.let(action::setSlowmode)
+        request.defaultThreadSlowmodeSeconds?.let(action::setDefaultThreadSlowmode)
+        request.bitrate?.let(action::setBitrate)
+        request.userLimit?.let(action::setUserlimit)
+        request.region?.let { action.setRegion(parseRegion(it)) }
+        if (request.syncPermissions == true) action.syncPermissionOverrides()
+        applyPermissionOverrides(action, request.permissionOverrides)
+        request.reason?.takeIf(String::isNotBlank)?.let(action::reason)
+        return action.submit().thenApply { channel ->
+            mapOf("operation" to "copy", "sourceChannelId" to source.id, "channel" to channelPayload(channel, emptyList()))
         }
     }
 
@@ -488,55 +613,80 @@ internal class DiscordOpsAdapter(
             when (channel) {
                 is TextChannel -> channel.manager.apply {
                     request.name?.let(::setName)
+                    request.type?.let { setType(parseTextChannelType(it)) }
                     request.parentCategoryId?.let { setParent(requireCategory(channel.guild.id, it)) }
+                    if (request.clearParent == true) setParent(null)
+                    if (request.syncPermissions == true) sync()
                     request.topic?.let(::setTopic)
                     request.nsfw?.let(::setNSFW)
                     request.slowmodeSeconds?.let(::setSlowmode)
+                    request.defaultThreadSlowmodeSeconds?.let(::setDefaultThreadSlowmode)
                     request.position?.let(::setPosition)
                     request.reason?.takeIf(String::isNotBlank)?.let(::reason)
                 }.submit()
                 is NewsChannel -> channel.manager.apply {
                     request.name?.let(::setName)
+                    request.type?.let { setType(parseTextChannelType(it)) }
                     request.parentCategoryId?.let { setParent(requireCategory(channel.guild.id, it)) }
+                    if (request.clearParent == true) setParent(null)
+                    if (request.syncPermissions == true) sync()
                     request.topic?.let(::setTopic)
                     request.nsfw?.let(::setNSFW)
+                    request.defaultThreadSlowmodeSeconds?.let(::setDefaultThreadSlowmode)
                     request.position?.let(::setPosition)
                     request.reason?.takeIf(String::isNotBlank)?.let(::reason)
                 }.submit()
                 is ForumChannel -> channel.manager.apply {
                     request.name?.let(::setName)
                     request.parentCategoryId?.let { setParent(requireCategory(channel.guild.id, it)) }
+                    if (request.clearParent == true) setParent(null)
+                    if (request.syncPermissions == true) sync()
                     request.topic?.let(::setTopic)
                     request.nsfw?.let(::setNSFW)
                     request.slowmodeSeconds?.let(::setSlowmode)
+                    request.defaultThreadSlowmodeSeconds?.let(::setDefaultThreadSlowmode)
                     request.position?.let(::setPosition)
                     request.reason?.takeIf(String::isNotBlank)?.let(::reason)
                 }.submit()
                 is MediaChannel -> channel.manager.apply {
                     request.name?.let(::setName)
                     request.parentCategoryId?.let { setParent(requireCategory(channel.guild.id, it)) }
+                    if (request.clearParent == true) setParent(null)
+                    if (request.syncPermissions == true) sync()
                     request.topic?.let(::setTopic)
                     request.nsfw?.let(::setNSFW)
                     request.slowmodeSeconds?.let(::setSlowmode)
+                    request.defaultThreadSlowmodeSeconds?.let(::setDefaultThreadSlowmode)
                     request.position?.let(::setPosition)
                     request.reason?.takeIf(String::isNotBlank)?.let(::reason)
                 }.submit()
                 is VoiceChannel -> channel.manager.apply {
                     request.name?.let(::setName)
                     request.parentCategoryId?.let { setParent(requireCategory(channel.guild.id, it)) }
+                    if (request.clearParent == true) setParent(null)
+                    if (request.syncPermissions == true) sync()
                     request.bitrate?.let(::setBitrate)
                     request.userLimit?.let(::setUserLimit)
+                    request.region?.let { setRegion(parseRegion(it)) }
+                    request.slowmodeSeconds?.let(::setSlowmode)
                     request.position?.let(::setPosition)
                     request.reason?.takeIf(String::isNotBlank)?.let(::reason)
                 }.submit()
                 is StageChannel -> channel.manager.apply {
                     request.name?.let(::setName)
                     request.parentCategoryId?.let { setParent(requireCategory(channel.guild.id, it)) }
+                    if (request.clearParent == true) setParent(null)
+                    if (request.syncPermissions == true) sync()
                     request.bitrate?.let(::setBitrate)
+                    request.region?.let { setRegion(parseRegion(it)) }
+                    request.slowmodeSeconds?.let(::setSlowmode)
                     request.position?.let(::setPosition)
                     request.reason?.takeIf(String::isNotBlank)?.let(::reason)
                 }.submit()
                 is Category -> channel.manager.apply {
+                    require(request.clearParent != true && request.syncPermissions != true) {
+                        "category cannot have a parent or sync parent permissions"
+                    }
                     request.name?.let(::setName)
                     request.position?.let(::setPosition)
                     request.reason?.takeIf(String::isNotBlank)?.let(::reason)
@@ -566,9 +716,13 @@ internal class DiscordOpsAdapter(
         request.permissions?.let { action.setPermissions(parsePermissions(it)) }
         request.hoisted?.let(action::setHoisted)
         request.mentionable?.let(action::setMentionable)
+        request.iconDataBase64?.let { action.setIcon(Icon.from(Base64.getDecoder().decode(it))) }
+        request.unicodeEmoji?.let(action::setIcon)
         request.reason?.takeIf(String::isNotBlank)?.let(action::reason)
-        return action.submit().thenApply { role ->
-            mapOf("operation" to "create", "role" to rolePayload(role))
+        return action.submit().thenCompose { role ->
+            moveRole(role, request.position).thenApply {
+                mapOf("operation" to "create", "role" to rolePayload(role))
+            }
         }
     }
 
@@ -580,8 +734,21 @@ internal class DiscordOpsAdapter(
         request.permissions?.let { manager.setPermissions(parsePermissions(it)) }
         request.hoisted?.let(manager::setHoisted)
         request.mentionable?.let(manager::setMentionable)
+        request.iconDataBase64?.let { manager.setIcon(Icon.from(Base64.getDecoder().decode(it))) }
+        if (request.removeIcon == true) manager.setIcon(null as Icon?)
+        request.unicodeEmoji?.let(manager::setIcon)
         request.reason?.takeIf(String::isNotBlank)?.let(manager::reason)
-        return manager.submit().thenApply { mapOf("operation" to "update", "role" to rolePayload(role)) }
+        return manager.submit().thenCompose {
+            moveRole(role, request.position)
+        }.thenApply { mapOf("operation" to "update", "role" to rolePayload(role)) }
+    }
+
+    private fun moveRole(
+        role: Role,
+        position: Int?,
+    ): CompletableFuture<Void> {
+        if (position == null) return CompletableFuture.completedFuture(null)
+        return role.guild.modifyRolePositions().selectPosition(role).moveTo(position).submit()
     }
 
     private fun deleteRole(request: DiscordRoleMutationRequest): CompletableFuture<Map<String, Any?>> {
@@ -703,6 +870,21 @@ internal class DiscordOpsAdapter(
         return Color(normalized.toInt(16))
     }
 
+    private fun parseRegion(value: String): Region {
+        val region = Region.fromKey(value.trim().lowercase().replace('_', '-'))
+        require(region != Region.UNKNOWN) { "unknown voice region: $value" }
+        return region
+    }
+
+    private fun parseTextChannelType(value: String): ChannelType =
+        when (value.trim().lowercase()) {
+            "text" -> ChannelType.TEXT
+            "news", "announcement" -> ChannelType.NEWS
+            else -> error("text channels can only be converted between text and announcement")
+        }
+
+    private fun systemChannelFlag(value: String): SystemChannelFlag = enumValue(value)
+
     private fun requireGuild(guildId: String) = jda().getGuildById(guildId) ?: error("Discord guild not found: $guildId")
 
     private fun requireGuildChannel(channelId: String): GuildChannel =
@@ -720,6 +902,24 @@ internal class DiscordOpsAdapter(
         guildId: String,
         categoryId: String,
     ): Category = requireGuild(guildId).getCategoryById(categoryId) ?: error("Category not found: $categoryId")
+
+    private fun requireTextChannel(
+        guild: Guild,
+        channelId: String,
+    ): TextChannel = guild.getTextChannelById(channelId) ?: error("Text channel not found: $channelId")
+
+    private fun requireVoiceChannel(
+        guild: Guild,
+        channelId: String,
+    ): VoiceChannel = guild.getVoiceChannelById(channelId) ?: error("Voice channel not found: $channelId")
+
+    private fun requireAudioChannel(
+        guild: Guild,
+        channelId: String?,
+    ): AudioChannel {
+        val id = channelId ?: error("channelId required")
+        return guild.getVoiceChannelById(id) ?: guild.getStageChannelById(id) ?: error("Audio channel not found: $id")
+    }
 
     private fun requireRole(
         guildId: String,
@@ -749,6 +949,14 @@ internal class DiscordOpsAdapter(
             "description" to guild.description,
             "iconUrl" to guild.iconUrl,
             "bannerUrl" to guild.bannerUrl,
+            "splashUrl" to guild.splashUrl,
+            "afkChannelId" to guild.afkChannel?.id,
+            "afkTimeoutSeconds" to guild.afkTimeout.seconds,
+            "systemChannelId" to guild.systemChannel?.id,
+            "rulesChannelId" to guild.rulesChannel?.id,
+            "communityUpdatesChannelId" to guild.communityUpdatesChannel?.id,
+            "safetyAlertsChannelId" to guild.safetyAlertsChannel?.id,
+            "systemChannelFlags" to guild.systemChannelFlags.map(SystemChannelFlag::name).sorted(),
             "verificationLevel" to guild.verificationLevel.name,
             "defaultNotificationLevel" to guild.defaultNotificationLevel.name,
             "explicitContentLevel" to guild.explicitContentLevel.name,
@@ -777,6 +985,7 @@ internal class DiscordOpsAdapter(
         channel: GuildChannel,
         aliases: List<String>,
     ): Map<String, Any?> {
+        val self = channel.guild.selfMember
         val payload =
             linkedMapOf<String, Any?>(
                 "id" to channel.id,
@@ -789,13 +998,25 @@ internal class DiscordOpsAdapter(
                 "jumpUrl" to channel.jumpUrl,
                 "readable" to (channel is GuildMessageChannel),
                 "writable" to ((channel as? GuildMessageChannel)?.canTalk() == true),
+                "botManageable" to self.hasPermission(channel, Permission.MANAGE_CHANNEL),
+                "botPermissions" to self.getPermissions(channel).map(Permission::name).sorted(),
             )
         if (channel is ThreadChannel) {
             payload["archived"] = channel.isArchived
             payload["locked"] = channel.isLocked
+            payload["invitable"] = channel.isInvitable
+            payload["autoArchiveMinutes"] = channel.autoArchiveDuration.minutes
+            payload["slowmodeSeconds"] = channel.slowmode
+            payload["appliedTagIds"] = channel.appliedTags.map { it.id }
             payload["messageCount"] = channel.messageCount
         }
         if (channel is IPostContainer) payload["activeThreadCount"] = channel.threadChannels.size
+        if (channel is IThreadContainer) payload["defaultThreadSlowmodeSeconds"] = channel.defaultThreadSlowmode
+        if (channel is AudioChannel) {
+            payload["bitrate"] = channel.bitrate
+            payload["userLimit"] = channel.userLimit
+            payload["region"] = channel.regionRaw
+        }
         if (channel is IPermissionContainer) {
             payload["permissionOverrides"] =
                 channel.permissionOverrides.map { override ->
@@ -830,6 +1051,9 @@ internal class DiscordOpsAdapter(
             "mentionable" to role.isMentionable,
             "managed" to role.isManaged,
             "publicRole" to role.isPublicRole,
+            "botManageable" to role.guild.selfMember.canInteract(role),
+            "iconUrl" to role.icon?.iconUrl,
+            "unicodeEmoji" to role.icon?.emoji,
             "permissions" to role.permissions.map(Permission::name).sorted(),
         )
     }
@@ -841,6 +1065,7 @@ internal class DiscordOpsAdapter(
             "displayName" to member.effectiveName,
             "nickname" to member.nickname,
             "owner" to member.isOwner,
+            "botManageable" to member.guild.selfMember.canInteract(member),
             "joinedAt" to member.timeJoined.toString(),
             "timeoutUntil" to member.timeOutEnd?.toString(),
             "roles" to member.roles.map(::rolePayload),
@@ -938,6 +1163,7 @@ internal class DiscordOpsAdapter(
         private const val ALL = "*"
         private const val MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024
         private val MESSAGE_CONTAINER_TYPES = setOf("text", "news", "announcement", "forum", "media")
+        private val SUPPORTED_CHANNEL_TYPES = MESSAGE_CONTAINER_TYPES + setOf("voice", "stage", "category")
 
         internal fun isAllowed(
             channelId: String,

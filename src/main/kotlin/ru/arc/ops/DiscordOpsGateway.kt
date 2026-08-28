@@ -18,6 +18,8 @@ interface DiscordOpsGateway {
 
     fun listGuilds(allowedGuildIds: Set<String>): Map<String, Any?>
 
+    fun readCapabilities(guildId: String): Map<String, Any?>
+
     fun listChannels(
         allowedGuildIds: Set<String>,
         allowedChannelIds: Set<String>,
@@ -85,6 +87,8 @@ enum class DiscordMessageMutation {
     SEND,
     EDIT,
     DELETE,
+    BULK_DELETE,
+    CROSSPOST,
     REACTION_ADD,
     REACTION_REMOVE,
     REACTIONS_CLEAR,
@@ -96,6 +100,7 @@ data class DiscordMessageMutationRequest(
     val operation: DiscordMessageMutation,
     val channelId: String,
     val messageId: String? = null,
+    val messageIds: List<String> = emptyList(),
     val content: String? = null,
     val replyToMessageId: String? = null,
     val embeds: List<DiscordEmbedSpec>? = null,
@@ -146,6 +151,20 @@ data class DiscordGuildMutationRequest(
     val removeIcon: Boolean? = null,
     val bannerDataBase64: String? = null,
     val removeBanner: Boolean? = null,
+    val splashDataBase64: String? = null,
+    val removeSplash: Boolean? = null,
+    val afkChannelId: String? = null,
+    val clearAfkChannel: Boolean? = null,
+    val afkTimeoutSeconds: Int? = null,
+    val systemChannelId: String? = null,
+    val clearSystemChannel: Boolean? = null,
+    val rulesChannelId: String? = null,
+    val clearRulesChannel: Boolean? = null,
+    val communityUpdatesChannelId: String? = null,
+    val clearCommunityUpdatesChannel: Boolean? = null,
+    val safetyAlertsChannelId: String? = null,
+    val clearSafetyAlertsChannel: Boolean? = null,
+    val systemChannelFlags: Set<String>? = null,
     val verificationLevel: String? = null,
     val defaultNotificationLevel: String? = null,
     val explicitContentLevel: String? = null,
@@ -175,6 +194,11 @@ enum class DiscordThreadMutation {
     CREATE,
     FORUM_POST,
     UPDATE,
+    DELETE,
+    JOIN,
+    LEAVE,
+    MEMBER_ADD,
+    MEMBER_REMOVE,
 }
 
 data class DiscordThreadMutationRequest(
@@ -189,6 +213,11 @@ data class DiscordThreadMutationRequest(
     val archived: Boolean? = null,
     val locked: Boolean? = null,
     val pinned: Boolean? = null,
+    val invitable: Boolean? = null,
+    val slowmodeSeconds: Int? = null,
+    val autoArchiveMinutes: Int? = null,
+    val appliedTagIds: Set<String>? = null,
+    val userId: String? = null,
     val reason: String? = null,
 )
 
@@ -201,6 +230,7 @@ data class DiscordPermissionOverrideSpec(
 
 enum class DiscordChannelMutation {
     CREATE,
+    COPY,
     UPDATE,
     DELETE,
 }
@@ -212,11 +242,15 @@ data class DiscordChannelMutationRequest(
     val type: String? = null,
     val name: String? = null,
     val parentCategoryId: String? = null,
+    val clearParent: Boolean? = null,
+    val syncPermissions: Boolean? = null,
     val topic: String? = null,
     val nsfw: Boolean? = null,
     val slowmodeSeconds: Int? = null,
+    val defaultThreadSlowmodeSeconds: Int? = null,
     val bitrate: Int? = null,
     val userLimit: Int? = null,
+    val region: String? = null,
     val position: Int? = null,
     val permissionOverrides: List<DiscordPermissionOverrideSpec> = emptyList(),
     val removePermissionOverrideIds: Set<String> = emptySet(),
@@ -241,6 +275,10 @@ data class DiscordRoleMutationRequest(
     val permissions: Set<String>? = null,
     val hoisted: Boolean? = null,
     val mentionable: Boolean? = null,
+    val position: Int? = null,
+    val iconDataBase64: String? = null,
+    val removeIcon: Boolean? = null,
+    val unicodeEmoji: String? = null,
     val reason: String? = null,
 )
 
@@ -250,6 +288,8 @@ enum class DiscordMemberMutation {
     TIMEOUT_REMOVE,
     MUTE,
     DEAFEN,
+    MOVE,
+    DISCONNECT,
     KICK,
     BAN,
     UNBAN,
@@ -262,6 +302,7 @@ data class DiscordMemberMutationRequest(
     val nickname: String? = null,
     val durationSeconds: Long? = null,
     val enabled: Boolean? = null,
+    val channelId: String? = null,
     val deleteMessageSeconds: Int = 0,
     val reason: String? = null,
 )

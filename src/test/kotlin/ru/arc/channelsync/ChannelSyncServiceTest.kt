@@ -266,6 +266,8 @@ private class TrackingDiscordGateway : DiscordOpsGateway {
 
     override fun listGuilds(allowedGuildIds: Set<String>) = emptyMap<String, Any?>()
 
+    override fun readCapabilities(guildId: String) = emptyMap<String, Any?>()
+
     override fun listChannels(allowedGuildIds: Set<String>, allowedChannelIds: Set<String>) = emptyMap<String, Any?>()
 
     override fun listRoles(guildId: String) = emptyMap<String, Any?>()

@@ -459,6 +459,9 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
     override fun listGuilds(allowedGuildIds: Set<String>): Map<String, Any?> =
         opsAdapter.listGuilds(allowedGuildIds)
 
+    override fun readCapabilities(guildId: String): Map<String, Any?> =
+        opsAdapter.readCapabilities(guildId)
+
     override fun listChannels(
         allowedGuildIds: Set<String>,
         allowedChannelIds: Set<String>,

@@ -129,6 +129,23 @@ class ProxyOpsHttpServerTest : FreeSpec({
         fixture.close()
     }
 
+    "Discord capabilities expose the allowlisted bot authority" {
+        val fixture =
+            discordServer(
+                """
+                discord-read-enabled: true
+                discord-allowed-guild-ids:
+                  - "100000000000000001"
+                """,
+            )
+
+        val response = fixture.request("GET", "/ops/discord/capabilities?guildId=100000000000000001")
+
+        response.statusCode() shouldBe 200
+        ObjectMapper().readTree(response.body())["bot"]["administrator"].asBoolean() shouldBe true
+        fixture.close()
+    }
+
     "Discord read rejects channels outside the allowlist" {
         val fixture =
             discordServer(
@@ -254,6 +271,121 @@ class ProxyOpsHttpServerTest : FreeSpec({
         fixture.close()
     }
 
+    "Discord expanded admin actions preserve high impact settings" {
+        val fixture =
+            discordServer(
+                """
+                discord-write-enabled: true
+                discord-admin-enabled: true
+                discord-allowed-guild-ids:
+                  - "100000000000000001"
+                discord-allowed-channel-ids:
+                  - "200000000000000002"
+                  - "300000000000000003"
+                discord-write-channel-ids:
+                  - "200000000000000002"
+                  - "300000000000000003"
+                """,
+            )
+
+        fixture.request(
+            "POST",
+            "/ops/discord/messages/actions",
+            """
+            {
+              "operation": "bulk_delete",
+              "channelId": "200000000000000002",
+              "messageIds": ["400000000000000004", "500000000000000005"],
+              "confirmation": "DISCORD MESSAGE BULK_DELETE 200000000000000002"
+            }
+            """.trimIndent(),
+        ).statusCode() shouldBe 200
+        fixture.gateway.lastMessageRequest?.messageIds shouldBe
+            listOf("400000000000000004", "500000000000000005")
+
+        fixture.request(
+            "POST",
+            "/ops/discord/channels/actions",
+            """
+            {
+              "operation": "copy",
+              "guildId": "100000000000000001",
+              "channelId": "200000000000000002",
+              "name": "копия",
+              "clearParent": true,
+              "syncPermissions": true,
+              "defaultThreadSlowmodeSeconds": 15,
+              "confirmation": "DISCORD CHANNEL COPY 200000000000000002"
+            }
+            """.trimIndent(),
+        ).statusCode() shouldBe 200
+        fixture.gateway.lastChannelRequest shouldBe
+            DiscordChannelMutationRequest(
+                operation = DiscordChannelMutation.COPY,
+                guildId = "100000000000000001",
+                channelId = "200000000000000002",
+                name = "копия",
+                clearParent = true,
+                syncPermissions = true,
+                defaultThreadSlowmodeSeconds = 15,
+            )
+
+        fixture.request(
+            "POST",
+            "/ops/discord/threads/actions",
+            """
+            {
+              "operation": "member_add",
+              "channelId": "200000000000000002",
+              "threadId": "300000000000000003",
+              "userId": "600000000000000006",
+              "confirmation": "DISCORD THREAD MEMBER_ADD 300000000000000003"
+            }
+            """.trimIndent(),
+        ).statusCode() shouldBe 200
+        fixture.gateway.lastThreadRequest?.userId shouldBe "600000000000000006"
+
+        fixture.request(
+            "POST",
+            "/ops/discord/members/actions",
+            """
+            {
+              "operation": "move",
+              "guildId": "100000000000000001",
+              "userId": "600000000000000006",
+              "channelId": "200000000000000002",
+              "confirmation": "DISCORD MEMBER MOVE 100000000000000001:600000000000000006"
+            }
+            """.trimIndent(),
+        ).statusCode() shouldBe 200
+        fixture.gateway.lastMemberRequest?.channelId shouldBe "200000000000000002"
+
+        fixture.request(
+            "POST",
+            "/ops/discord/roles/actions",
+            """
+            {
+              "operation": "update",
+              "guildId": "100000000000000001",
+              "roleId": "700000000000000007",
+              "position": 5,
+              "unicodeEmoji": "🛠️",
+              "confirmation": "DISCORD ROLE UPDATE 700000000000000007"
+            }
+            """.trimIndent(),
+        ).statusCode() shouldBe 200
+        fixture.gateway.lastRoleRequest shouldBe
+            DiscordRoleMutationRequest(
+                operation = DiscordRoleMutation.UPDATE,
+                guildId = "100000000000000001",
+                roleId = "700000000000000007",
+                position = 5,
+                unicodeEmoji = "🛠️",
+            )
+
+        fixture.close()
+    }
+
     "Discord admin rejects a mutation without the admin gate" {
         val fixture =
             discordServer(
@@ -304,6 +436,10 @@ class ProxyOpsHttpServerTest : FreeSpec({
                   "guildId": "100000000000000001",
                   "name": "RusCrafting",
                   "iconDataBase64": "aW1hZ2U=",
+                  "splashDataBase64": "c3BsYXNo",
+                  "afkTimeoutSeconds": 300,
+                  "systemChannelId": "200000000000000002",
+                  "systemChannelFlags": ["suppress_join_notifications"],
                   "invitesDisabled": false,
                   "confirmation": "DISCORD GUILD UPDATE 100000000000000001"
                 }
@@ -316,6 +452,10 @@ class ProxyOpsHttpServerTest : FreeSpec({
                 guildId = "100000000000000001",
                 name = "RusCrafting",
                 iconDataBase64 = "aW1hZ2U=",
+                splashDataBase64 = "c3BsYXNo",
+                afkTimeoutSeconds = 300,
+                systemChannelId = "200000000000000002",
+                systemChannelFlags = setOf("suppress_join_notifications"),
                 invitesDisabled = false,
             )
 
@@ -892,7 +1032,10 @@ private class FakeDiscordOpsGateway : DiscordOpsGateway {
     var ready = true
     var lastHistoryRequest: DiscordHistoryRequest? = null
     var lastMessageRequest: DiscordMessageMutationRequest? = null
+    var lastThreadRequest: DiscordThreadMutationRequest? = null
     var lastChannelRequest: DiscordChannelMutationRequest? = null
+    var lastRoleRequest: DiscordRoleMutationRequest? = null
+    var lastMemberRequest: DiscordMemberMutationRequest? = null
     var lastGuildRequest: DiscordGuildMutationRequest? = null
     var lastInviteRequest: DiscordInviteMutationRequest? = null
 
@@ -911,6 +1054,9 @@ private class FakeDiscordOpsGateway : DiscordOpsGateway {
 
     override fun listGuilds(allowedGuildIds: Set<String>): Map<String, Any?> =
         mapOf("guilds" to emptyList<Any>())
+
+    override fun readCapabilities(guildId: String): Map<String, Any?> =
+        mapOf("guildId" to guildId, "bot" to mapOf("administrator" to true))
 
     override fun listChannels(
         allowedGuildIds: Set<String>,
@@ -950,19 +1096,25 @@ private class FakeDiscordOpsGateway : DiscordOpsGateway {
         return CompletableFuture.completedFuture(mapOf("id" to "101"))
     }
 
-    override fun mutateThread(request: DiscordThreadMutationRequest): CompletableFuture<Map<String, Any?>> =
-        CompletableFuture.completedFuture(mapOf("threadId" to (request.threadId ?: "102")))
+    override fun mutateThread(request: DiscordThreadMutationRequest): CompletableFuture<Map<String, Any?>> {
+        lastThreadRequest = request
+        return CompletableFuture.completedFuture(mapOf("threadId" to (request.threadId ?: "102")))
+    }
 
     override fun mutateChannel(request: DiscordChannelMutationRequest): CompletableFuture<Map<String, Any?>> {
         lastChannelRequest = request
         return CompletableFuture.completedFuture(mapOf("channelId" to (request.channelId ?: "103")))
     }
 
-    override fun mutateRole(request: DiscordRoleMutationRequest): CompletableFuture<Map<String, Any?>> =
-        CompletableFuture.completedFuture(mapOf("roleId" to (request.roleId ?: "104")))
+    override fun mutateRole(request: DiscordRoleMutationRequest): CompletableFuture<Map<String, Any?>> {
+        lastRoleRequest = request
+        return CompletableFuture.completedFuture(mapOf("roleId" to (request.roleId ?: "104")))
+    }
 
-    override fun mutateMember(request: DiscordMemberMutationRequest): CompletableFuture<Map<String, Any?>> =
-        CompletableFuture.completedFuture(mapOf("userId" to request.userId))
+    override fun mutateMember(request: DiscordMemberMutationRequest): CompletableFuture<Map<String, Any?>> {
+        lastMemberRequest = request
+        return CompletableFuture.completedFuture(mapOf("userId" to request.userId))
+    }
 
     override fun mutateGuild(request: DiscordGuildMutationRequest): CompletableFuture<Map<String, Any?>> {
         lastGuildRequest = request

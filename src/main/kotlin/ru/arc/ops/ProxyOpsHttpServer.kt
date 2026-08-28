@@ -116,6 +116,8 @@ class ProxyOpsHttpServer(
                 logs(exchange, cfg)
             path == "discord/guilds" && method == "GET" ->
                 discordGuilds(exchange, cfg)
+            path == "discord/capabilities" && method == "GET" ->
+                discordCapabilities(exchange, cfg)
             path == "discord/channels" && method == "GET" ->
                 discordChannels(exchange, cfg)
             path == "discord/roles" && method == "GET" ->
@@ -391,6 +393,17 @@ class ProxyOpsHttpServer(
         if (!requireDiscordRead(exchange, cfg)) return
         val gateway = requireDiscordGateway(exchange) ?: return
         respond(exchange, 200, successJson(gateway.listGuilds(cfg.discordAllowedGuildIds)))
+    }
+
+    private fun discordCapabilities(
+        exchange: HttpExchange,
+        cfg: ProxyOpsHttpConfig,
+    ) {
+        if (!requireDiscordRead(exchange, cfg)) return
+        val gateway = requireDiscordGateway(exchange) ?: return
+        val guildId = parseQuery(exchange.requestURI.rawQuery)["guildId"].orEmpty()
+        if (!requireAllowedGuild(exchange, gateway, cfg, guildId)) return
+        respond(exchange, 200, successJson(gateway.readCapabilities(guildId)))
     }
 
     private fun discordChannels(
@@ -692,6 +705,18 @@ class ProxyOpsHttpServer(
             return
         }
         if (!requireAllowedGuild(exchange, gateway, cfg, request.guildId)) return
+        if (request.channelId != null &&
+            !gateway.isChannelAllowed(request.channelId, cfg.discordAllowedGuildIds, cfg.discordAllowedChannelIds)
+        ) {
+            respond(exchange, 403, ProxyOpsJson.error("discord-channel-not-allowed"))
+            return
+        }
+        if (request.parentCategoryId != null &&
+            !gateway.isChannelAllowed(request.parentCategoryId, cfg.discordAllowedGuildIds, cfg.discordAllowedChannelIds)
+        ) {
+            respond(exchange, 403, ProxyOpsJson.error("discord-parent-not-allowed"))
+            return
+        }
         val target = request.channelId ?: request.guildId
         if (!requireConfirmation(exchange, map, "DISCORD CHANNEL ${request.operation.name} $target")) return
         val result = gateway.mutateChannel(request).get(DISCORD_REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -737,6 +762,12 @@ class ProxyOpsHttpServer(
             return
         }
         if (!requireAllowedGuild(exchange, gateway, cfg, request.guildId)) return
+        if (request.channelId != null &&
+            !gateway.isChannelAllowed(request.channelId, cfg.discordAllowedGuildIds, cfg.discordAllowedChannelIds)
+        ) {
+            respond(exchange, 403, ProxyOpsJson.error("discord-channel-not-allowed"))
+            return
+        }
         val target = "${request.guildId}:${request.userId}"
         if (!requireConfirmation(exchange, map, "DISCORD MEMBER ${request.operation.name} $target")) return
         val result = gateway.mutateMember(request).get(DISCORD_REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -757,6 +788,21 @@ class ProxyOpsHttpServer(
             return
         }
         if (!requireAllowedGuild(exchange, gateway, cfg, request.guildId)) return
+        val referencedChannels =
+            listOfNotNull(
+                request.afkChannelId,
+                request.systemChannelId,
+                request.rulesChannelId,
+                request.communityUpdatesChannelId,
+                request.safetyAlertsChannelId,
+            )
+        if (referencedChannels.any {
+                !gateway.isChannelAllowed(it, cfg.discordAllowedGuildIds, cfg.discordAllowedChannelIds)
+            }
+        ) {
+            respond(exchange, 403, ProxyOpsJson.error("discord-channel-not-allowed"))
+            return
+        }
         if (!requireConfirmation(exchange, map, "DISCORD GUILD ${request.operation.name} ${request.guildId}")) return
         val result = gateway.mutateGuild(request).get(DISCORD_REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         logDiscordMutation("guild", request.operation.name, request.guildId, result)
@@ -1022,6 +1068,7 @@ class ProxyOpsHttpServer(
             if (cfg.logsEnabled) add("GET /ops/assistant/logs?pattern=&lines=")
             if (cfg.discordReadEnabled) {
                 add("GET /ops/discord/guilds")
+                add("GET /ops/discord/capabilities?guildId=")
                 add("GET /ops/discord/channels")
                 add("GET /ops/discord/roles?guildId=")
                 add("GET /ops/discord/invites?guildId=")
@@ -1132,14 +1179,23 @@ class ProxyOpsHttpServer(
                 operation = operation,
                 channelId = channelId,
                 messageId = messageId,
+                messageIds = map.stringSet("messageIds").toList(),
                 content = content,
                 replyToMessageId = replyTo,
                 embeds = if (map.containsKey("embeds")) map.mapList("embeds").map(::parseEmbed) else null,
                 attachments = map.mapList("attachments").map(::parseAttachment),
-                allowedUserMentionIds = emptySet(),
+                allowedUserMentionIds = map.stringSet("allowedUserMentionIds"),
                 emoji = map.optionalString("emoji"),
                 reason = map.optionalString("reason"),
-            )
+            ).also { request ->
+                require(request.messageIds.all(::validSnowflake))
+                require(request.allowedUserMentionIds.all(::validSnowflake))
+                when (request.operation) {
+                    DiscordMessageMutation.BULK_DELETE -> require(request.messageId == null && request.messageIds.size in 2..100)
+                    DiscordMessageMutation.CROSSPOST -> require(request.messageId != null && request.messageIds.isEmpty())
+                    else -> require(request.messageIds.isEmpty())
+                }
+            }
         } catch (_: Exception) {
             null
         }
@@ -1164,8 +1220,21 @@ class ProxyOpsHttpServer(
                 archived = map.boolean("archived"),
                 locked = map.boolean("locked"),
                 pinned = map.boolean("pinned"),
+                invitable = map.boolean("invitable"),
+                slowmodeSeconds = map.integer("slowmodeSeconds"),
+                autoArchiveMinutes = map.integer("autoArchiveMinutes"),
+                appliedTagIds = if (map.containsKey("appliedTagIds")) map.stringSet("appliedTagIds") else null,
+                userId = map.optionalString("userId"),
                 reason = map.optionalString("reason"),
-            )
+            ).also { request ->
+                require(request.userId == null || validSnowflake(request.userId))
+                require(request.appliedTagIds == null || request.appliedTagIds.all(::validSnowflake))
+                require(request.slowmodeSeconds == null || request.slowmodeSeconds in 0..21_600)
+                require(request.autoArchiveMinutes == null || request.autoArchiveMinutes in DISCORD_THREAD_ARCHIVE_MINUTES)
+                if (request.operation in setOf(DiscordThreadMutation.MEMBER_ADD, DiscordThreadMutation.MEMBER_REMOVE)) {
+                    require(request.userId != null)
+                }
+            }
         } catch (_: Exception) {
             null
         }
@@ -1179,11 +1248,15 @@ class ProxyOpsHttpServer(
                 type = map.optionalString("type"),
                 name = map.optionalString("name", preserveBlank = true),
                 parentCategoryId = map.optionalString("parentCategoryId"),
+                clearParent = map.boolean("clearParent"),
+                syncPermissions = map.boolean("syncPermissions"),
                 topic = map.optionalString("topic", preserveBlank = true),
                 nsfw = map.boolean("nsfw"),
                 slowmodeSeconds = map.integer("slowmodeSeconds"),
+                defaultThreadSlowmodeSeconds = map.integer("defaultThreadSlowmodeSeconds"),
                 bitrate = map.integer("bitrate"),
                 userLimit = map.integer("userLimit"),
+                region = map.optionalString("region"),
                 position = map.integer("position"),
                 permissionOverrides = map.mapList("permissionOverrides").map(::parsePermissionOverride),
                 removePermissionOverrideIds = map.stringSet("removePermissionOverrideIds"),
@@ -1191,6 +1264,13 @@ class ProxyOpsHttpServer(
             ).also { request ->
                 require(request.channelId == null || validSnowflake(request.channelId))
                 require(request.parentCategoryId == null || validSnowflake(request.parentCategoryId))
+                require(request.parentCategoryId == null || request.clearParent != true)
+                require(request.slowmodeSeconds == null || request.slowmodeSeconds in 0..21_600)
+                require(request.defaultThreadSlowmodeSeconds == null || request.defaultThreadSlowmodeSeconds in 0..21_600)
+                require(request.userLimit == null || request.userLimit in 0..99)
+                if (request.operation in setOf(DiscordChannelMutation.COPY, DiscordChannelMutation.UPDATE, DiscordChannelMutation.DELETE)) {
+                    require(request.channelId != null)
+                }
             }
         } catch (_: Exception) {
             null
@@ -1208,10 +1288,18 @@ class ProxyOpsHttpServer(
                 permissions = if (map.containsKey("permissions")) map.stringSet("permissions") else null,
                 hoisted = map.boolean("hoisted"),
                 mentionable = map.boolean("mentionable"),
+                position = map.integer("position"),
+                iconDataBase64 = map.optionalString("iconDataBase64"),
+                removeIcon = map.boolean("removeIcon"),
+                unicodeEmoji = map.optionalString("unicodeEmoji"),
                 reason = map.optionalString("reason"),
             ).also { request ->
                 require(request.roleId == null || validSnowflake(request.roleId))
                 require(request.userId == null || validSnowflake(request.userId))
+                require(request.position == null || request.position >= 0)
+                val iconChoices = listOfNotNull(request.iconDataBase64, request.unicodeEmoji).size
+                require(iconChoices + (if (request.removeIcon == true) 1 else 0) <= 1)
+                request.iconDataBase64?.let(::validateDiscordImage)
             }
         } catch (_: Exception) {
             null
@@ -1226,9 +1314,13 @@ class ProxyOpsHttpServer(
                 nickname = map.optionalString("nickname", preserveBlank = true),
                 durationSeconds = (map["durationSeconds"] as? Number)?.toLong(),
                 enabled = map.boolean("enabled"),
+                channelId = map.optionalString("channelId"),
                 deleteMessageSeconds = map.integer("deleteMessageSeconds") ?: 0,
                 reason = map.optionalString("reason"),
-            )
+            ).also { request ->
+                require(request.channelId == null || validSnowflake(request.channelId))
+                if (request.operation == DiscordMemberMutation.MOVE) require(request.channelId != null)
+            }
         } catch (_: Exception) {
             null
         }
@@ -1244,6 +1336,20 @@ class ProxyOpsHttpServer(
                 removeIcon = map.boolean("removeIcon"),
                 bannerDataBase64 = map.optionalString("bannerDataBase64"),
                 removeBanner = map.boolean("removeBanner"),
+                splashDataBase64 = map.optionalString("splashDataBase64"),
+                removeSplash = map.boolean("removeSplash"),
+                afkChannelId = map.optionalString("afkChannelId"),
+                clearAfkChannel = map.boolean("clearAfkChannel"),
+                afkTimeoutSeconds = map.integer("afkTimeoutSeconds"),
+                systemChannelId = map.optionalString("systemChannelId"),
+                clearSystemChannel = map.boolean("clearSystemChannel"),
+                rulesChannelId = map.optionalString("rulesChannelId"),
+                clearRulesChannel = map.boolean("clearRulesChannel"),
+                communityUpdatesChannelId = map.optionalString("communityUpdatesChannelId"),
+                clearCommunityUpdatesChannel = map.boolean("clearCommunityUpdatesChannel"),
+                safetyAlertsChannelId = map.optionalString("safetyAlertsChannelId"),
+                clearSafetyAlertsChannel = map.boolean("clearSafetyAlertsChannel"),
+                systemChannelFlags = if (map.containsKey("systemChannelFlags")) map.stringSet("systemChannelFlags") else null,
                 verificationLevel = map.optionalString("verificationLevel"),
                 defaultNotificationLevel = map.optionalString("defaultNotificationLevel"),
                 explicitContentLevel = map.optionalString("explicitContentLevel"),
@@ -1256,14 +1362,37 @@ class ProxyOpsHttpServer(
                 require(request.description == null || request.description.length <= DISCORD_GUILD_DESCRIPTION_MAX_LENGTH)
                 require(request.iconDataBase64 == null || request.removeIcon != true)
                 require(request.bannerDataBase64 == null || request.removeBanner != true)
+                require(request.splashDataBase64 == null || request.removeSplash != true)
+                require(request.afkChannelId == null || request.clearAfkChannel != true)
+                require(request.systemChannelId == null || request.clearSystemChannel != true)
+                require(request.rulesChannelId == null || request.clearRulesChannel != true)
+                require(request.communityUpdatesChannelId == null || request.clearCommunityUpdatesChannel != true)
+                require(request.safetyAlertsChannelId == null || request.clearSafetyAlertsChannel != true)
+                listOfNotNull(
+                    request.afkChannelId,
+                    request.systemChannelId,
+                    request.rulesChannelId,
+                    request.communityUpdatesChannelId,
+                    request.safetyAlertsChannelId,
+                ).forEach { require(validSnowflake(it)) }
+                require(request.afkTimeoutSeconds == null || request.afkTimeoutSeconds in DISCORD_AFK_TIMEOUT_SECONDS)
                 request.iconDataBase64?.let(::validateDiscordImage)
                 request.bannerDataBase64?.let(::validateDiscordImage)
+                request.splashDataBase64?.let(::validateDiscordImage)
+                request.systemChannelFlags?.forEach { enumValue<net.dv8tion.jda.api.entities.guild.SystemChannelFlag>(it) }
                 request.verificationLevel?.let { enumValue<net.dv8tion.jda.api.entities.Guild.VerificationLevel>(it) }
                 request.defaultNotificationLevel?.let { enumValue<net.dv8tion.jda.api.entities.Guild.NotificationLevel>(it) }
                 request.explicitContentLevel?.let { enumValue<net.dv8tion.jda.api.entities.Guild.ExplicitContentLevel>(it) }
                 require(
                     request.name != null || request.description != null || request.iconDataBase64 != null ||
                         request.removeIcon == true || request.bannerDataBase64 != null || request.removeBanner == true ||
+                        request.splashDataBase64 != null || request.removeSplash == true ||
+                        request.afkChannelId != null || request.clearAfkChannel == true || request.afkTimeoutSeconds != null ||
+                        request.systemChannelId != null || request.clearSystemChannel == true ||
+                        request.rulesChannelId != null || request.clearRulesChannel == true ||
+                        request.communityUpdatesChannelId != null || request.clearCommunityUpdatesChannel == true ||
+                        request.safetyAlertsChannelId != null || request.clearSafetyAlertsChannel == true ||
+                        request.systemChannelFlags != null ||
                         request.verificationLevel != null || request.defaultNotificationLevel != null ||
                         request.explicitContentLevel != null || request.boostProgressBarEnabled != null ||
                         request.invitesDisabled != null,
@@ -1724,6 +1853,8 @@ class ProxyOpsHttpServer(
         private const val DISCORD_IMAGE_MAX_BYTES = 8 * 1024 * 1024
         private const val DISCORD_INVITE_MAX_AGE_SECONDS = 604_800
         private const val DISCORD_INVITE_MAX_USES = 100
+        private val DISCORD_THREAD_ARCHIVE_MINUTES = setOf(60, 1_440, 4_320, 10_080)
+        private val DISCORD_AFK_TIMEOUT_SECONDS = setOf(60, 300, 900, 1_800, 3_600)
         private const val DISCORD_REQUEST_TIMEOUT_SECONDS = 15L
         private const val TELEGRAM_MESSAGE_MAX_LENGTH = 4_096
         private const val TELEGRAM_CAPTION_MAX_LENGTH = 1_024
