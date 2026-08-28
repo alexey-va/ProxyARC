@@ -9,6 +9,8 @@ import io.mockk.mockk
 import io.mockk.verify
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import org.telegram.telegrambots.meta.api.methods.BotApiMethod
+import org.telegram.telegrambots.meta.api.methods.forum.EditForumTopic
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage
 import org.telegram.telegrambots.meta.api.objects.Chat
 import org.telegram.telegrambots.meta.api.objects.Message
@@ -17,8 +19,12 @@ import org.telegram.telegrambots.meta.api.objects.Update
 import org.telegram.telegrambots.meta.api.objects.User
 import org.telegram.telegrambots.meta.generics.BotSession
 import ru.arc.core.TestTaskScheduler
+import ru.arc.ops.TelegramTopicMutation
+import ru.arc.ops.TelegramTopicMutationRequest
+import java.io.Serializable
 import java.nio.file.Files
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 class TelegramBotTest : FreeSpec({
@@ -50,6 +56,36 @@ class TelegramBotTest : FreeSpec({
         bot.close()
         scheduler.executeImmediate()
         executions.get() shouldBe 1
+    }
+
+    "forum topic updates use blocking API execution" {
+        val methods = mutableListOf<BotApiMethod<*>>()
+        val bot =
+            TelegramBot(
+                config = TestTelegramConfig(),
+                scheduler = TestTaskScheduler(),
+                blockingMethodExecutor = { method ->
+                    methods += method
+                    true as Serializable
+                },
+            )
+
+        val result =
+            bot.mutateTopic(
+                TelegramTopicMutationRequest(
+                    operation = TelegramTopicMutation.UPDATE,
+                    chatId = "-1002456417492",
+                    threadId = 36,
+                    name = "Общий чат",
+                ),
+            ).get(2, TimeUnit.SECONDS)
+
+        val method = methods.single() as EditForumTopic
+        method.chatId shouldBe "-1002456417492"
+        method.messageThreadId shouldBe 36
+        method.name shouldBe "Общий чат"
+        result["success"] shouldBe true
+        bot.close()
     }
 
     "runtime stops the registered session and closes the bot" {

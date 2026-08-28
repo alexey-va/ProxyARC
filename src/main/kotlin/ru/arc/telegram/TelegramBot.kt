@@ -96,6 +96,7 @@ open class TelegramBot(
     token: String = config.token,
     private val scheduler: TaskScheduler = Tasks.scheduler,
     requestExecutor: ((SendMessage) -> Unit)? = null,
+    private val blockingMethodExecutor: ((BotApiMethod<*>) -> Serializable)? = null,
     private val inboundRelay: TelegramInboundRelay = VelocityTelegramInboundRelay,
     private val identityService: TelegramIdentityService? = null,
     botOptions: DefaultBotOptions = DefaultBotOptions(),
@@ -542,7 +543,7 @@ open class TelegramBot(
                 method.messageThreadId = requireNotNull(request.threadId)
                 method.name = request.name
                 method.iconCustomEmojiId = request.iconCustomEmojiId
-                executeWhenOpen(method).thenApply { success -> topicMutationMap(request, success) }
+                executeBlockingWhenOpen(method).thenApply { success -> topicMutationMap(request, success) }
             }
             TelegramTopicMutation.CLOSE ->
                 executeWhenOpen(CloseForumTopic(request.chatId, requireNotNull(request.threadId)))
@@ -720,6 +721,14 @@ open class TelegramBot(
             executeAsync(method)
         } catch (error: Exception) {
             CompletableFuture.failedFuture(error)
+        }
+    }
+
+    private fun <T : Serializable> executeBlockingWhenOpen(method: BotApiMethod<T>): CompletableFuture<T> {
+        if (closed.get()) return CompletableFuture.failedFuture(IllegalStateException("telegram bot is closed"))
+        return CompletableFuture.supplyAsync {
+            @Suppress("UNCHECKED_CAST")
+            (blockingMethodExecutor?.invoke(method) as T?) ?: execute(method)
         }
     }
 
