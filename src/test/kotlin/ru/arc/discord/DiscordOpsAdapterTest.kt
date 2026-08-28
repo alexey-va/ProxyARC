@@ -12,6 +12,8 @@ import net.dv8tion.jda.api.entities.channel.concrete.TextChannel
 import net.dv8tion.jda.api.entities.channel.concrete.ThreadChannel
 import net.dv8tion.jda.api.requests.restaction.MessageCreateAction
 import net.dv8tion.jda.api.utils.messages.MessageCreateData
+import ru.arc.ops.DiscordGuildMutation
+import ru.arc.ops.DiscordGuildMutationRequest
 import ru.arc.ops.DiscordMessageMutation
 import ru.arc.ops.DiscordMessageMutationRequest
 import java.time.OffsetDateTime
@@ -65,6 +67,28 @@ class DiscordOpsAdapterTest : FreeSpec({
         every { thread.isInvitable } returns true
 
         DiscordOpsAdapter.threadInvitable(thread) shouldBe true
+    }
+
+    "community channel update reasserts the existing community feature" {
+        val request =
+            DiscordGuildMutationRequest(
+                operation = DiscordGuildMutation.UPDATE,
+                guildId = "100000000000000001",
+                rulesChannelId = "200000000000000002",
+            )
+
+        DiscordOpsAdapter.shouldReassertCommunityFeature(request, setOf("COMMUNITY", "NEWS")) shouldBe true
+    }
+
+    "unrelated guild update does not touch community features" {
+        val request =
+            DiscordGuildMutationRequest(
+                operation = DiscordGuildMutation.UPDATE,
+                guildId = "100000000000000001",
+                name = "RusCrafting",
+            )
+
+        DiscordOpsAdapter.shouldReassertCommunityFeature(request, setOf("COMMUNITY", "NEWS")) shouldBe false
     }
 
     "send disables mentions and replied-user ping" {

@@ -149,9 +149,9 @@ internal class DiscordOpsAdapter(
         val aliasesById = aliasesById()
         val candidates =
             if (ALL in allowedChannelIds) {
-                jda.guilds
-                    .filter { isGuildAllowed(it.id, allowedGuildIds) }
-                    .flatMap { it.channels }
+                val guilds = jda.guilds.filter { isGuildAllowed(it.id, allowedGuildIds) }
+                guilds.flatMap { it.channels } +
+                    jda.threadChannels.filter { thread -> isGuildAllowed(thread.guild.id, allowedGuildIds) }
             } else {
                 val roots = allowedChannelIds.mapNotNull(jda::getGuildChannelById)
                 val children =
@@ -377,6 +377,9 @@ internal class DiscordOpsAdapter(
     override fun mutateGuild(request: DiscordGuildMutationRequest): CompletableFuture<Map<String, Any?>> {
         val guild = requireGuild(request.guildId)
         val manager = guild.manager
+        if (shouldReassertCommunityFeature(request, guild.features)) {
+            manager.addFeatures("COMMUNITY")
+        }
         request.name?.let(manager::setName)
         request.description?.let(manager::setDescription)
         request.iconDataBase64?.let { manager.setIcon(Icon.from(Base64.getDecoder().decode(it))) }
@@ -1176,6 +1179,13 @@ internal class DiscordOpsAdapter(
 
         internal fun threadInvitable(channel: ThreadChannel): Boolean? =
             if (channel.type == ChannelType.GUILD_PRIVATE_THREAD) channel.isInvitable else null
+
+        internal fun shouldReassertCommunityFeature(
+            request: DiscordGuildMutationRequest,
+            guildFeatures: Set<String>,
+        ): Boolean =
+            "COMMUNITY" in guildFeatures &&
+                (request.rulesChannelId != null || request.communityUpdatesChannelId != null)
 
         private fun parentChannelId(channel: GuildChannel): String? =
             when (channel) {
