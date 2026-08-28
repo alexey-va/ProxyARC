@@ -4,6 +4,8 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import ru.arc.ops.DiscordChannelMutationRequest
 import ru.arc.ops.DiscordHistoryRequest
+import ru.arc.ops.DiscordGuildMutationRequest
+import ru.arc.ops.DiscordInviteMutationRequest
 import ru.arc.ops.DiscordMemberMutationRequest
 import ru.arc.ops.DiscordMemberReadRequest
 import ru.arc.ops.DiscordMessageMutation
@@ -16,6 +18,7 @@ import ru.arc.ops.DiscordSearchRequest
 import ru.arc.ops.DiscordThreadMutationRequest
 import ru.arc.ops.TelegramChatMutationRequest
 import ru.arc.ops.TelegramInviteMutationRequest
+import ru.arc.ops.TelegramMemberMutationRequest
 import ru.arc.ops.TelegramMessageMutation
 import ru.arc.ops.TelegramMessageMutationRequest
 import ru.arc.ops.TelegramOpsGateway
@@ -233,6 +236,10 @@ private class TrackingTelegramGateway : TelegramOpsGateway {
 
     override fun readChat(chatId: String) = completed(mapOf<String, Any?>())
 
+    override fun listAdministrators(chatId: String) = completed(mapOf<String, Any?>())
+
+    override fun readMember(chatId: String, userId: Long) = completed(mapOf<String, Any?>())
+
     override fun mutateMessage(request: TelegramMessageMutationRequest): CompletableFuture<Map<String, Any?>> {
         messages += request
         return nextResponse?.also { nextResponse = null } ?: completed(mapOf("messageId" to nextMessageId++))
@@ -243,6 +250,8 @@ private class TrackingTelegramGateway : TelegramOpsGateway {
     override fun mutateTopic(request: TelegramTopicMutationRequest) = completed(mapOf<String, Any?>())
 
     override fun mutateInvite(request: TelegramInviteMutationRequest) = completed(mapOf<String, Any?>())
+
+    override fun mutateMember(request: TelegramMemberMutationRequest) = completed(mapOf<String, Any?>())
 }
 
 private class TrackingDiscordGateway : DiscordOpsGateway {
@@ -260,6 +269,8 @@ private class TrackingDiscordGateway : DiscordOpsGateway {
     override fun listChannels(allowedGuildIds: Set<String>, allowedChannelIds: Set<String>) = emptyMap<String, Any?>()
 
     override fun listRoles(guildId: String) = emptyMap<String, Any?>()
+
+    override fun listInvites(guildId: String) = completed(mapOf<String, Any?>())
 
     override fun readMember(request: DiscordMemberReadRequest) = completed(mapOf<String, Any?>())
 
@@ -283,6 +294,10 @@ private class TrackingDiscordGateway : DiscordOpsGateway {
     override fun mutateRole(request: DiscordRoleMutationRequest) = completed(mapOf<String, Any?>())
 
     override fun mutateMember(request: DiscordMemberMutationRequest) = completed(mapOf<String, Any?>())
+
+    override fun mutateGuild(request: DiscordGuildMutationRequest) = completed(mapOf<String, Any?>())
+
+    override fun mutateInvite(request: DiscordInviteMutationRequest) = completed(mapOf<String, Any?>())
 }
 
 private fun completed(value: Map<String, Any?>): CompletableFuture<Map<String, Any?>> =

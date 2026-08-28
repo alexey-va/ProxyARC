@@ -9,18 +9,40 @@ import org.telegram.telegrambots.bots.TelegramLongPollingBot
 import org.telegram.telegrambots.meta.api.methods.GetMe
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod
 import org.telegram.telegrambots.meta.api.methods.forum.CloseForumTopic
+import org.telegram.telegrambots.meta.api.methods.forum.CloseGeneralForumTopic
 import org.telegram.telegrambots.meta.api.methods.forum.CreateForumTopic
 import org.telegram.telegrambots.meta.api.methods.forum.DeleteForumTopic
 import org.telegram.telegrambots.meta.api.methods.forum.EditForumTopic
+import org.telegram.telegrambots.meta.api.methods.forum.EditGeneralForumTopic
+import org.telegram.telegrambots.meta.api.methods.forum.HideGeneralForumTopic
 import org.telegram.telegrambots.meta.api.methods.forum.ReopenForumTopic
+import org.telegram.telegrambots.meta.api.methods.forum.ReopenGeneralForumTopic
+import org.telegram.telegrambots.meta.api.methods.forum.UnhideGeneralForumTopic
+import org.telegram.telegrambots.meta.api.methods.forum.UnpinAllForumTopicMessages
+import org.telegram.telegrambots.meta.api.methods.forum.UnpinAllGeneralForumTopicMessages
+import org.telegram.telegrambots.meta.api.methods.groupadministration.ApproveChatJoinRequest
+import org.telegram.telegrambots.meta.api.methods.groupadministration.BanChatMember
 import org.telegram.telegrambots.meta.api.methods.groupadministration.CreateChatInviteLink
+import org.telegram.telegrambots.meta.api.methods.groupadministration.DeclineChatJoinRequest
+import org.telegram.telegrambots.meta.api.methods.groupadministration.DeleteChatPhoto
+import org.telegram.telegrambots.meta.api.methods.groupadministration.DeleteChatStickerSet
+import org.telegram.telegrambots.meta.api.methods.groupadministration.EditChatInviteLink
 import org.telegram.telegrambots.meta.api.methods.groupadministration.GetChat
+import org.telegram.telegrambots.meta.api.methods.groupadministration.GetChatAdministrators
+import org.telegram.telegrambots.meta.api.methods.groupadministration.GetChatMember
+import org.telegram.telegrambots.meta.api.methods.groupadministration.PromoteChatMember
+import org.telegram.telegrambots.meta.api.methods.groupadministration.RestrictChatMember
 import org.telegram.telegrambots.meta.api.methods.groupadministration.RevokeChatInviteLink
+import org.telegram.telegrambots.meta.api.methods.groupadministration.SetChatAdministratorCustomTitle
 import org.telegram.telegrambots.meta.api.methods.groupadministration.SetChatDescription
 import org.telegram.telegrambots.meta.api.methods.groupadministration.SetChatPermissions
+import org.telegram.telegrambots.meta.api.methods.groupadministration.SetChatPhoto
+import org.telegram.telegrambots.meta.api.methods.groupadministration.SetChatStickerSet
 import org.telegram.telegrambots.meta.api.methods.groupadministration.SetChatTitle
+import org.telegram.telegrambots.meta.api.methods.groupadministration.UnbanChatMember
 import org.telegram.telegrambots.meta.api.methods.pinnedmessages.PinChatMessage
 import org.telegram.telegrambots.meta.api.methods.pinnedmessages.UnpinChatMessage
+import org.telegram.telegrambots.meta.api.methods.pinnedmessages.UnpinAllChatMessages
 import org.telegram.telegrambots.meta.api.methods.send.SendDocument
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto
@@ -33,6 +55,9 @@ import org.telegram.telegrambots.meta.api.objects.InputFile
 import org.telegram.telegrambots.meta.api.objects.Message
 import org.telegram.telegrambots.meta.api.objects.Update
 import org.telegram.telegrambots.meta.api.objects.forum.ForumTopic
+import org.telegram.telegrambots.meta.api.objects.chatmember.ChatMember
+import org.telegram.telegrambots.meta.api.objects.chatmember.ChatMemberAdministrator
+import org.telegram.telegrambots.meta.api.objects.chatmember.ChatMemberRestricted
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton
 import ru.arc.Utils.plain
@@ -49,6 +74,8 @@ import ru.arc.ops.TelegramChatMutationRequest
 import ru.arc.ops.TelegramChatMutation
 import ru.arc.ops.TelegramInviteMutation
 import ru.arc.ops.TelegramInviteMutationRequest
+import ru.arc.ops.TelegramMemberMutation
+import ru.arc.ops.TelegramMemberMutationRequest
 import ru.arc.ops.TelegramMessageMutation
 import ru.arc.ops.TelegramMessageMutationRequest
 import ru.arc.ops.TelegramOpsGateway
@@ -396,6 +423,23 @@ open class TelegramBot(
     override fun readChat(chatId: String): CompletableFuture<Map<String, Any?>> =
         executeWhenOpen(GetChat(chatId)).thenApply(::chatMap)
 
+    override fun listAdministrators(chatId: String): CompletableFuture<Map<String, Any?>> =
+        executeWhenOpen(GetChatAdministrators(chatId)).thenApply { administrators ->
+            mapOf(
+                "chatId" to chatId,
+                "count" to administrators.size,
+                "administrators" to administrators.map(::chatMemberMap),
+            )
+        }
+
+    override fun readMember(
+        chatId: String,
+        userId: Long,
+    ): CompletableFuture<Map<String, Any?>> =
+        executeWhenOpen(GetChatMember(chatId, userId)).thenApply { member ->
+            mapOf("chatId" to chatId, "member" to chatMemberMap(member))
+        }
+
     override fun mutateMessage(request: TelegramMessageMutationRequest): CompletableFuture<Map<String, Any?>> =
         when (request.operation) {
             TelegramMessageMutation.SEND -> {
@@ -433,32 +477,54 @@ open class TelegramBot(
         }
 
     override fun mutateChat(request: TelegramChatMutationRequest): CompletableFuture<Map<String, Any?>> {
-        if (request.operation == TelegramChatMutation.SET_PERMISSIONS) {
-            val method = SetChatPermissions()
-            method.chatId = request.chatId
-            method.permissions = requireNotNull(request.permissions).toApi()
-            method.useIndependentChatPermissions = request.useIndependentPermissions
-            return executeWhenOpen(method).thenApply { success ->
-                mapOf("chatId" to request.chatId, "updated" to listOf("permissions"), "success" to success)
-            }
-        }
-        val mutations =
-            buildList<CompletableFuture<Boolean>> {
-                request.title?.let { title -> add(executeWhenOpen(SetChatTitle(request.chatId, title))) }
-                request.description?.let { description ->
-                    add(executeWhenOpen(SetChatDescription(request.chatId, description)))
+        return when (request.operation) {
+            TelegramChatMutation.UPDATE -> {
+                val mutations =
+                    buildList<CompletableFuture<Boolean>> {
+                        request.title?.let { title -> add(executeWhenOpen(SetChatTitle(request.chatId, title))) }
+                        request.description?.let { description ->
+                            add(executeWhenOpen(SetChatDescription(request.chatId, description)))
+                        }
+                    }
+                CompletableFuture.allOf(*mutations.toTypedArray()).thenApply {
+                    mapOf(
+                        "chatId" to request.chatId,
+                        "updated" to
+                            buildList {
+                                if (request.title != null) add("title")
+                                if (request.description != null) add("description")
+                            },
+                        "success" to mutations.all { it.join() },
+                    )
                 }
             }
-        return CompletableFuture.allOf(*mutations.toTypedArray()).thenApply {
-            mapOf(
-                "chatId" to request.chatId,
-                "updated" to
-                    buildList {
-                        if (request.title != null) add("title")
-                        if (request.description != null) add("description")
-                    },
-                "success" to mutations.all { it.join() },
-            )
+            TelegramChatMutation.SET_PERMISSIONS -> {
+                val method = SetChatPermissions()
+                method.chatId = request.chatId
+                method.permissions = requireNotNull(request.permissions).toApi()
+                method.useIndependentChatPermissions = request.useIndependentPermissions
+                executeWhenOpen(method).thenApply { success -> chatMutationMap(request, "permissions", success) }
+            }
+            TelegramChatMutation.SET_PHOTO -> {
+                val method = SetChatPhoto(request.chatId, requireNotNull(request.photo).toInputFile())
+                executeMediaWhenOpen(method).thenApply { success -> chatMutationMap(request, "photo", success) }
+            }
+            TelegramChatMutation.DELETE_PHOTO ->
+                executeWhenOpen(DeleteChatPhoto(request.chatId)).thenApply { success ->
+                    chatMutationMap(request, "photo", success)
+                }
+            TelegramChatMutation.UNPIN_ALL ->
+                executeWhenOpen(UnpinAllChatMessages(request.chatId)).thenApply { success ->
+                    chatMutationMap(request, "pinnedMessages", success)
+                }
+            TelegramChatMutation.SET_STICKER_SET ->
+                executeWhenOpen(SetChatStickerSet(request.chatId, requireNotNull(request.stickerSetName))).thenApply { success ->
+                    chatMutationMap(request, "stickerSet", success)
+                }
+            TelegramChatMutation.DELETE_STICKER_SET ->
+                executeWhenOpen(DeleteChatStickerSet(request.chatId)).thenApply { success ->
+                    chatMutationMap(request, "stickerSet", success)
+                }
         }
     }
 
@@ -487,6 +553,23 @@ open class TelegramBot(
             TelegramTopicMutation.DELETE ->
                 executeWhenOpen(DeleteForumTopic(request.chatId, requireNotNull(request.threadId)))
                     .thenApply { success -> topicMutationMap(request, success) }
+            TelegramTopicMutation.UNPIN_ALL ->
+                executeWhenOpen(UnpinAllForumTopicMessages(request.chatId, requireNotNull(request.threadId)))
+                    .thenApply { success -> topicMutationMap(request, success) }
+            TelegramTopicMutation.GENERAL_UPDATE ->
+                executeWhenOpen(EditGeneralForumTopic(request.chatId, requireNotNull(request.name)))
+                    .thenApply { success -> topicMutationMap(request, success) }
+            TelegramTopicMutation.GENERAL_CLOSE ->
+                executeWhenOpen(CloseGeneralForumTopic(request.chatId)).thenApply { success -> topicMutationMap(request, success) }
+            TelegramTopicMutation.GENERAL_REOPEN ->
+                executeWhenOpen(ReopenGeneralForumTopic(request.chatId)).thenApply { success -> topicMutationMap(request, success) }
+            TelegramTopicMutation.GENERAL_HIDE ->
+                executeWhenOpen(HideGeneralForumTopic(request.chatId)).thenApply { success -> topicMutationMap(request, success) }
+            TelegramTopicMutation.GENERAL_UNHIDE ->
+                executeWhenOpen(UnhideGeneralForumTopic(request.chatId)).thenApply { success -> topicMutationMap(request, success) }
+            TelegramTopicMutation.GENERAL_UNPIN_ALL ->
+                executeWhenOpen(UnpinAllGeneralForumTopicMessages(request.chatId))
+                    .thenApply { success -> topicMutationMap(request, success) }
         }
 
     override fun mutateInvite(request: TelegramInviteMutationRequest): CompletableFuture<Map<String, Any?>> =
@@ -499,9 +582,68 @@ open class TelegramBot(
                 method.createsJoinRequest = request.createsJoinRequest
                 executeWhenOpen(method).thenApply { invite -> inviteMap(request.chatId, invite) }
             }
+            TelegramInviteMutation.EDIT -> {
+                val method = EditChatInviteLink(request.chatId, requireNotNull(request.inviteLink))
+                method.name = request.name
+                method.expireDate = request.expireDate
+                method.memberLimit = request.memberLimit
+                method.createsJoinRequest = request.createsJoinRequest
+                executeWhenOpen(method).thenApply { invite -> inviteMap(request.chatId, invite) }
+            }
             TelegramInviteMutation.REVOKE ->
                 executeWhenOpen(RevokeChatInviteLink(request.chatId, requireNotNull(request.inviteLink)))
                     .thenApply { invite -> inviteMap(request.chatId, invite) }
+        }
+
+    override fun mutateMember(request: TelegramMemberMutationRequest): CompletableFuture<Map<String, Any?>> =
+        when (request.operation) {
+            TelegramMemberMutation.BAN -> {
+                val method = BanChatMember(request.chatId, request.userId)
+                method.untilDate = request.untilDate
+                method.revokeMessages = request.revokeMessages
+                executeWhenOpen(method).thenApply { success -> memberMutationMap(request, success) }
+            }
+            TelegramMemberMutation.UNBAN -> {
+                val method = UnbanChatMember(request.chatId, request.userId)
+                method.onlyIfBanned = request.onlyIfBanned
+                executeWhenOpen(method).thenApply { success -> memberMutationMap(request, success) }
+            }
+            TelegramMemberMutation.RESTRICT -> {
+                val method = RestrictChatMember(request.chatId, request.userId, requireNotNull(request.permissions).toApi())
+                method.untilDate = request.untilDate
+                method.useIndependentChatPermissions = request.useIndependentPermissions
+                executeWhenOpen(method).thenApply { success -> memberMutationMap(request, success) }
+            }
+            TelegramMemberMutation.PROMOTE -> {
+                val rights = requireNotNull(request.administratorRights)
+                val method = PromoteChatMember(request.chatId, request.userId)
+                method.canManageChat = rights.canManageChat
+                method.canChangeInformation = rights.canChangeInfo
+                method.canPostMessages = rights.canPostMessages
+                method.canEditMessages = rights.canEditMessages
+                method.canDeleteMessages = rights.canDeleteMessages
+                method.canInviteUsers = rights.canInviteUsers
+                method.canRestrictMembers = rights.canRestrictMembers
+                method.canPinMessages = rights.canPinMessages
+                method.canPromoteMembers = rights.canPromoteMembers
+                method.canManageVideoChats = rights.canManageVideoChats
+                method.canManageTopics = rights.canManageTopics
+                method.canPostStories = rights.canPostStories
+                method.canEditStories = rights.canEditStories
+                method.canDeleteStories = rights.canDeleteStories
+                method.isAnonymous = rights.isAnonymous
+                executeWhenOpen(method).thenApply { success -> memberMutationMap(request, success) }
+            }
+            TelegramMemberMutation.SET_ADMIN_TITLE ->
+                executeWhenOpen(
+                    SetChatAdministratorCustomTitle(request.chatId, request.userId, requireNotNull(request.customTitle)),
+                ).thenApply { success -> memberMutationMap(request, success) }
+            TelegramMemberMutation.APPROVE_JOIN_REQUEST ->
+                executeWhenOpen(ApproveChatJoinRequest(request.chatId, request.userId))
+                    .thenApply { success -> memberMutationMap(request, success) }
+            TelegramMemberMutation.DECLINE_JOIN_REQUEST ->
+                executeWhenOpen(DeclineChatJoinRequest(request.chatId, request.userId))
+                    .thenApply { success -> memberMutationMap(request, success) }
         }
 
     private fun sendRichMessage(request: TelegramMessageMutationRequest): CompletableFuture<Message> {
@@ -555,6 +697,15 @@ open class TelegramBot(
     }
 
     private fun executeMediaWhenOpen(method: SendDocument): CompletableFuture<Message> {
+        if (closed.get()) return CompletableFuture.failedFuture(IllegalStateException("telegram bot is closed"))
+        return try {
+            executeAsync(method)
+        } catch (error: Exception) {
+            CompletableFuture.failedFuture(error)
+        }
+    }
+
+    private fun executeMediaWhenOpen(method: SetChatPhoto): CompletableFuture<Boolean> {
         if (closed.get()) return CompletableFuture.failedFuture(IllegalStateException("telegram bot is closed"))
         return try {
             executeAsync(method)
@@ -690,6 +841,79 @@ open class TelegramBot(
                 permissions.canPinMessages = canPinMessages
                 permissions.canManageTopics = canManageTopics
             }
+
+        private fun chatMutationMap(
+            request: TelegramChatMutationRequest,
+            field: String,
+            success: Boolean,
+        ): Map<String, Any?> =
+            mapOf(
+                "chatId" to request.chatId,
+                "operation" to request.operation.name,
+                "updated" to listOf(field),
+                "success" to success,
+            )
+
+        private fun chatMemberMap(member: ChatMember): Map<String, Any?> {
+            val user = member.user
+            val payload =
+                linkedMapOf<String, Any?>(
+                    "status" to member.status,
+                    "userId" to user.id,
+                    "username" to user.userName,
+                    "firstName" to user.firstName,
+                    "lastName" to user.lastName,
+                    "bot" to user.isBot,
+                )
+            when (member) {
+                is ChatMemberAdministrator -> {
+                    payload["customTitle"] = member.customTitle
+                    payload["canBeEdited"] = member.canBeEdited
+                    payload["isAnonymous"] = member.isAnonymous
+                    payload["canManageChat"] = member.canManageChat
+                    payload["canChangeInfo"] = member.canChangeInfo
+                    payload["canPostMessages"] = member.canPostMessages
+                    payload["canEditMessages"] = member.canEditMessages
+                    payload["canDeleteMessages"] = member.canDeleteMessages
+                    payload["canInviteUsers"] = member.canInviteUsers
+                    payload["canRestrictMembers"] = member.canRestrictMembers
+                    payload["canPinMessages"] = member.canPinMessages
+                    payload["canPromoteMembers"] = member.canPromoteMembers
+                    payload["canManageVideoChats"] = member.canManageVideoChats
+                    payload["canManageTopics"] = member.canManageTopics
+                }
+                is ChatMemberRestricted -> {
+                    payload["member"] = member.isMember
+                    payload["untilDate"] = member.untilDate
+                    payload["canSendMessages"] = member.canSendMessages
+                    payload["canSendAudios"] = member.canSendAudios
+                    payload["canSendDocuments"] = member.canSendDocuments
+                    payload["canSendPhotos"] = member.canSendPhotos
+                    payload["canSendVideos"] = member.canSendVideos
+                    payload["canSendVideoNotes"] = member.canSendVideoNotes
+                    payload["canSendVoiceNotes"] = member.canSendVoiceNotes
+                    payload["canSendPolls"] = member.canSendPolls
+                    payload["canSendOtherMessages"] = member.canSendOtherMessages
+                    payload["canAddWebPagePreviews"] = member.canAddWebpagePreviews
+                    payload["canChangeInfo"] = member.canChangeInfo
+                    payload["canInviteUsers"] = member.canInviteUsers
+                    payload["canPinMessages"] = member.canPinMessages
+                    payload["canManageTopics"] = member.canManageTopics
+                }
+            }
+            return payload
+        }
+
+        private fun memberMutationMap(
+            request: TelegramMemberMutationRequest,
+            success: Boolean,
+        ): Map<String, Any?> =
+            mapOf(
+                "chatId" to request.chatId,
+                "userId" to request.userId,
+                "operation" to request.operation.name,
+                "success" to success,
+            )
 
         private fun topicMap(
             chatId: String,

@@ -6,12 +6,16 @@ import net.dv8tion.jda.api.Permission
 import net.dv8tion.jda.api.entities.Member
 import net.dv8tion.jda.api.entities.Message
 import net.dv8tion.jda.api.entities.Role
+import net.dv8tion.jda.api.entities.Guild
+import net.dv8tion.jda.api.entities.Icon
+import net.dv8tion.jda.api.entities.Invite
 import net.dv8tion.jda.api.entities.UserSnowflake
 import net.dv8tion.jda.api.entities.channel.attribute.ICategorizableChannel
 import net.dv8tion.jda.api.entities.channel.attribute.IPermissionContainer
 import net.dv8tion.jda.api.entities.channel.attribute.IPositionableChannel
 import net.dv8tion.jda.api.entities.channel.attribute.IPostContainer
 import net.dv8tion.jda.api.entities.channel.attribute.IThreadContainer
+import net.dv8tion.jda.api.entities.channel.attribute.IInviteContainer
 import net.dv8tion.jda.api.entities.channel.concrete.Category
 import net.dv8tion.jda.api.entities.channel.concrete.ForumChannel
 import net.dv8tion.jda.api.entities.channel.concrete.MediaChannel
@@ -32,6 +36,10 @@ import ru.arc.ops.DiscordChannelMutation
 import ru.arc.ops.DiscordChannelMutationRequest
 import ru.arc.ops.DiscordEmbedSpec
 import ru.arc.ops.DiscordHistoryRequest
+import ru.arc.ops.DiscordGuildMutation
+import ru.arc.ops.DiscordGuildMutationRequest
+import ru.arc.ops.DiscordInviteMutation
+import ru.arc.ops.DiscordInviteMutationRequest
 import ru.arc.ops.DiscordMemberMutation
 import ru.arc.ops.DiscordMemberMutationRequest
 import ru.arc.ops.DiscordMemberReadRequest
@@ -125,6 +133,13 @@ internal class DiscordOpsAdapter(
         val guild = requireGuild(guildId)
         val roles = guild.roles.sortedByDescending(Role::getPosition).map(::rolePayload)
         return mapOf("guildId" to guild.id, "count" to roles.size, "roles" to roles)
+    }
+
+    override fun listInvites(guildId: String): CompletableFuture<Map<String, Any?>> {
+        val guild = requireGuild(guildId)
+        return guild.retrieveInvites().submit().thenApply { invites ->
+            mapOf("guildId" to guild.id, "count" to invites.size, "invites" to invites.map(::invitePayload))
+        }
     }
 
     override fun readMember(request: DiscordMemberReadRequest): CompletableFuture<Map<String, Any?>> {
@@ -295,6 +310,56 @@ internal class DiscordOpsAdapter(
             )
         }
     }
+
+    override fun mutateGuild(request: DiscordGuildMutationRequest): CompletableFuture<Map<String, Any?>> {
+        val guild = requireGuild(request.guildId)
+        val manager = guild.manager
+        request.name?.let(manager::setName)
+        request.description?.let(manager::setDescription)
+        request.iconDataBase64?.let { manager.setIcon(Icon.from(Base64.getDecoder().decode(it))) }
+        if (request.removeIcon == true) manager.setIcon(null)
+        request.bannerDataBase64?.let { manager.setBanner(Icon.from(Base64.getDecoder().decode(it))) }
+        if (request.removeBanner == true) manager.setBanner(null)
+        request.verificationLevel?.let { manager.setVerificationLevel(enumValue(it)) }
+        request.defaultNotificationLevel?.let { manager.setDefaultNotificationLevel(enumValue(it)) }
+        request.explicitContentLevel?.let { manager.setExplicitContentLevel(enumValue(it)) }
+        request.boostProgressBarEnabled?.let(manager::setBoostProgressBarEnabled)
+        request.invitesDisabled?.let(manager::setInvitesDisabled)
+        request.reason?.takeIf(String::isNotBlank)?.let(manager::reason)
+        return manager.submit().thenApply {
+            mapOf(
+                "operation" to request.operation.name.lowercase(),
+                "guild" to guildPayload(guild),
+            )
+        }
+    }
+
+    override fun mutateInvite(request: DiscordInviteMutationRequest): CompletableFuture<Map<String, Any?>> =
+        when (request.operation) {
+            DiscordInviteMutation.CREATE -> {
+                val channel = requireGuildChannel(requireNotNull(request.channelId))
+                require(channel.guild.id == request.guildId) { "channel does not belong to guild" }
+                val container = channel as? IInviteContainer ?: error("channel does not support invites: ${channel.id}")
+                val action = container.createInvite()
+                request.maxAgeSeconds?.let(action::setMaxAge)
+                request.maxUses?.let(action::setMaxUses)
+                request.temporary?.let(action::setTemporary)
+                request.unique?.let(action::setUnique)
+                request.reason?.takeIf(String::isNotBlank)?.let(action::reason)
+                action.submit().thenApply { invite ->
+                    mapOf("operation" to "create", "guildId" to request.guildId, "invite" to invitePayload(invite))
+                }
+            }
+            DiscordInviteMutation.DELETE -> {
+                val code = requireNotNull(request.code)
+                Invite.resolve(jda(), code, true).submit().thenCompose { invite ->
+                    require(invite.guild?.id == request.guildId) { "invite does not belong to guild" }
+                    reason(invite.delete(), request.reason).submit().thenApply {
+                        mapOf("operation" to "delete", "guildId" to request.guildId, "code" to code)
+                    }
+                }
+            }
+        }
 
     private fun sendMessage(
         channel: GuildMessageChannel,
@@ -675,7 +740,38 @@ internal class DiscordOpsAdapter(
             .groupBy({ it.value }, { it.key })
 
     private fun aliasesFor(channelId: String): List<String> =
-        aliasesProvider().filterValues { it == channelId }.keys.sorted()
+            aliasesProvider().filterValues { it == channelId }.keys.sorted()
+
+    private fun guildPayload(guild: Guild): Map<String, Any?> =
+        mapOf(
+            "id" to guild.id,
+            "name" to guild.name,
+            "description" to guild.description,
+            "iconUrl" to guild.iconUrl,
+            "bannerUrl" to guild.bannerUrl,
+            "verificationLevel" to guild.verificationLevel.name,
+            "defaultNotificationLevel" to guild.defaultNotificationLevel.name,
+            "explicitContentLevel" to guild.explicitContentLevel.name,
+            "boostProgressBarEnabled" to guild.isBoostProgressBarEnabled,
+            "invitesDisabled" to guild.isInvitesDisabled,
+        )
+
+    private fun invitePayload(invite: Invite): Map<String, Any?> =
+        mapOf(
+            "code" to invite.code,
+            "url" to invite.url,
+            "channelId" to invite.channel?.id,
+            "guildId" to invite.guild?.id,
+            "inviterId" to invite.inviter?.id,
+            "maxAgeSeconds" to invite.maxAge,
+            "maxUses" to invite.maxUses,
+            "uses" to invite.uses,
+            "temporary" to invite.isTemporary,
+            "createdAt" to invite.timeCreated.toString(),
+        )
+
+    private inline fun <reified T : Enum<T>> enumValue(value: String): T =
+        enumValueOf(value.trim().uppercase().replace('-', '_'))
 
     private fun channelPayload(
         channel: GuildChannel,

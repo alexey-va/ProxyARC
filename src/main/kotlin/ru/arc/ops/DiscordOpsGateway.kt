@@ -25,6 +25,8 @@ interface DiscordOpsGateway {
 
     fun listRoles(guildId: String): Map<String, Any?>
 
+    fun listInvites(guildId: String): CompletableFuture<Map<String, Any?>>
+
     fun readMember(request: DiscordMemberReadRequest): CompletableFuture<Map<String, Any?>>
 
     fun readHistory(request: DiscordHistoryRequest): CompletableFuture<Map<String, Any?>>
@@ -44,6 +46,10 @@ interface DiscordOpsGateway {
     fun mutateRole(request: DiscordRoleMutationRequest): CompletableFuture<Map<String, Any?>>
 
     fun mutateMember(request: DiscordMemberMutationRequest): CompletableFuture<Map<String, Any?>>
+
+    fun mutateGuild(request: DiscordGuildMutationRequest): CompletableFuture<Map<String, Any?>>
+
+    fun mutateInvite(request: DiscordInviteMutationRequest): CompletableFuture<Map<String, Any?>>
 }
 
 data class DiscordHistoryRequest(
@@ -125,6 +131,44 @@ data class DiscordAttachmentSpec(
     val fileName: String,
     val dataBase64: String,
     val description: String? = null,
+)
+
+enum class DiscordGuildMutation {
+    UPDATE,
+}
+
+data class DiscordGuildMutationRequest(
+    val operation: DiscordGuildMutation,
+    val guildId: String,
+    val name: String? = null,
+    val description: String? = null,
+    val iconDataBase64: String? = null,
+    val removeIcon: Boolean? = null,
+    val bannerDataBase64: String? = null,
+    val removeBanner: Boolean? = null,
+    val verificationLevel: String? = null,
+    val defaultNotificationLevel: String? = null,
+    val explicitContentLevel: String? = null,
+    val boostProgressBarEnabled: Boolean? = null,
+    val invitesDisabled: Boolean? = null,
+    val reason: String? = null,
+)
+
+enum class DiscordInviteMutation {
+    CREATE,
+    DELETE,
+}
+
+data class DiscordInviteMutationRequest(
+    val operation: DiscordInviteMutation,
+    val guildId: String,
+    val channelId: String? = null,
+    val code: String? = null,
+    val maxAgeSeconds: Int? = null,
+    val maxUses: Int? = null,
+    val temporary: Boolean? = null,
+    val unique: Boolean? = null,
+    val reason: String? = null,
 )
 
 enum class DiscordThreadMutation {

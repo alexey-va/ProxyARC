@@ -10,7 +10,9 @@ import ru.arc.config.ProxyConfigs
 import ru.arc.core.Tasks
 import ru.arc.metrics.core.MetricPoint
 import ru.arc.ops.DiscordChannelMutationRequest
+import ru.arc.ops.DiscordGuildMutationRequest
 import ru.arc.ops.DiscordHistoryRequest
+import ru.arc.ops.DiscordInviteMutationRequest
 import ru.arc.ops.DiscordMemberMutationRequest
 import ru.arc.ops.DiscordMemberReadRequest
 import ru.arc.ops.DiscordMessageMutationRequest
@@ -463,6 +465,7 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
     ): Map<String, Any?> = opsAdapter.listChannels(allowedGuildIds, allowedChannelIds)
 
     override fun listRoles(guildId: String): Map<String, Any?> = opsAdapter.listRoles(guildId)
+    override fun listInvites(guildId: String) = opsAdapter.listInvites(guildId)
     override fun readMember(request: DiscordMemberReadRequest) = opsAdapter.readMember(request)
     override fun readHistory(request: DiscordHistoryRequest) = opsAdapter.readHistory(request)
     override fun readMessage(request: DiscordMessageRequest) = opsAdapter.readMessage(request)
@@ -473,6 +476,8 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
     override fun mutateChannel(request: DiscordChannelMutationRequest) = opsAdapter.mutateChannel(request)
     override fun mutateRole(request: DiscordRoleMutationRequest) = opsAdapter.mutateRole(request)
     override fun mutateMember(request: DiscordMemberMutationRequest) = opsAdapter.mutateMember(request)
+    override fun mutateGuild(request: DiscordGuildMutationRequest) = opsAdapter.mutateGuild(request)
+    override fun mutateInvite(request: DiscordInviteMutationRequest) = opsAdapter.mutateInvite(request)
 
     private fun configuredChannelAliases(): Map<String, String> =
         OPS_CHANNEL_ALIASES.associateWith { config.string("channels.$it", "").trim() }

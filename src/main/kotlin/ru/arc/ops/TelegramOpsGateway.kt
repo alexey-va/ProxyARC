@@ -9,6 +9,13 @@ interface TelegramOpsGateway {
 
     fun readChat(chatId: String): CompletableFuture<Map<String, Any?>>
 
+    fun listAdministrators(chatId: String): CompletableFuture<Map<String, Any?>>
+
+    fun readMember(
+        chatId: String,
+        userId: Long,
+    ): CompletableFuture<Map<String, Any?>>
+
     fun mutateMessage(request: TelegramMessageMutationRequest): CompletableFuture<Map<String, Any?>>
 
     fun mutateChat(request: TelegramChatMutationRequest): CompletableFuture<Map<String, Any?>>
@@ -16,6 +23,8 @@ interface TelegramOpsGateway {
     fun mutateTopic(request: TelegramTopicMutationRequest): CompletableFuture<Map<String, Any?>>
 
     fun mutateInvite(request: TelegramInviteMutationRequest): CompletableFuture<Map<String, Any?>>
+
+    fun mutateMember(request: TelegramMemberMutationRequest): CompletableFuture<Map<String, Any?>>
 }
 
 enum class TelegramMessageMutation {
@@ -69,6 +78,11 @@ data class TelegramAttachmentSpec(
 enum class TelegramChatMutation {
     UPDATE,
     SET_PERMISSIONS,
+    SET_PHOTO,
+    DELETE_PHOTO,
+    UNPIN_ALL,
+    SET_STICKER_SET,
+    DELETE_STICKER_SET,
 }
 
 data class TelegramChatMutationRequest(
@@ -78,6 +92,8 @@ data class TelegramChatMutationRequest(
     val description: String? = null,
     val permissions: TelegramChatPermissionsSpec? = null,
     val useIndependentPermissions: Boolean? = null,
+    val photo: TelegramAttachmentSpec? = null,
+    val stickerSetName: String? = null,
 )
 
 data class TelegramChatPermissionsSpec(
@@ -103,6 +119,13 @@ enum class TelegramTopicMutation {
     CLOSE,
     REOPEN,
     DELETE,
+    UNPIN_ALL,
+    GENERAL_UPDATE,
+    GENERAL_CLOSE,
+    GENERAL_REOPEN,
+    GENERAL_HIDE,
+    GENERAL_UNHIDE,
+    GENERAL_UNPIN_ALL,
 }
 
 data class TelegramTopicMutationRequest(
@@ -116,6 +139,7 @@ data class TelegramTopicMutationRequest(
 
 enum class TelegramInviteMutation {
     CREATE,
+    EDIT,
     REVOKE,
 }
 
@@ -127,4 +151,45 @@ data class TelegramInviteMutationRequest(
     val expireDate: Int? = null,
     val memberLimit: Int? = null,
     val createsJoinRequest: Boolean? = null,
+)
+
+enum class TelegramMemberMutation {
+    BAN,
+    UNBAN,
+    RESTRICT,
+    PROMOTE,
+    SET_ADMIN_TITLE,
+    APPROVE_JOIN_REQUEST,
+    DECLINE_JOIN_REQUEST,
+}
+
+data class TelegramAdministratorRightsSpec(
+    val canManageChat: Boolean? = null,
+    val canChangeInfo: Boolean? = null,
+    val canPostMessages: Boolean? = null,
+    val canEditMessages: Boolean? = null,
+    val canDeleteMessages: Boolean? = null,
+    val canInviteUsers: Boolean? = null,
+    val canRestrictMembers: Boolean? = null,
+    val canPinMessages: Boolean? = null,
+    val canPromoteMembers: Boolean? = null,
+    val canManageVideoChats: Boolean? = null,
+    val canManageTopics: Boolean? = null,
+    val canPostStories: Boolean? = null,
+    val canEditStories: Boolean? = null,
+    val canDeleteStories: Boolean? = null,
+    val isAnonymous: Boolean? = null,
+)
+
+data class TelegramMemberMutationRequest(
+    val operation: TelegramMemberMutation,
+    val chatId: String,
+    val userId: Long,
+    val untilDate: Int? = null,
+    val revokeMessages: Boolean? = null,
+    val onlyIfBanned: Boolean? = null,
+    val permissions: TelegramChatPermissionsSpec? = null,
+    val useIndependentPermissions: Boolean? = null,
+    val administratorRights: TelegramAdministratorRightsSpec? = null,
+    val customTitle: String? = null,
 )

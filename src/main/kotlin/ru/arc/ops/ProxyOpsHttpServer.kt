@@ -120,6 +120,8 @@ class ProxyOpsHttpServer(
                 discordChannels(exchange, cfg)
             path == "discord/roles" && method == "GET" ->
                 discordRoles(exchange, cfg)
+            path == "discord/invites" && method == "GET" ->
+                discordInvites(exchange, cfg)
             path == "discord/member" && method == "GET" ->
                 discordMember(exchange, cfg)
             path == "discord/messages" && method == "GET" ->
@@ -142,10 +144,18 @@ class ProxyOpsHttpServer(
                 discordRoleMutation(exchange, cfg)
             path == "discord/members/actions" && method == "POST" ->
                 discordMemberMutation(exchange, cfg)
+            path == "discord/guilds/actions" && method == "POST" ->
+                discordGuildMutation(exchange, cfg)
+            path == "discord/invites/actions" && method == "POST" ->
+                discordInviteMutation(exchange, cfg)
             path == "telegram/chats" && method == "GET" ->
                 telegramChats(exchange, cfg)
             path == "telegram/chat" && method == "GET" ->
                 telegramChat(exchange, cfg)
+            path == "telegram/administrators" && method == "GET" ->
+                telegramAdministrators(exchange, cfg)
+            path == "telegram/member" && method == "GET" ->
+                telegramMember(exchange, cfg)
             path == "telegram/messages/actions" && method == "POST" ->
                 telegramMessageMutation(exchange, cfg)
             path == "telegram/chats/actions" && method == "POST" ->
@@ -154,6 +164,8 @@ class ProxyOpsHttpServer(
                 telegramTopicMutation(exchange, cfg)
             path == "telegram/invites/actions" && method == "POST" ->
                 telegramInviteMutation(exchange, cfg)
+            path == "telegram/members/actions" && method == "POST" ->
+                telegramMemberMutation(exchange, cfg)
             else -> respond(exchange, 404, ProxyOpsJson.error("Not found: /ops/$path"))
         }
     }
@@ -193,6 +205,46 @@ class ProxyOpsHttpServer(
             return
         }
         val result = gateway.readChat(chatId).get(TELEGRAM_REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        respond(exchange, 200, successJson(result))
+    }
+
+    private fun telegramAdministrators(
+        exchange: HttpExchange,
+        cfg: ProxyOpsHttpConfig,
+    ) {
+        if (!requireTelegramRead(exchange, cfg)) return
+        val gateway = requireTelegramGateway(exchange) ?: return
+        val chatId = parseQuery(exchange.requestURI.rawQuery)["chatId"].orEmpty()
+        if (!validTelegramChatId(chatId)) {
+            respond(exchange, 400, ProxyOpsJson.error("valid chatId required"))
+            return
+        }
+        if (!telegramChatAllowed(chatId, cfg.telegramAllowedChatIds)) {
+            respond(exchange, 403, ProxyOpsJson.error("telegram-chat-not-allowed"))
+            return
+        }
+        val result = gateway.listAdministrators(chatId).get(TELEGRAM_REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        respond(exchange, 200, successJson(result))
+    }
+
+    private fun telegramMember(
+        exchange: HttpExchange,
+        cfg: ProxyOpsHttpConfig,
+    ) {
+        if (!requireTelegramRead(exchange, cfg)) return
+        val gateway = requireTelegramGateway(exchange) ?: return
+        val query = parseQuery(exchange.requestURI.rawQuery)
+        val chatId = query["chatId"].orEmpty()
+        val userId = query["userId"]?.toLongOrNull()
+        if (!validTelegramChatId(chatId) || userId == null || userId <= 0) {
+            respond(exchange, 400, ProxyOpsJson.error("valid chatId and userId required"))
+            return
+        }
+        if (!telegramChatAllowed(chatId, cfg.telegramAllowedChatIds)) {
+            respond(exchange, 403, ProxyOpsJson.error("telegram-chat-not-allowed"))
+            return
+        }
+        val result = gateway.readMember(chatId, userId).get(TELEGRAM_REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         respond(exchange, 200, successJson(result))
     }
 
@@ -305,6 +357,33 @@ class ProxyOpsHttpServer(
         respond(exchange, 200, successJson(result))
     }
 
+    private fun telegramMemberMutation(
+        exchange: HttpExchange,
+        cfg: ProxyOpsHttpConfig,
+    ) {
+        if (!requireTelegramAdmin(exchange, cfg)) return
+        val gateway = requireTelegramGateway(exchange) ?: return
+        val map = readJsonMap(exchange) ?: return
+        val request = parseTelegramMemberMutation(map)
+        if (request == null) {
+            respond(exchange, 400, ProxyOpsJson.error("invalid Telegram member action"))
+            return
+        }
+        if (!telegramChatAllowed(request.chatId, cfg.telegramAdminChatIds)) {
+            respond(exchange, 403, ProxyOpsJson.error("telegram-chat-not-allowed"))
+            return
+        }
+        if (!requireConfirmation(exchange, map, "TELEGRAM MEMBER ${request.operation.name} ${request.userId}")) return
+        val result = gateway.mutateMember(request).get(TELEGRAM_REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        log.info(
+            "Telegram ops mutation surface=member operation={} chat={} user={}",
+            request.operation.name,
+            request.chatId,
+            request.userId,
+        )
+        respond(exchange, 200, successJson(result))
+    }
+
     private fun discordGuilds(
         exchange: HttpExchange,
         cfg: ProxyOpsHttpConfig,
@@ -336,6 +415,18 @@ class ProxyOpsHttpServer(
         val guildId = parseQuery(exchange.requestURI.rawQuery)["guildId"].orEmpty()
         if (!requireAllowedGuild(exchange, gateway, cfg, guildId)) return
         respond(exchange, 200, successJson(gateway.listRoles(guildId)))
+    }
+
+    private fun discordInvites(
+        exchange: HttpExchange,
+        cfg: ProxyOpsHttpConfig,
+    ) {
+        if (!requireDiscordRead(exchange, cfg)) return
+        val gateway = requireDiscordGateway(exchange) ?: return
+        val guildId = parseQuery(exchange.requestURI.rawQuery)["guildId"].orEmpty()
+        if (!requireAllowedGuild(exchange, gateway, cfg, guildId)) return
+        val result = gateway.listInvites(guildId).get(DISCORD_REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        respond(exchange, 200, successJson(result))
     }
 
     private fun discordMember(
@@ -653,6 +744,51 @@ class ProxyOpsHttpServer(
         respond(exchange, 200, successJson(result))
     }
 
+    private fun discordGuildMutation(
+        exchange: HttpExchange,
+        cfg: ProxyOpsHttpConfig,
+    ) {
+        if (!requireDiscordAdmin(exchange, cfg)) return
+        val gateway = requireDiscordGateway(exchange) ?: return
+        val map = readJsonMap(exchange) ?: return
+        val request = parseGuildMutation(map)
+        if (request == null || !validSnowflake(request.guildId)) {
+            respond(exchange, 400, ProxyOpsJson.error("invalid Discord guild action"))
+            return
+        }
+        if (!requireAllowedGuild(exchange, gateway, cfg, request.guildId)) return
+        if (!requireConfirmation(exchange, map, "DISCORD GUILD ${request.operation.name} ${request.guildId}")) return
+        val result = gateway.mutateGuild(request).get(DISCORD_REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        logDiscordMutation("guild", request.operation.name, request.guildId, result)
+        respond(exchange, 200, successJson(result))
+    }
+
+    private fun discordInviteMutation(
+        exchange: HttpExchange,
+        cfg: ProxyOpsHttpConfig,
+    ) {
+        if (!requireDiscordAdmin(exchange, cfg)) return
+        val gateway = requireDiscordGateway(exchange) ?: return
+        val map = readJsonMap(exchange) ?: return
+        val request = parseDiscordInviteMutation(map)
+        if (request == null || !validSnowflake(request.guildId)) {
+            respond(exchange, 400, ProxyOpsJson.error("invalid Discord invite action"))
+            return
+        }
+        if (!requireAllowedGuild(exchange, gateway, cfg, request.guildId)) return
+        if (request.channelId != null &&
+            !gateway.isChannelAllowed(request.channelId, cfg.discordAllowedGuildIds, cfg.discordAllowedChannelIds)
+        ) {
+            respond(exchange, 403, ProxyOpsJson.error("discord-channel-not-allowed"))
+            return
+        }
+        val target = request.channelId ?: request.code.orEmpty()
+        if (!requireConfirmation(exchange, map, "DISCORD INVITE ${request.operation.name} $target")) return
+        val result = gateway.mutateInvite(request).get(DISCORD_REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        logDiscordMutation("invite", request.operation.name, target, result)
+        respond(exchange, 200, successJson(result))
+    }
+
     private fun requireDiscordWrite(
         exchange: HttpExchange,
         cfg: ProxyOpsHttpConfig,
@@ -888,6 +1024,7 @@ class ProxyOpsHttpServer(
                 add("GET /ops/discord/guilds")
                 add("GET /ops/discord/channels")
                 add("GET /ops/discord/roles?guildId=")
+                add("GET /ops/discord/invites?guildId=")
                 add("GET /ops/discord/member?guildId=&userId=")
                 add("GET /ops/discord/messages?channelId=&limit=&before=")
                 add("GET /ops/discord/messages/{messageId}?channelId=")
@@ -903,10 +1040,14 @@ class ProxyOpsHttpServer(
                 add("POST /ops/discord/channels/actions")
                 add("POST /ops/discord/roles/actions")
                 add("POST /ops/discord/members/actions")
+                add("POST /ops/discord/guilds/actions")
+                add("POST /ops/discord/invites/actions")
             }
             if (cfg.telegramReadEnabled) {
                 add("GET /ops/telegram/chats")
                 add("GET /ops/telegram/chat?chatId=")
+                add("GET /ops/telegram/administrators?chatId=")
+                add("GET /ops/telegram/member?chatId=&userId=")
             }
             if (cfg.telegramWriteEnabled) {
                 add("POST /ops/telegram/messages/actions")
@@ -915,6 +1056,7 @@ class ProxyOpsHttpServer(
                 add("POST /ops/telegram/chats/actions")
                 add("POST /ops/telegram/topics/actions")
                 add("POST /ops/telegram/invites/actions")
+                add("POST /ops/telegram/members/actions")
             }
         }
 
@@ -1091,6 +1233,82 @@ class ProxyOpsHttpServer(
             null
         }
 
+    private fun parseGuildMutation(map: Map<String, Any?>): DiscordGuildMutationRequest? =
+        try {
+            DiscordGuildMutationRequest(
+                operation = enumValue(map.string("operation")),
+                guildId = map.string("guildId"),
+                name = map.optionalString("name", preserveBlank = true),
+                description = map.optionalString("description", preserveBlank = true),
+                iconDataBase64 = map.optionalString("iconDataBase64"),
+                removeIcon = map.boolean("removeIcon"),
+                bannerDataBase64 = map.optionalString("bannerDataBase64"),
+                removeBanner = map.boolean("removeBanner"),
+                verificationLevel = map.optionalString("verificationLevel"),
+                defaultNotificationLevel = map.optionalString("defaultNotificationLevel"),
+                explicitContentLevel = map.optionalString("explicitContentLevel"),
+                boostProgressBarEnabled = map.boolean("boostProgressBarEnabled"),
+                invitesDisabled = map.boolean("invitesDisabled"),
+                reason = map.optionalString("reason"),
+            ).also { request ->
+                require(validSnowflake(request.guildId))
+                require(request.name == null || request.name.length in 2..DISCORD_GUILD_NAME_MAX_LENGTH)
+                require(request.description == null || request.description.length <= DISCORD_GUILD_DESCRIPTION_MAX_LENGTH)
+                require(request.iconDataBase64 == null || request.removeIcon != true)
+                require(request.bannerDataBase64 == null || request.removeBanner != true)
+                request.iconDataBase64?.let(::validateDiscordImage)
+                request.bannerDataBase64?.let(::validateDiscordImage)
+                request.verificationLevel?.let { enumValue<net.dv8tion.jda.api.entities.Guild.VerificationLevel>(it) }
+                request.defaultNotificationLevel?.let { enumValue<net.dv8tion.jda.api.entities.Guild.NotificationLevel>(it) }
+                request.explicitContentLevel?.let { enumValue<net.dv8tion.jda.api.entities.Guild.ExplicitContentLevel>(it) }
+                require(
+                    request.name != null || request.description != null || request.iconDataBase64 != null ||
+                        request.removeIcon == true || request.bannerDataBase64 != null || request.removeBanner == true ||
+                        request.verificationLevel != null || request.defaultNotificationLevel != null ||
+                        request.explicitContentLevel != null || request.boostProgressBarEnabled != null ||
+                        request.invitesDisabled != null,
+                )
+            }
+        } catch (_: Exception) {
+            null
+        }
+
+    private fun parseDiscordInviteMutation(map: Map<String, Any?>): DiscordInviteMutationRequest? =
+        try {
+            DiscordInviteMutationRequest(
+                operation = enumValue(map.string("operation")),
+                guildId = map.string("guildId"),
+                channelId = map.optionalString("channelId"),
+                code = map.optionalString("code"),
+                maxAgeSeconds = map.integer("maxAgeSeconds"),
+                maxUses = map.integer("maxUses"),
+                temporary = map.boolean("temporary"),
+                unique = map.boolean("unique"),
+                reason = map.optionalString("reason"),
+            ).also { request ->
+                require(validSnowflake(request.guildId))
+                require(request.channelId == null || validSnowflake(request.channelId))
+                require(request.code == null || request.code.matches(Regex("[A-Za-z0-9_-]{2,64}")))
+                require(request.maxAgeSeconds == null || request.maxAgeSeconds in 0..DISCORD_INVITE_MAX_AGE_SECONDS)
+                require(request.maxUses == null || request.maxUses in 0..DISCORD_INVITE_MAX_USES)
+                when (request.operation) {
+                    DiscordInviteMutation.CREATE -> require(request.channelId != null && request.code == null)
+                    DiscordInviteMutation.DELETE ->
+                        require(
+                            request.channelId == null && request.code != null && request.maxAgeSeconds == null &&
+                                request.maxUses == null && request.temporary == null && request.unique == null,
+                        )
+                }
+            }
+        } catch (_: Exception) {
+            null
+        }
+
+    private fun validateDiscordImage(dataBase64: String) {
+        val bytes = java.util.Base64.getDecoder().decode(dataBase64)
+        require(bytes.isNotEmpty() && bytes.size <= DISCORD_IMAGE_MAX_BYTES)
+    }
+
     private fun parseTelegramMessageMutation(map: Map<String, Any?>): TelegramMessageMutationRequest? =
         try {
             val buttons =
@@ -1150,19 +1368,38 @@ class ProxyOpsHttpServer(
                 description = map.optionalString("description", preserveBlank = true),
                 permissions = map.objectMap("permissions")?.let(::parseTelegramPermissions),
                 useIndependentPermissions = map.boolean("useIndependentPermissions"),
+                photo = map.objectMap("photo")?.let(::parseTelegramAttachment),
+                stickerSetName = map.optionalString("stickerSetName"),
             ).also { request ->
                 require(validTelegramChatId(request.chatId))
+                require(request.stickerSetName == null || request.stickerSetName.length <= TELEGRAM_STICKER_SET_NAME_MAX_LENGTH)
                 when (request.operation) {
                     TelegramChatMutation.UPDATE -> {
                         require(request.title != null || request.description != null)
-                        require(request.permissions == null)
+                        require(request.permissions == null && request.photo == null && request.stickerSetName == null)
                         require(request.title == null || request.title.length in 1..TELEGRAM_TITLE_MAX_LENGTH)
                         require(request.description == null || request.description.length <= TELEGRAM_DESCRIPTION_MAX_LENGTH)
                     }
                     TelegramChatMutation.SET_PERMISSIONS -> {
                         require(request.permissions != null)
-                        require(request.title == null && request.description == null)
+                        require(request.title == null && request.description == null && request.photo == null && request.stickerSetName == null)
                     }
+                    TelegramChatMutation.SET_PHOTO -> {
+                        require(request.photo?.type == TelegramAttachmentType.PHOTO)
+                        require(request.photo.dataBase64 != null)
+                        require(request.title == null && request.description == null && request.permissions == null && request.stickerSetName == null)
+                    }
+                    TelegramChatMutation.SET_STICKER_SET -> {
+                        require(request.stickerSetName != null)
+                        require(request.title == null && request.description == null && request.permissions == null && request.photo == null)
+                    }
+                    TelegramChatMutation.DELETE_PHOTO,
+                    TelegramChatMutation.UNPIN_ALL,
+                    TelegramChatMutation.DELETE_STICKER_SET,
+                    -> require(
+                        request.title == null && request.description == null && request.permissions == null &&
+                            request.photo == null && request.stickerSetName == null,
+                    )
                 }
             }
         } catch (_: Exception) {
@@ -1190,7 +1427,16 @@ class ProxyOpsHttpServer(
                     TelegramTopicMutation.CLOSE,
                     TelegramTopicMutation.REOPEN,
                     TelegramTopicMutation.DELETE,
+                    TelegramTopicMutation.UNPIN_ALL,
                     -> require(request.threadId != null)
+                    TelegramTopicMutation.GENERAL_UPDATE ->
+                        require(request.threadId == null && request.name != null && request.iconColor == null && request.iconCustomEmojiId == null)
+                    TelegramTopicMutation.GENERAL_CLOSE,
+                    TelegramTopicMutation.GENERAL_REOPEN,
+                    TelegramTopicMutation.GENERAL_HIDE,
+                    TelegramTopicMutation.GENERAL_UNHIDE,
+                    TelegramTopicMutation.GENERAL_UNPIN_ALL,
+                    -> require(request.threadId == null && request.name == null && request.iconColor == null && request.iconCustomEmojiId == null)
                 }
             }
         } catch (_: Exception) {
@@ -1215,7 +1461,58 @@ class ProxyOpsHttpServer(
                 require(request.createsJoinRequest != true || request.memberLimit == null)
                 when (request.operation) {
                     TelegramInviteMutation.CREATE -> require(request.inviteLink == null)
+                    TelegramInviteMutation.EDIT -> require(!request.inviteLink.isNullOrBlank())
                     TelegramInviteMutation.REVOKE -> require(!request.inviteLink.isNullOrBlank())
+                }
+            }
+        } catch (_: Exception) {
+            null
+        }
+
+    private fun parseTelegramMemberMutation(map: Map<String, Any?>): TelegramMemberMutationRequest? =
+        try {
+            TelegramMemberMutationRequest(
+                operation = enumValue(map.string("operation")),
+                chatId = map.string("chatId"),
+                userId = map.long("userId") ?: error("userId required"),
+                untilDate = map.integer("untilDate"),
+                revokeMessages = map.boolean("revokeMessages"),
+                onlyIfBanned = map.boolean("onlyIfBanned"),
+                permissions = map.objectMap("permissions")?.let(::parseTelegramPermissions),
+                useIndependentPermissions = map.boolean("useIndependentPermissions"),
+                administratorRights = map.objectMap("administratorRights")?.let(::parseTelegramAdministratorRights),
+                customTitle = map.optionalString("customTitle", preserveBlank = true),
+            ).also { request ->
+                require(validTelegramChatId(request.chatId))
+                require(request.userId > 0)
+                require(request.untilDate == null || request.untilDate > 0)
+                require(request.customTitle == null || request.customTitle.length in 0..TELEGRAM_ADMIN_TITLE_MAX_LENGTH)
+                when (request.operation) {
+                    TelegramMemberMutation.BAN ->
+                        require(request.permissions == null && request.administratorRights == null && request.customTitle == null)
+                    TelegramMemberMutation.UNBAN ->
+                        require(
+                            request.untilDate == null && request.revokeMessages == null && request.permissions == null &&
+                                request.administratorRights == null && request.customTitle == null,
+                        )
+                    TelegramMemberMutation.RESTRICT ->
+                        require(request.permissions != null && request.administratorRights == null && request.customTitle == null)
+                    TelegramMemberMutation.PROMOTE ->
+                        require(
+                            request.administratorRights != null && request.permissions == null && request.customTitle == null &&
+                                request.untilDate == null && request.revokeMessages == null && request.onlyIfBanned == null,
+                        )
+                    TelegramMemberMutation.SET_ADMIN_TITLE ->
+                        require(
+                            request.customTitle != null && request.permissions == null && request.administratorRights == null &&
+                                request.untilDate == null && request.revokeMessages == null && request.onlyIfBanned == null,
+                        )
+                    TelegramMemberMutation.APPROVE_JOIN_REQUEST,
+                    TelegramMemberMutation.DECLINE_JOIN_REQUEST,
+                    -> require(
+                        request.permissions == null && request.administratorRights == null && request.customTitle == null &&
+                            request.untilDate == null && request.revokeMessages == null && request.onlyIfBanned == null,
+                    )
                 }
             }
         } catch (_: Exception) {
@@ -1278,6 +1575,36 @@ class ProxyOpsHttpServer(
         )
     }
 
+    private fun parseTelegramAdministratorRights(map: Map<String, Any?>): TelegramAdministratorRightsSpec {
+        require(map.isNotEmpty())
+        val allowed =
+            setOf(
+                "canManageChat", "canChangeInfo", "canPostMessages", "canEditMessages", "canDeleteMessages",
+                "canInviteUsers", "canRestrictMembers", "canPinMessages", "canPromoteMembers",
+                "canManageVideoChats", "canManageTopics", "canPostStories", "canEditStories",
+                "canDeleteStories", "isAnonymous",
+            )
+        require(map.keys.all(allowed::contains))
+        require(map.values.all { it is Boolean })
+        return TelegramAdministratorRightsSpec(
+            canManageChat = map.boolean("canManageChat"),
+            canChangeInfo = map.boolean("canChangeInfo"),
+            canPostMessages = map.boolean("canPostMessages"),
+            canEditMessages = map.boolean("canEditMessages"),
+            canDeleteMessages = map.boolean("canDeleteMessages"),
+            canInviteUsers = map.boolean("canInviteUsers"),
+            canRestrictMembers = map.boolean("canRestrictMembers"),
+            canPinMessages = map.boolean("canPinMessages"),
+            canPromoteMembers = map.boolean("canPromoteMembers"),
+            canManageVideoChats = map.boolean("canManageVideoChats"),
+            canManageTopics = map.boolean("canManageTopics"),
+            canPostStories = map.boolean("canPostStories"),
+            canEditStories = map.boolean("canEditStories"),
+            canDeleteStories = map.boolean("canDeleteStories"),
+            isAnonymous = map.boolean("isAnonymous"),
+        )
+    }
+
     private fun parseEmbed(map: Map<String, Any?>): DiscordEmbedSpec =
         DiscordEmbedSpec(
             title = map.optionalString("title", preserveBlank = true),
@@ -1333,6 +1660,13 @@ class ProxyOpsHttpServer(
 
     private fun Map<String, Any?>.integer(key: String): Int? = (this[key] as? Number)?.toInt()
 
+    private fun Map<String, Any?>.long(key: String): Long? =
+        when (val value = this[key]) {
+            is Number -> value.toLong()
+            is String -> value.toLongOrNull()
+            else -> null
+        }
+
     @Suppress("UNCHECKED_CAST")
     private fun Map<String, Any?>.objectMap(key: String): Map<String, Any?>? =
         this[key]?.let { it as? Map<String, Any?> ?: error("$key must be an object") }
@@ -1385,6 +1719,11 @@ class ProxyOpsHttpServer(
 
     companion object {
         private const val DISCORD_MESSAGE_MAX_LENGTH = 2_000
+        private const val DISCORD_GUILD_NAME_MAX_LENGTH = 100
+        private const val DISCORD_GUILD_DESCRIPTION_MAX_LENGTH = 1_200
+        private const val DISCORD_IMAGE_MAX_BYTES = 8 * 1024 * 1024
+        private const val DISCORD_INVITE_MAX_AGE_SECONDS = 604_800
+        private const val DISCORD_INVITE_MAX_USES = 100
         private const val DISCORD_REQUEST_TIMEOUT_SECONDS = 15L
         private const val TELEGRAM_MESSAGE_MAX_LENGTH = 4_096
         private const val TELEGRAM_CAPTION_MAX_LENGTH = 1_024
@@ -1392,6 +1731,8 @@ class ProxyOpsHttpServer(
         private const val TELEGRAM_DESCRIPTION_MAX_LENGTH = 255
         private const val TELEGRAM_TOPIC_NAME_MAX_LENGTH = 128
         private const val TELEGRAM_INVITE_NAME_MAX_LENGTH = 32
+        private const val TELEGRAM_STICKER_SET_NAME_MAX_LENGTH = 64
+        private const val TELEGRAM_ADMIN_TITLE_MAX_LENGTH = 16
         private const val TELEGRAM_INVITE_MEMBER_LIMIT_MAX = 99_999
         private const val TELEGRAM_BUTTON_ROWS_MAX = 8
         private const val TELEGRAM_BUTTONS_PER_ROW_MAX = 8

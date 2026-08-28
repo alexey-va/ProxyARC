@@ -282,6 +282,72 @@ class ProxyOpsHttpServerTest : FreeSpec({
         fixture.close()
     }
 
+    "Discord guild images and invite lifecycle use bounded admin routes" {
+        val fixture =
+            discordServer(
+                """
+                discord-admin-enabled: true
+                discord-allowed-guild-ids:
+                  - "100000000000000001"
+                discord-allowed-channel-ids:
+                  - "200000000000000002"
+                """,
+            )
+
+        val guild =
+            fixture.request(
+                "POST",
+                "/ops/discord/guilds/actions",
+                """
+                {
+                  "operation": "update",
+                  "guildId": "100000000000000001",
+                  "name": "RusCrafting",
+                  "iconDataBase64": "aW1hZ2U=",
+                  "invitesDisabled": false,
+                  "confirmation": "DISCORD GUILD UPDATE 100000000000000001"
+                }
+                """.trimIndent(),
+            )
+        guild.statusCode() shouldBe 200
+        fixture.gateway.lastGuildRequest shouldBe
+            DiscordGuildMutationRequest(
+                operation = DiscordGuildMutation.UPDATE,
+                guildId = "100000000000000001",
+                name = "RusCrafting",
+                iconDataBase64 = "aW1hZ2U=",
+                invitesDisabled = false,
+            )
+
+        val invite =
+            fixture.request(
+                "POST",
+                "/ops/discord/invites/actions",
+                """
+                {
+                  "operation": "create",
+                  "guildId": "100000000000000001",
+                  "channelId": "200000000000000002",
+                  "maxAgeSeconds": 3600,
+                  "maxUses": 10,
+                  "unique": true,
+                  "confirmation": "DISCORD INVITE CREATE 200000000000000002"
+                }
+                """.trimIndent(),
+            )
+        invite.statusCode() shouldBe 200
+        fixture.gateway.lastInviteRequest shouldBe
+            DiscordInviteMutationRequest(
+                operation = DiscordInviteMutation.CREATE,
+                guildId = "100000000000000001",
+                channelId = "200000000000000002",
+                maxAgeSeconds = 3_600,
+                maxUses = 10,
+                unique = true,
+            )
+        fixture.close()
+    }
+
     "Discord search cannot bypass a bounded channel allowlist" {
         val fixture =
             discordServer(
@@ -495,6 +561,49 @@ class ProxyOpsHttpServerTest : FreeSpec({
         fixture.close()
     }
 
+    "Telegram channel photo is an admin upload instead of a browser-only action" {
+        val fixture =
+            discordServer(
+                """
+                telegram-admin-enabled: true
+                telegram-admin-chat-ids:
+                  - "-100200"
+                """,
+            )
+
+        val response =
+            fixture.request(
+                "POST",
+                "/ops/telegram/chats/actions",
+                """
+                {
+                  "operation": "set_photo",
+                  "chatId": "-100200",
+                  "photo": {
+                    "type": "photo",
+                    "fileName": "ruscrafting.png",
+                    "dataBase64": "aW1hZ2U="
+                  },
+                  "confirmation": "TELEGRAM CHAT SET_PHOTO -100200"
+                }
+                """.trimIndent(),
+            )
+
+        response.statusCode() shouldBe 200
+        fixture.telegramGateway.lastChatRequest shouldBe
+            TelegramChatMutationRequest(
+                operation = TelegramChatMutation.SET_PHOTO,
+                chatId = "-100200",
+                photo =
+                    TelegramAttachmentSpec(
+                        type = TelegramAttachmentType.PHOTO,
+                        fileName = "ruscrafting.png",
+                        dataBase64 = "aW1hZ2U=",
+                    ),
+            )
+        fixture.close()
+    }
+
     "Telegram rich posts support formatting buttons and bounded attachments" {
         val fixture =
             discordServer(
@@ -642,6 +751,64 @@ class ProxyOpsHttpServerTest : FreeSpec({
         fixture.close()
     }
 
+    "Telegram general topics and member moderation are first-class admin ops" {
+        val fixture =
+            discordServer(
+                """
+                telegram-admin-enabled: true
+                telegram-admin-chat-ids:
+                  - "-100200"
+                """,
+            )
+
+        val topic =
+            fixture.request(
+                "POST",
+                "/ops/telegram/topics/actions",
+                """
+                {
+                  "operation": "general_update",
+                  "chatId": "-100200",
+                  "name": "Общий Discord",
+                  "confirmation": "TELEGRAM TOPIC GENERAL_UPDATE -100200"
+                }
+                """.trimIndent(),
+            )
+        topic.statusCode() shouldBe 200
+        fixture.telegramGateway.lastTopicRequest shouldBe
+            TelegramTopicMutationRequest(
+                operation = TelegramTopicMutation.GENERAL_UPDATE,
+                chatId = "-100200",
+                name = "Общий Discord",
+            )
+
+        val member =
+            fixture.request(
+                "POST",
+                "/ops/telegram/members/actions",
+                """
+                {
+                  "operation": "restrict",
+                  "chatId": "-100200",
+                  "userId": 123456789,
+                  "permissions": {"canSendMessages": false},
+                  "untilDate": 2000000000,
+                  "confirmation": "TELEGRAM MEMBER RESTRICT 123456789"
+                }
+                """.trimIndent(),
+            )
+        member.statusCode() shouldBe 200
+        fixture.telegramGateway.lastMemberRequest shouldBe
+            TelegramMemberMutationRequest(
+                operation = TelegramMemberMutation.RESTRICT,
+                chatId = "-100200",
+                userId = 123_456_789,
+                untilDate = 2_000_000_000,
+                permissions = TelegramChatPermissionsSpec(canSendMessages = false),
+            )
+        fixture.close()
+    }
+
     "stop shuts down the worker executor" {
         val directory = Files.createTempDirectory("proxyarc-ops-server-")
         Files.writeString(
@@ -726,6 +893,8 @@ private class FakeDiscordOpsGateway : DiscordOpsGateway {
     var lastHistoryRequest: DiscordHistoryRequest? = null
     var lastMessageRequest: DiscordMessageMutationRequest? = null
     var lastChannelRequest: DiscordChannelMutationRequest? = null
+    var lastGuildRequest: DiscordGuildMutationRequest? = null
+    var lastInviteRequest: DiscordInviteMutationRequest? = null
 
     override fun isReady(): Boolean = ready
 
@@ -750,6 +919,9 @@ private class FakeDiscordOpsGateway : DiscordOpsGateway {
         mapOf("channels" to emptyList<Any>())
 
     override fun listRoles(guildId: String): Map<String, Any?> = mapOf("guildId" to guildId, "roles" to emptyList<Any>())
+
+    override fun listInvites(guildId: String): CompletableFuture<Map<String, Any?>> =
+        CompletableFuture.completedFuture(mapOf("guildId" to guildId, "invites" to emptyList<Any>()))
 
     override fun readMember(request: DiscordMemberReadRequest): CompletableFuture<Map<String, Any?>> =
         CompletableFuture.completedFuture(mapOf("userId" to request.userId))
@@ -791,6 +963,18 @@ private class FakeDiscordOpsGateway : DiscordOpsGateway {
 
     override fun mutateMember(request: DiscordMemberMutationRequest): CompletableFuture<Map<String, Any?>> =
         CompletableFuture.completedFuture(mapOf("userId" to request.userId))
+
+    override fun mutateGuild(request: DiscordGuildMutationRequest): CompletableFuture<Map<String, Any?>> {
+        lastGuildRequest = request
+        return CompletableFuture.completedFuture(mapOf<String, Any?>("guildId" to request.guildId))
+    }
+
+    override fun mutateInvite(request: DiscordInviteMutationRequest): CompletableFuture<Map<String, Any?>> {
+        lastInviteRequest = request
+        return CompletableFuture.completedFuture(
+            mapOf<String, Any?>("guildId" to request.guildId, "code" to request.code),
+        )
+    }
 }
 
 private class FakeTelegramOpsGateway : TelegramOpsGateway {
@@ -801,6 +985,7 @@ private class FakeTelegramOpsGateway : TelegramOpsGateway {
     var lastChatRequest: TelegramChatMutationRequest? = null
     var lastTopicRequest: TelegramTopicMutationRequest? = null
     var lastInviteRequest: TelegramInviteMutationRequest? = null
+    var lastMemberRequest: TelegramMemberMutationRequest? = null
 
     override fun isReady(): Boolean = ready
 
@@ -815,6 +1000,15 @@ private class FakeTelegramOpsGateway : TelegramOpsGateway {
         lastReadChatId = chatId
         return CompletableFuture.completedFuture(mapOf("id" to chatId, "type" to "channel"))
     }
+
+    override fun listAdministrators(chatId: String): CompletableFuture<Map<String, Any?>> =
+        CompletableFuture.completedFuture(mapOf("chatId" to chatId, "administrators" to emptyList<Any>()))
+
+    override fun readMember(
+        chatId: String,
+        userId: Long,
+    ): CompletableFuture<Map<String, Any?>> =
+        CompletableFuture.completedFuture(mapOf("chatId" to chatId, "member" to mapOf("userId" to userId)))
 
     override fun mutateMessage(request: TelegramMessageMutationRequest): CompletableFuture<Map<String, Any?>> {
         lastMessageRequest = request
@@ -838,5 +1032,10 @@ private class FakeTelegramOpsGateway : TelegramOpsGateway {
     override fun mutateInvite(request: TelegramInviteMutationRequest): CompletableFuture<Map<String, Any?>> {
         lastInviteRequest = request
         return CompletableFuture.completedFuture(mapOf("chatId" to request.chatId, "inviteLink" to "redacted"))
+    }
+
+    override fun mutateMember(request: TelegramMemberMutationRequest): CompletableFuture<Map<String, Any?>> {
+        lastMemberRequest = request
+        return CompletableFuture.completedFuture(mapOf("chatId" to request.chatId, "userId" to request.userId))
     }
 }

@@ -148,10 +148,13 @@ Available routes:
 | --- | --- | --- | --- |
 | `GET` | `/ops/telegram/chats` | read | Read metadata for every explicitly allowed chat id |
 | `GET` | `/ops/telegram/chat?chatId=...` | read | Read one allowed chat/channel |
+| `GET` | `/ops/telegram/administrators?chatId=...` | read | Read administrators and their effective rights |
+| `GET` | `/ops/telegram/member?chatId=...&userId=...` | read | Read one member and restrictions |
 | `POST` | `/ops/telegram/messages/actions` | write | Send rich posts, edit, delete, pin or unpin |
-| `POST` | `/ops/telegram/chats/actions` | admin | Update metadata or default member permissions |
-| `POST` | `/ops/telegram/topics/actions` | admin | Create, edit, close, reopen or delete forum topics |
-| `POST` | `/ops/telegram/invites/actions` | admin | Create or revoke invite links |
+| `POST` | `/ops/telegram/chats/actions` | admin | Metadata, photo, permissions, pins and sticker-set administration |
+| `POST` | `/ops/telegram/topics/actions` | admin | Full forum-topic and General-topic administration |
+| `POST` | `/ops/telegram/invites/actions` | admin | Create, edit or revoke invite links |
+| `POST` | `/ops/telegram/members/actions` | admin | Ban, unban, restrict, promote, title and join-request actions |
 
 Every mutation requires an exact confirmation string. A plain post:
 
@@ -197,6 +200,23 @@ Edit channel metadata:
 
 Updating both title and description issues two Bot API calls and is not transactional; after an upstream Telegram error, read the channel metadata before retrying.
 
+Set a channel or forum-group photo without a browser:
+
+```json
+{
+  "operation": "set_photo",
+  "chatId": "-1002222222222",
+  "photo": {
+    "type": "photo",
+    "fileName": "ruscrafting.png",
+    "dataBase64": "..."
+  },
+  "confirmation": "TELEGRAM CHAT SET_PHOTO -1002222222222"
+}
+```
+
+`set_photo` requires an uploaded base64 image because Telegram's `setChatPhoto` method requires multipart upload. `delete_photo`, `unpin_all`, `set_sticker_set`, and `delete_sticker_set` use the same chat route and exact operation-specific confirmation.
+
 Create a forum topic:
 
 ```json
@@ -208,6 +228,8 @@ Create a forum topic:
   "confirmation": "TELEGRAM TOPIC CREATE -1001111111111"
 }
 ```
+
+The broadcast channel itself cannot contain forum topics. Topic operations target the linked/bridged forum supergroup. Besides `create`, `update`, `close`, `reopen`, `delete`, and `unpin_all`, the route supports `general_update`, `general_close`, `general_reopen`, `general_hide`, `general_unhide`, and `general_unpin_all` for Telegram's special General topic.
 
 Set default member permissions:
 
@@ -236,5 +258,7 @@ TELEGRAM MESSAGE UNPIN <messageId>
 ```
 
 Invite creation uses `TELEGRAM INVITE CREATE <chatId>`; revocation uses `TELEGRAM INVITE REVOKE <chatId>`. Topic updates and destructive actions use the topic id as confirmation target, for example `TELEGRAM TOPIC DELETE 42`.
+
+Member moderation uses `TELEGRAM MEMBER <OPERATION> <userId>`. Supported operations are `ban`, `unban`, `restrict`, `promote`, `set_admin_title`, `approve_join_request`, and `decline_join_request`. `restrict` accepts the same permission object as `set_permissions`; `promote` accepts an `administratorRights` object with explicit nullable Bot API rights, so omitted rights are not silently invented.
 
 After changing destinations, mappings, token, or ops settings, `/proxyarc reload` safely restarts the Telegram session, reloads channel mappings, and restarts the ops HTTP server. Discord/JDA remains connected.
