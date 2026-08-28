@@ -17,6 +17,12 @@ class ProxyOpsHttpConfig private constructor(
     val discordAllowedChannelIds: Set<String>,
     val discordWriteChannelIds: Set<String>,
     val discordMaxHistory: Int,
+    val telegramReadEnabled: Boolean,
+    val telegramWriteEnabled: Boolean,
+    val telegramAdminEnabled: Boolean,
+    val telegramAllowedChatIds: Set<String>,
+    val telegramWriteChatIds: Set<String>,
+    val telegramAdminChatIds: Set<String>,
 ) {
     constructor(config: Config) : this(
         enabled = config.bool("enabled", false),
@@ -32,6 +38,12 @@ class ProxyOpsHttpConfig private constructor(
         discordAllowedChannelIds = config.idSet("discord-allowed-channel-ids"),
         discordWriteChannelIds = config.idSet("discord-write-channel-ids"),
         discordMaxHistory = config.integer("discord-max-history", 50).coerceIn(1, 100),
+        telegramReadEnabled = config.bool("telegram-read-enabled", false),
+        telegramWriteEnabled = config.bool("telegram-write-enabled", false),
+        telegramAdminEnabled = config.bool("telegram-admin-enabled", false),
+        telegramAllowedChatIds = config.idSet("telegram-allowed-chat-ids"),
+        telegramWriteChatIds = config.idSet("telegram-write-chat-ids"),
+        telegramAdminChatIds = config.idSet("telegram-admin-chat-ids"),
     )
 
     companion object {
@@ -50,6 +62,12 @@ class ProxyOpsHttpConfig private constructor(
                 discordAllowedChannelIds = emptySet(),
                 discordWriteChannelIds = emptySet(),
                 discordMaxHistory = 50,
+                telegramReadEnabled = false,
+                telegramWriteEnabled = false,
+                telegramAdminEnabled = false,
+                telegramAllowedChatIds = emptySet(),
+                telegramWriteChatIds = emptySet(),
+                telegramAdminChatIds = emptySet(),
             )
 
         @Volatile

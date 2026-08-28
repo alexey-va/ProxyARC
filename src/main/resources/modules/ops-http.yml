@@ -16,3 +16,14 @@ discord-allowed-guild-ids: []
 discord-allowed-channel-ids: []
 discord-write-channel-ids: []
 discord-max-history: 50
+
+# Telegram ops are independent from the bridge destinations and deny by default.
+# Use exact signed numeric chat/channel ids. Bot API cannot create a Telegram channel;
+# create it in Telegram, add the bot as administrator, then manage messages, metadata,
+# default permissions, forum topics and invite links through the documented routes.
+telegram-read-enabled: false
+telegram-write-enabled: false
+telegram-admin-enabled: false
+telegram-allowed-chat-ids: []
+telegram-write-chat-ids: []
+telegram-admin-chat-ids: []

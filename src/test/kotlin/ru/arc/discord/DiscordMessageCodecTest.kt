@@ -33,6 +33,10 @@ class DiscordMessageCodecTest : FreeSpec({
         codec.minecraftToDiscord("Привет @PlayerOne и @Unknown", null) shouldBe
             "Привет <@1073279640912789595> и @Unknown"
         codec.messageData("<@1073279640912789595>").allowedMentions shouldBe emptySet()
+        codec.messageData(
+            "<@1073279640912789595>",
+            setOf("1073279640912789595"),
+        ).mentionedUsers shouldBe setOf("1073279640912789595")
     }
 
     "strips Minecraft formatting while preserving web links" {

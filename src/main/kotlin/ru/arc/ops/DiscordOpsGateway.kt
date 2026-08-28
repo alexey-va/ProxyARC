@@ -94,6 +94,7 @@ data class DiscordMessageMutationRequest(
     val replyToMessageId: String? = null,
     val embeds: List<DiscordEmbedSpec>? = null,
     val attachments: List<DiscordAttachmentSpec> = emptyList(),
+    val allowedUserMentionIds: Set<String> = emptySet(),
     val emoji: String? = null,
     val reason: String? = null,
 )

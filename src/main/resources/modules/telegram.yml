@@ -1,13 +1,77 @@
 enabled: false
 token: "none"
+username: "RusCrafting"
+
+# Legacy fallback for existing installations. New setups should use bridge.* below.
 chat-id: 0
 
 topics:
   chat: 0
   general: 0
 
+# Three-way Minecraft <-> Discord <-> Telegram chat bridge.
+# Telegram chat/channel ids are signed integers; supergroups and channels usually start with -100.
+bridge:
+  chat:
+    chat-id: 0
+    thread-id: 0
+  general:
+    chat-id: 0
+    thread-id: 0
+
+# Optional public information channel. Discord general messages are mirrored here in addition
+# to bridge.general. Add the bot as a channel administrator with permission to post messages.
+channels:
+  information:
+    chat-id: 0
+    thread-id: 0
+    mirror-general: true
+
 chat-format: "<blue>T <gray>%sender% <dark_gray>» <white>%message%"
 discord-format: "**%sender%** » %message%"
+
+# One Minecraft UUID may be linked to both Discord and Telegram. The game issues a
+# one-time code with /verify telegram; the Telegram user completes it in a private
+# chat with /verify <code>. Numeric Telegram user ids are the trusted identity.
+identity:
+  enabled: true
+  private-chat-only: true
+  allowed-backends:
+    - "spawn"
+    - "survival"
+    - "parkour"
+    - "end"
+    - "etd"
+  codes:
+    length: 8
+    ttl-seconds: 600
+    issue-cooldown-seconds: 60
+    issue-window-seconds: 600
+    max-issues-per-window: 3
+    attempt-window-seconds: 600
+    max-attempts-per-window: 5
+  messages:
+    minecraft-challenge: "Код Telegram: %code%. Откройте @%bot_username% в личных сообщениях и отправьте /verify %code%. Код действует %minutes% мин."
+    minecraft-telegram-already-linked: "Telegram уже привязан к %player_name%."
+    minecraft-rate-limited: "Новый код Telegram можно получить через %minutes% мин."
+    minecraft-unavailable: "Привязка Telegram временно недоступна."
+    minecraft-status-linked: "Telegram привязан: @%telegram_username% → %player_name%."
+    minecraft-status-not-linked: "Telegram не привязан."
+    minecraft-unlink-success: "Telegram-аккаунт отвязан."
+    minecraft-unlink-not-linked: "Telegram-аккаунт не был привязан."
+    private-only: "Команды привязки работают только в личном чате с ботом."
+    status-linked: "Привязан Minecraft-аккаунт: %player_name%."
+    status-not-linked: "Аккаунт не привязан. Получите код в игре: /verify telegram"
+    verified: "Telegram привязан к Minecraft-аккаунту %player_name%."
+    verified-idempotent: "Telegram уже привязан к Minecraft-аккаунту %player_name%."
+    invalid-or-expired: "Код неверный или истёк. Получите новый: /verify telegram"
+    minecraft-already-linked: "Этот Minecraft-аккаунт уже связан с другим Telegram."
+    telegram-already-linked: "Этот Telegram уже связан с другим Minecraft-аккаунтом."
+    rate-limited: "Слишком много попыток. Повторите через %minutes% мин."
+    unlink-success: "Telegram отвязан от Minecraft-аккаунта %player_name%."
+    unlink-not-linked: "Telegram не привязан."
+    unlink-confirm: "Для отвязки отправьте /unlink confirm"
+    usage: "Использование: /verify <код>, /verify, /unlink confirm"
 
 messages:
   join: "Игрок %player_name% присоединился к серверу"

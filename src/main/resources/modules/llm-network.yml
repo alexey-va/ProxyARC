@@ -1,4 +1,5 @@
-# Non-secret OpenRouter route for Velocity. The API key remains live-only in llm.yml.
+# Shared non-secret outbound route for OpenRouter and Telegram on Velocity.
+# Provider credentials and the Telegram bot token remain in their feature configs.
 http-proxy:
   enabled: true
   host: "172.29.172.3"

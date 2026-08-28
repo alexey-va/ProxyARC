@@ -50,6 +50,8 @@ import ru.arc.hooks.LiteBansHook
 import ru.arc.hooks.LuckpermsHook
 import ru.arc.telegram.TelegramBot
 import ru.arc.telegram.TelegramModule
+import ru.arc.channelsync.ChannelSyncModule
+import ru.arc.channelsync.ChannelSyncService
 import ru.arc.xserver.NetworkRegistry
 import ru.arc.xserver.PlayerListAnnouncer
 import ru.arc.redis.RedisManager
@@ -128,6 +130,7 @@ class Velocity @Inject constructor(
             // Integrations (70-89)
             DiscordModule,
             TelegramModule,
+            ChannelSyncModule,
             AntibotModule,
             AssistantModule,
             ProxyOpsHttpModule,
@@ -232,6 +235,9 @@ class Velocity @Inject constructor(
 
         @JvmField
         var telegramBot: TelegramBot? = null
+
+        @JvmField
+        var channelSync: ChannelSyncService? = null
 
         @JvmField
         var firstJoinData: FirstJoinData? = null

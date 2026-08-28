@@ -4,9 +4,10 @@ import org.slf4j.LoggerFactory
 import org.telegram.telegrambots.meta.TelegramBotsApi
 import org.telegram.telegrambots.meta.generics.BotSession
 import org.telegram.telegrambots.updatesreceivers.DefaultBotSession
-import ru.arc.config.ProxyConfigs
 import ru.arc.core.PluginModule
+import ru.arc.config.ProxyConfigs
 import ru.arc.velocity.Velocity
+import java.util.concurrent.TimeUnit
 
 private val log = LoggerFactory.getLogger(TelegramModule::class.java)
 
@@ -24,13 +25,37 @@ object TelegramModule : PluginModule {
     override fun init() {
         shutdown()
         try {
-            val telegramConfig = ProxyConfigs.module("telegram.yml")
-            if (!telegramConfig.bool("enabled", false)) {
+            val telegramConfig = TelegramConfig.load()
+            if (!telegramConfig.enabled) {
                 log.info("TelegramBot is disabled in config")
                 return
             }
-            Velocity.telegramBot = runtime.start(TelegramBot())
-            log.info("TelegramBot initialized")
+            telegramConfig.validate()
+            val proxySettings = TelegramProxySettings.from(ProxyConfigs.module("llm-network.yml"))
+            val identity =
+                if (telegramConfig.identityEnabled) {
+                    runCatching {
+                        TelegramIdentityService(
+                            TelegramIdentityStore(Velocity.requireDataFolder()),
+                            telegramConfig,
+                        )
+                    }.onFailure { error ->
+                        log.error("Telegram identity service is unavailable", error)
+                    }.getOrNull()
+                } else {
+                    null
+                }
+            val bot =
+                runtime.start(
+                    TelegramBot(
+                        telegramConfig,
+                        identityService = identity,
+                        botOptions = proxySettings.botOptions(),
+                    ),
+                )
+            bot.probeConnectivity().get(CONNECTIVITY_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            Velocity.telegramBot = bot
+            log.info("TelegramBot initialized proxy={}", proxySettings.enabled)
         } catch (e: Exception) {
             runtime.close()
             Velocity.telegramBot = null
@@ -46,6 +71,8 @@ object TelegramModule : PluginModule {
     override fun reload() {
         init()
     }
+
+    private const val CONNECTIVITY_TIMEOUT_SECONDS = 15L
 }
 
 internal class TelegramRuntime(

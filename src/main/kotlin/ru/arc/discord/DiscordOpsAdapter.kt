@@ -305,6 +305,7 @@ internal class DiscordOpsAdapter(
             channel.sendMessage(data)
                 .setAllowedMentions(emptySet())
                 .mentionRepliedUser(false)
+        if (request.allowedUserMentionIds.isNotEmpty()) action.mentionUsers(request.allowedUserMentionIds)
         request.replyToMessageId?.let { action = action.setMessageReference(it) }
         return action.submit()
             .whenComplete { _, _ -> uploads.forEach(FileUpload::close) }
@@ -321,9 +322,10 @@ internal class DiscordOpsAdapter(
             request.content?.let(builder::setContent)
             request.embeds?.let { embeds -> builder.setEmbeds(embeds.map(::buildEmbed)) }
             if (uploads.isNotEmpty()) builder.setFiles(uploads)
-            message.editMessage(builder.build())
-                .setAllowedMentions(emptySet())
-                .submit()
+            message.editMessage(builder.build()).also { action ->
+                action.setAllowedMentions(emptySet())
+                if (request.allowedUserMentionIds.isNotEmpty()) action.mentionUsers(request.allowedUserMentionIds)
+            }.submit()
         }.whenComplete { _, _ -> uploads.forEach(FileUpload::close) }
             .thenApply(::messageMutationPayload)
     }

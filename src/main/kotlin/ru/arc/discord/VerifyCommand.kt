@@ -2,7 +2,10 @@ package ru.arc.discord
 
 import com.velocitypowered.api.command.SimpleCommand
 import com.velocitypowered.api.proxy.Player
+import net.kyori.adventure.text.Component
 import ru.arc.core.Tasks
+import ru.arc.telegram.TelegramChallengeIssueResult
+import ru.arc.telegram.TelegramUnlinkResult
 import ru.arc.velocity.Velocity
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
@@ -15,6 +18,11 @@ class VerifyCommand : SimpleCommand {
             invocation.source().sendMessage(messages.minecraft("only-player"))
             return
         }
+        val arguments = invocation.arguments().map(String::lowercase)
+        if (arguments.firstOrNull() == "telegram") {
+            executeTelegram(player, arguments.drop(1))
+            return
+        }
         val bot = Velocity.discordBot
         if (bot == null || !bot.isVerificationEnabled()) {
             player.sendMessage(messages.minecraft("unavailable"))
@@ -25,7 +33,7 @@ class VerifyCommand : SimpleCommand {
             player.sendMessage(messages.minecraft("backend-required"))
             return
         }
-        when (invocation.arguments().map(String::lowercase)) {
+        when (arguments) {
             emptyList<String>() -> issue(player, recovery = false, messages)
             listOf("status") -> showStatus(player, messages)
             listOf("recover") -> issue(player, recovery = true, messages)
@@ -33,6 +41,102 @@ class VerifyCommand : SimpleCommand {
             else -> player.sendMessage(messages.minecraft("usage"))
         }
     }
+
+    private fun executeTelegram(
+        player: Player,
+        arguments: List<String>,
+    ) {
+        val bot = Velocity.telegramBot
+        if (bot == null || !bot.isIdentityEnabled()) {
+            player.sendMessage(Component.text("Привязка Telegram временно недоступна."))
+            return
+        }
+        val backend = player.currentServer.map { it.serverInfo.name }.orElse(null)
+        if (!player.isActive || backend == null || !bot.isIdentityBackendAllowed(backend)) {
+            player.sendMessage(Component.text("Сначала войдите на игровой сервер."))
+            return
+        }
+        when (arguments) {
+            emptyList<String>() -> issueTelegram(player, bot)
+            listOf("status") -> showTelegramStatus(player, bot)
+            listOf("unlink", "confirm") -> unlinkTelegram(player, bot)
+            else -> player.sendMessage(Component.text("Использование: /verify telegram [status|unlink confirm]"))
+        }
+    }
+
+    private fun issueTelegram(
+        player: Player,
+        bot: ru.arc.telegram.TelegramBot,
+    ) {
+        Tasks.scheduler.runAsync {
+            val response =
+                when (val result = bot.issueIdentityChallenge(player.uniqueId, player.username)) {
+                    is TelegramChallengeIssueResult.Issued ->
+                        botIdentityMessage(
+                            "minecraft-challenge",
+                            mapOf(
+                                "code" to result.code,
+                                "bot_username" to bot.botUsername,
+                                "minutes" to retryMinutes(result.expiresAt).toString(),
+                            ),
+                        )
+                    is TelegramChallengeIssueResult.AlreadyLinked ->
+                        botIdentityMessage(
+                            "minecraft-telegram-already-linked",
+                            mapOf("player_name" to result.link.playerName),
+                        )
+                    is TelegramChallengeIssueResult.RateLimited ->
+                        botIdentityMessage(
+                            "minecraft-rate-limited",
+                            mapOf("minutes" to retryMinutes(result.retryAt).toString()),
+                        )
+                    TelegramChallengeIssueResult.Unavailable -> botIdentityMessage("minecraft-unavailable")
+                }
+            if (player.isActive) player.sendMessage(Component.text(response))
+        }
+    }
+
+    private fun showTelegramStatus(
+        player: Player,
+        bot: ru.arc.telegram.TelegramBot,
+    ) {
+        Tasks.scheduler.runAsync {
+            val link = bot.findIdentityByPlayer(player.uniqueId)
+            val response =
+                if (link == null) {
+                    botIdentityMessage("minecraft-status-not-linked")
+                } else {
+                    botIdentityMessage(
+                        "minecraft-status-linked",
+                        mapOf(
+                            "telegram_username" to (link.telegramUsername ?: link.telegramUserId.toString()),
+                            "player_name" to link.playerName,
+                        ),
+                    )
+                }
+            if (player.isActive) player.sendMessage(Component.text(response))
+        }
+    }
+
+    private fun unlinkTelegram(
+        player: Player,
+        bot: ru.arc.telegram.TelegramBot,
+    ) {
+        Tasks.scheduler.runAsync {
+            val response =
+                when (bot.unlinkIdentityByMinecraft(player.uniqueId)) {
+                    is TelegramUnlinkResult.Unlinked -> botIdentityMessage("minecraft-unlink-success")
+                    TelegramUnlinkResult.NotLinked -> botIdentityMessage("minecraft-unlink-not-linked")
+                    TelegramUnlinkResult.Unavailable -> botIdentityMessage("minecraft-unavailable")
+                }
+            if (player.isActive) player.sendMessage(Component.text(response))
+        }
+    }
+
+    private fun botIdentityMessage(
+        key: String,
+        values: Map<String, String> = emptyMap(),
+    ): String = Velocity.telegramBot?.identityMessage(key, values) ?: "Привязка Telegram временно недоступна."
 
     private fun issue(
         player: Player,
@@ -120,8 +224,22 @@ class VerifyCommand : SimpleCommand {
     override fun suggest(invocation: SimpleCommand.Invocation): List<String> {
         val args = invocation.arguments()
         return when (args.size) {
-            0, 1 -> listOf("status", "recover", "unlink").filter { it.startsWith(args.firstOrNull().orEmpty(), true) }
-            2 -> if (args[0].equals("unlink", true) && "confirm".startsWith(args[1], true)) listOf("confirm") else emptyList()
+            0, 1 -> listOf("status", "recover", "unlink", "telegram").filter { it.startsWith(args.firstOrNull().orEmpty(), true) }
+            2 ->
+                when {
+                    args[0].equals("unlink", true) && "confirm".startsWith(args[1], true) -> listOf("confirm")
+                    args[0].equals("telegram", true) ->
+                        listOf("status", "unlink").filter { it.startsWith(args[1], true) }
+                    else -> emptyList()
+                }
+            3 ->
+                if (args[0].equals("telegram", true) && args[1].equals("unlink", true) &&
+                    "confirm".startsWith(args[2], true)
+                ) {
+                    listOf("confirm")
+                } else {
+                    emptyList()
+                }
             else -> emptyList()
         }
     }

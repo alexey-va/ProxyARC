@@ -1,0 +1,20 @@
+# Generic Discord <-> Telegram channel/topic mappings. Text, replies and edits sync both ways;
+# Discord deletions sync to Telegram (Telegram does not publish deletion updates to bots).
+# Fixed Minecraft chat/general bridges remain in discord.yml and telegram.yml.
+enabled: false
+
+mappings: []
+
+# Example:
+# mappings:
+#   - id: community
+#     discord-channel-id: "1073279998359765042"
+#     telegram:
+#       chat-id: "-1001234567890"
+#       thread-id: 42
+#       username: "ruscrafting_chat" # optional, enables cross-platform channel mentions
+#     direction: both
+#     sync-edits: true
+#     sync-deletes: true
+#     to-discord-format: "**%sender%** » %message%"
+#     to-telegram-format: "%sender% » %message%"

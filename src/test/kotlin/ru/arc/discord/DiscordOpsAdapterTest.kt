@@ -51,6 +51,7 @@ class DiscordOpsAdapterTest : FreeSpec({
     "send disables mentions and replied-user ping" {
         val channelId = "100000000000000001"
         val replyId = "200000000000000002"
+        val allowedMentionId = "400000000000000004"
         val jda = mockk<JDA>()
         val channel = mockk<TextChannel>()
         val action = mockk<MessageCreateAction>()
@@ -59,6 +60,7 @@ class DiscordOpsAdapterTest : FreeSpec({
         every { channel.sendMessage(any<MessageCreateData>()) } returns action
         every { action.setAllowedMentions(emptySet()) } returns action
         every { action.mentionRepliedUser(false) } returns action
+        every { action.mentionUsers(setOf(allowedMentionId)) } returns action
         every { action.setMessageReference(replyId) } returns action
         every { action.submit() } returns CompletableFuture.completedFuture(sent)
         every { sent.id } returns "300000000000000003"
@@ -76,12 +78,14 @@ class DiscordOpsAdapterTest : FreeSpec({
                     channelId = channelId,
                     content = "Проверка",
                     replyToMessageId = replyId,
+                    allowedUserMentionIds = setOf(allowedMentionId),
                 ),
             ).join()
 
         result["id"] shouldBe "300000000000000003"
         verify(exactly = 1) { action.setAllowedMentions(emptySet()) }
         verify(exactly = 1) { action.mentionRepliedUser(false) }
+        verify(exactly = 1) { action.mentionUsers(setOf(allowedMentionId)) }
         verify(exactly = 1) { action.setMessageReference(replyId) }
     }
 })

@@ -1,9 +1,15 @@
 package ru.arc.discord
 
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent
+import net.dv8tion.jda.api.events.message.MessageDeleteEvent
+import net.dv8tion.jda.api.events.message.MessageUpdateEvent
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel
 import org.slf4j.LoggerFactory
 import ru.arc.ai.routing.ingress.ChatIngress
+import ru.arc.channelsync.ChannelSyncModule
+import ru.arc.channelsync.DiscordSyncMessage
+import ru.arc.channelsync.telegramHtmlEscape
+import ru.arc.ops.TelegramParseMode
 import ru.arc.velocity.Velocity
 
 internal class DiscordChatService(
@@ -14,22 +20,74 @@ internal class DiscordChatService(
     private val identityResolver: DiscordChatIdentityResolver = DiscordChatIdentityResolver(),
 ) {
     fun onMessage(event: MessageReceivedEvent) {
-        if (event.author.isBot || event.isWebhookMessage) return
+        if (event.author.isBot || event.message.isWebhookMessage) return
         val snapshot = session.snapshot() ?: return
+        val (genericMessage, technical) = codec.discordToChannelSync(event.message)
+        if (genericMessage.isNotBlank() &&
+            Velocity.channelSync?.relayDiscord(
+                DiscordSyncMessage(
+                    channelId = event.channel.id,
+                    messageId = event.messageId,
+                    sender = inboundAuthor(event),
+                    text = genericMessage,
+                    replyToMessageId = event.message.messageReference?.messageId,
+                    technical = technical,
+                ),
+            ) == true
+        ) {
+            return
+        }
         when (event.channel.id) {
             snapshot.channels.chat.id -> relayChatInbound(event)
             snapshot.channels.general.id -> relayGeneralInbound(event)
         }
     }
 
-    fun sendChatMessage(message: String) {
-        val snapshot = session.snapshot() ?: return
-        sendBounded(snapshot.channels.chat, codec.minecraftToDiscord(message, snapshot.channels.chat.guild))
+    fun onMessageUpdate(event: MessageUpdateEvent) {
+        if (event.author.isBot || event.message.isWebhookMessage) return
+        val (text, technical) = codec.discordToChannelSync(event.message)
+        if (text.isBlank()) return
+        Velocity.channelSync?.editDiscord(
+            DiscordSyncMessage(
+                channelId = event.channel.id,
+                messageId = event.messageId,
+                sender = identityResolver.resolve(
+                    discordUserId = event.author.id,
+                    discordDisplayName = event.member?.effectiveName ?: event.author.effectiveName,
+                ),
+                text = text,
+                replyToMessageId = event.message.messageReference?.messageId,
+                technical = technical,
+            ),
+        )
     }
 
-    fun sendGeneralMessage(message: String) {
+    fun onMessageDelete(event: MessageDeleteEvent) {
+        Velocity.channelSync?.deleteDiscord(event.channel.id, event.messageId)
+    }
+
+    fun sendChatMessage(
+        message: String,
+        allowedUserMentionIds: Set<String> = emptySet(),
+    ) {
         val snapshot = session.snapshot() ?: return
-        sendBounded(snapshot.channels.general, codec.minecraftToDiscord(message, snapshot.channels.general.guild))
+        sendBounded(
+            snapshot.channels.chat,
+            codec.minecraftToDiscord(message, snapshot.channels.chat.guild),
+            allowedUserMentionIds,
+        )
+    }
+
+    fun sendGeneralMessage(
+        message: String,
+        allowedUserMentionIds: Set<String> = emptySet(),
+    ) {
+        val snapshot = session.snapshot() ?: return
+        sendBounded(
+            snapshot.channels.general,
+            codec.minecraftToDiscord(message, snapshot.channels.general.guild),
+            allowedUserMentionIds,
+        )
     }
 
     fun clearChat(channelId: String) {
@@ -65,7 +123,11 @@ internal class DiscordChatService(
         Velocity.plugin?.sendMessageToAll(component)
 
         Velocity.telegramBot?.sendChatMessage(
-            configured.telegramMessage(author, messageText),
+            configured.telegramMessage(
+                telegramHtmlEscape(author),
+                translateForTelegram(event).text,
+            ),
+            TelegramParseMode.HTML,
         )
 
         val proxy = Velocity.proxyServer ?: return
@@ -91,9 +153,26 @@ internal class DiscordChatService(
         if (messageText.isBlank()) return
         val author = inboundAuthor(event)
         Velocity.telegramBot?.sendGeneralMessage(
-            configured.telegramMessage(author, messageText),
+            configured.telegramMessage(
+                telegramHtmlEscape(author),
+                translateForTelegram(event).text,
+            ),
+            TelegramParseMode.HTML,
         )
     }
+
+    private fun translateForTelegram(event: MessageReceivedEvent) =
+        codec.discordToChannelSync(event.message).let { (text, technical) ->
+            ChannelSyncModule.textCodec().discordToTelegram(
+                DiscordSyncMessage(
+                    channelId = event.channel.id,
+                    messageId = event.messageId,
+                    sender = inboundAuthor(event),
+                    text = text,
+                    technical = technical,
+                ),
+            )
+        }
 
     private fun inboundAuthor(event: MessageReceivedEvent): String =
         identityResolver.resolve(
@@ -104,9 +183,10 @@ internal class DiscordChatService(
     private fun sendBounded(
         channel: TextChannel,
         message: String,
+        allowedUserMentionIds: Set<String>,
     ) {
         splitMessage(message).forEach { part ->
-            channel.sendMessage(codec.messageData(part)).queue(
+            channel.sendMessage(codec.messageData(part, allowedUserMentionIds)).queue(
                 {},
                 { error -> log.warn("Failed to send Discord bridge message: {}", error.javaClass.simpleName) },
             )

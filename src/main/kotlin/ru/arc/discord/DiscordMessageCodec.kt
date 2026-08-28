@@ -8,6 +8,7 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.event.ClickEvent
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
+import ru.arc.channelsync.DiscordSyncTechnicalText
 
 /** One safe translation boundary for messages crossing Minecraft and Discord. */
 internal class DiscordMessageCodec(
@@ -28,6 +29,20 @@ internal class DiscordMessageCodec(
             message.stickers.forEach { sticker -> add(":${sticker.name}:") }
         }
         return (listOf(content).filter(String::isNotBlank) + extras).joinToString("\n").trim()
+    }
+
+    fun discordToChannelSync(message: Message): Pair<String, DiscordSyncTechnicalText> {
+        val extras = buildList {
+            message.attachments.forEach { attachment -> add("📎 ${attachment.fileName}: ${attachment.url}") }
+            message.stickers.forEach { sticker -> add(":${sticker.name}:") }
+        }
+        val raw = (listOf(message.contentRaw).filter(String::isNotBlank) + extras).joinToString("\n").trim()
+        return raw to
+            DiscordSyncTechnicalText(
+                userNamesById = message.mentions.users.associate { it.id to it.name },
+                roleNamesById = message.mentions.roles.associate { it.id to it.name },
+                channelNamesById = message.mentions.channels.associate { it.id to it.name },
+            )
     }
 
     fun minecraftToDiscord(
@@ -53,10 +68,16 @@ internal class DiscordMessageCodec(
         return text.trim()
     }
 
-    fun messageData(content: String): MessageCreateData =
+    fun messageData(
+        content: String,
+        allowedUserMentionIds: Set<String> = emptySet(),
+    ): MessageCreateData =
         MessageCreateBuilder()
             .setContent(content)
             .setAllowedMentions(emptySet())
+            .also { builder ->
+                if (allowedUserMentionIds.isNotEmpty()) builder.mentionUsers(allowedUserMentionIds)
+            }
             .build()
 
     fun minecraftBody(text: String): Component {

@@ -20,3 +20,9 @@ not required. For coordinated local development, opt in explicitly:
 ```
 
 The production artifact is `ztarget/ProxyARC.jar`.
+
+## Telegram channel
+
+Telegram can bridge Minecraft and Discord chat topics, translate verified mentions and formatting, link the same Minecraft identity to both platforms, and mirror Discord general messages into a public information channel. Channel metadata and posts are managed through deny-by-default ops endpoints with exact chat allowlists and mutation confirmations.
+
+Setup, permissions, configuration and request contracts are documented in [docs/telegram-channel-ops.md](docs/telegram-channel-ops.md).

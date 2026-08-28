@@ -249,12 +249,18 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
 
     override fun isReady(): Boolean = connection.isEnabled() && session.isReady()
 
-    fun sendChatMessage(message: String) {
-        chat.sendChatMessage(message)
+    fun sendChatMessage(
+        message: String,
+        allowedUserMentionIds: Set<String> = emptySet(),
+    ) {
+        chat.sendChatMessage(message, allowedUserMentionIds)
         notifications?.notifyMentions(message)
     }
 
-    fun sendGeneralMessage(message: String) = chat.sendGeneralMessage(message)
+    fun sendGeneralMessage(
+        message: String,
+        allowedUserMentionIds: Set<String> = emptySet(),
+    ) = chat.sendGeneralMessage(message, allowedUserMentionIds)
 
     fun clearChat(channelId: String) = chat.clearChat(channelId)
 
@@ -337,6 +343,9 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
 
     internal fun findIdentityByPlayer(playerUuid: UUID): DiscordIdentityLink? =
         verification?.findByPlayerUuid(playerUuid)
+
+    internal fun findIdentityByDiscordUser(discordUserId: String): DiscordIdentityLink? =
+        identities?.findByDiscordUserId(discordUserId)
 
     internal fun reconcileIdentity(
         playerUuid: UUID,

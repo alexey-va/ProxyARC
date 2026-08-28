@@ -43,6 +43,12 @@ class ProxyOpsHttpServerTest : FreeSpec({
         config.discordAllowedChannelIds shouldBe emptySet()
         config.discordWriteChannelIds shouldBe emptySet()
         config.discordMaxHistory shouldBe 50
+        config.telegramReadEnabled shouldBe false
+        config.telegramWriteEnabled shouldBe false
+        config.telegramAdminEnabled shouldBe false
+        config.telegramAllowedChatIds shouldBe emptySet()
+        config.telegramWriteChatIds shouldBe emptySet()
+        config.telegramAdminChatIds shouldBe emptySet()
     }
 
     "Discord ops parse explicit gates and bounded channel allowlist" {
@@ -63,6 +69,16 @@ class ProxyOpsHttpServerTest : FreeSpec({
             discord-write-channel-ids:
               - "1073279640912789597"
             discord-max-history: 500
+            telegram-read-enabled: true
+            telegram-write-enabled: true
+            telegram-admin-enabled: true
+            telegram-allowed-chat-ids:
+              - "-100100"
+              - "-100100"
+            telegram-write-chat-ids:
+              - "-100100"
+            telegram-admin-chat-ids:
+              - "-100200"
             """.trimIndent(),
         )
 
@@ -78,6 +94,12 @@ class ProxyOpsHttpServerTest : FreeSpec({
         )
         config.discordWriteChannelIds.shouldContainExactly("1073279640912789597")
         config.discordMaxHistory shouldBe 100
+        config.telegramReadEnabled shouldBe true
+        config.telegramWriteEnabled shouldBe true
+        config.telegramAdminEnabled shouldBe true
+        config.telegramAllowedChatIds.shouldContainExactly("-100100")
+        config.telegramWriteChatIds.shouldContainExactly("-100100")
+        config.telegramAdminChatIds.shouldContainExactly("-100200")
     }
 
     "Discord history route is bounded by config and delegates to the bot" {
@@ -311,6 +333,315 @@ class ProxyOpsHttpServerTest : FreeSpec({
         fixture.close()
     }
 
+    "Telegram reads are bounded by an explicit chat allowlist" {
+        val fixture =
+            discordServer(
+                """
+                telegram-read-enabled: true
+                telegram-allowed-chat-ids:
+                  - "-100100"
+                  - "-100200"
+                """,
+            )
+
+        val listed = fixture.request("GET", "/ops/telegram/chats")
+        val rejected = fixture.request("GET", "/ops/telegram/chat?chatId=-100300")
+
+        listed.statusCode() shouldBe 200
+        fixture.telegramGateway.lastListedChatIds.shouldContainExactly("-100100", "-100200")
+        rejected.statusCode() shouldBe 403
+        fixture.telegramGateway.lastReadChatId shouldBe null
+        fixture.close()
+    }
+
+    "Telegram chat listing rejects mutable or malformed configured ids" {
+        val fixture =
+            discordServer(
+                """
+                telegram-read-enabled: true
+                telegram-allowed-chat-ids:
+                  - "@mutable-name"
+                """,
+            )
+
+        val response = fixture.request("GET", "/ops/telegram/chats")
+
+        response.statusCode() shouldBe 400
+        fixture.telegramGateway.lastListedChatIds shouldBe emptySet()
+        fixture.close()
+    }
+
+    "Telegram message actions require write scope and exact confirmation" {
+        val fixture =
+            discordServer(
+                """
+                telegram-write-enabled: true
+                telegram-write-chat-ids:
+                  - "-100100"
+                """,
+            )
+        val body =
+            """
+            {
+              "operation": "send",
+              "chatId": "-100100",
+              "threadId": 7,
+              "text": "Новости сервера",
+              "disableNotification": true,
+              "confirmation": "TELEGRAM MESSAGE SEND -100100"
+            }
+            """.trimIndent()
+
+        val rejected =
+            fixture.request(
+                "POST",
+                "/ops/telegram/messages/actions",
+                body.replace("TELEGRAM MESSAGE SEND -100100", "yes"),
+            )
+        rejected.statusCode() shouldBe 400
+        fixture.telegramGateway.lastMessageRequest shouldBe null
+
+        val accepted = fixture.request("POST", "/ops/telegram/messages/actions", body)
+
+        accepted.statusCode() shouldBe 200
+        fixture.telegramGateway.lastMessageRequest shouldBe
+            TelegramMessageMutationRequest(
+                operation = TelegramMessageMutation.SEND,
+                chatId = "-100100",
+                threadId = 7,
+                text = "Новости сервера",
+                disableNotification = true,
+            )
+        fixture.close()
+    }
+
+    "Telegram routes reject requests while the bot is not ready" {
+        val fixture =
+            discordServer(
+                """
+                telegram-read-enabled: true
+                telegram-allowed-chat-ids:
+                  - "-100100"
+                """,
+            )
+        fixture.telegramGateway.ready = false
+
+        val response = fixture.request("GET", "/ops/telegram/chat?chatId=-100100")
+
+        response.statusCode() shouldBe 503
+        fixture.telegramGateway.lastReadChatId shouldBe null
+        fixture.close()
+    }
+
+    "Telegram channel title and description require admin scope" {
+        val fixture =
+            discordServer(
+                """
+                telegram-admin-enabled: true
+                telegram-admin-chat-ids:
+                  - "-100200"
+                """,
+            )
+        val body =
+            """
+            {
+              "operation": "update",
+              "chatId": "-100200",
+              "title": "RusCrafting — новости",
+              "description": "Новости, события и обновления сервера",
+              "confirmation": "TELEGRAM CHAT UPDATE -100200"
+            }
+            """.trimIndent()
+
+        val accepted = fixture.request("POST", "/ops/telegram/chats/actions", body)
+
+        accepted.statusCode() shouldBe 200
+        fixture.telegramGateway.lastChatRequest shouldBe
+            TelegramChatMutationRequest(
+                operation = TelegramChatMutation.UPDATE,
+                chatId = "-100200",
+                title = "RusCrafting — новости",
+                description = "Новости, события и обновления сервера",
+            )
+        fixture.close()
+    }
+
+    "Telegram mutations reject malformed ids before calling the bot" {
+        val fixture =
+            discordServer(
+                """
+                telegram-write-enabled: true
+                telegram-write-chat-ids:
+                  - "*"
+                """,
+            )
+
+        val response =
+            fixture.request(
+                "POST",
+                "/ops/telegram/messages/actions",
+                """
+                {
+                  "operation": "delete",
+                  "chatId": "@mutable-name",
+                  "messageId": 5,
+                  "confirmation": "TELEGRAM MESSAGE DELETE 5"
+                }
+                """.trimIndent(),
+            )
+
+        response.statusCode() shouldBe 400
+        fixture.telegramGateway.lastMessageRequest shouldBe null
+        fixture.close()
+    }
+
+    "Telegram rich posts support formatting buttons and bounded attachments" {
+        val fixture =
+            discordServer(
+                """
+                telegram-write-enabled: true
+                telegram-write-chat-ids:
+                  - "-100100"
+                """,
+            )
+
+        val response =
+            fixture.request(
+                "POST",
+                "/ops/telegram/messages/actions",
+                """
+                {
+                  "operation": "send",
+                  "chatId": "-100100",
+                  "text": "<b>Обновление</b>",
+                  "parseMode": "html",
+                  "protectContent": true,
+                  "buttons": [[{"text": "Открыть", "url": "https://ruscrafting.ru/news"}]],
+                  "attachment": {
+                    "type": "photo",
+                    "fileName": "news.png",
+                    "dataBase64": "aW1hZ2U=",
+                    "hasSpoiler": false
+                  },
+                  "confirmation": "TELEGRAM MESSAGE SEND -100100"
+                }
+                """.trimIndent(),
+            )
+
+        response.statusCode() shouldBe 200
+        fixture.telegramGateway.lastMessageRequest shouldBe
+            TelegramMessageMutationRequest(
+                operation = TelegramMessageMutation.SEND,
+                chatId = "-100100",
+                text = "<b>Обновление</b>",
+                parseMode = TelegramParseMode.HTML,
+                protectContent = true,
+                buttons = listOf(listOf(TelegramButtonSpec("Открыть", "https://ruscrafting.ru/news"))),
+                attachment =
+                    TelegramAttachmentSpec(
+                        type = TelegramAttachmentType.PHOTO,
+                        fileName = "news.png",
+                        dataBase64 = "aW1hZ2U=",
+                        hasSpoiler = false,
+                    ),
+            )
+        fixture.close()
+    }
+
+    "Telegram forum topics and permissions use the admin scope" {
+        val fixture =
+            discordServer(
+                """
+                telegram-admin-enabled: true
+                telegram-admin-chat-ids:
+                  - "-100200"
+                """,
+            )
+
+        val topic =
+            fixture.request(
+                "POST",
+                "/ops/telegram/topics/actions",
+                """
+                {
+                  "operation": "create",
+                  "chatId": "-100200",
+                  "name": "Обновления",
+                  "iconColor": 7322096,
+                  "confirmation": "TELEGRAM TOPIC CREATE -100200"
+                }
+                """.trimIndent(),
+            )
+        topic.statusCode() shouldBe 200
+        fixture.telegramGateway.lastTopicRequest shouldBe
+            TelegramTopicMutationRequest(
+                operation = TelegramTopicMutation.CREATE,
+                chatId = "-100200",
+                name = "Обновления",
+                iconColor = 7_322_096,
+            )
+
+        val permissions =
+            fixture.request(
+                "POST",
+                "/ops/telegram/chats/actions",
+                """
+                {
+                  "operation": "set_permissions",
+                  "chatId": "-100200",
+                  "permissions": {"canSendMessages": true, "canManageTopics": false},
+                  "useIndependentPermissions": true,
+                  "confirmation": "TELEGRAM CHAT SET_PERMISSIONS -100200"
+                }
+                """.trimIndent(),
+            )
+        permissions.statusCode() shouldBe 200
+        fixture.telegramGateway.lastChatRequest shouldBe
+            TelegramChatMutationRequest(
+                operation = TelegramChatMutation.SET_PERMISSIONS,
+                chatId = "-100200",
+                permissions = TelegramChatPermissionsSpec(canSendMessages = true, canManageTopics = false),
+                useIndependentPermissions = true,
+            )
+        fixture.close()
+    }
+
+    "Telegram invite creation is separately confirmed" {
+        val fixture =
+            discordServer(
+                """
+                telegram-admin-enabled: true
+                telegram-admin-chat-ids:
+                  - "-100200"
+                """,
+            )
+
+        val response =
+            fixture.request(
+                "POST",
+                "/ops/telegram/invites/actions",
+                """
+                {
+                  "operation": "create",
+                  "chatId": "-100200",
+                  "name": "Discord bridge",
+                  "memberLimit": 100,
+                  "confirmation": "TELEGRAM INVITE CREATE -100200"
+                }
+                """.trimIndent(),
+            )
+
+        response.statusCode() shouldBe 200
+        fixture.telegramGateway.lastInviteRequest shouldBe
+            TelegramInviteMutationRequest(
+                operation = TelegramInviteMutation.CREATE,
+                chatId = "-100200",
+                name = "Discord bridge",
+                memberLimit = 100,
+            )
+        fixture.close()
+    }
+
     "stop shuts down the worker executor" {
         val directory = Files.createTempDirectory("proxyarc-ops-server-")
         Files.writeString(
@@ -336,6 +667,7 @@ class ProxyOpsHttpServerTest : FreeSpec({
 private class DiscordServerFixture(
     val server: ProxyOpsHttpServer,
     val gateway: FakeDiscordOpsGateway,
+    val telegramGateway: FakeTelegramOpsGateway,
 ) : AutoCloseable {
     private val client = HttpClient.newHttpClient()
 
@@ -377,14 +709,16 @@ private fun discordServer(extraConfig: String): DiscordServerFixture {
     )
     val config = ProxyOpsHttpConfig(ConfigManager.of(directory, "ops-http.yml"))
     val gateway = FakeDiscordOpsGateway()
+    val telegramGateway = FakeTelegramOpsGateway()
     val server =
         ProxyOpsHttpServer(
             executorFactory = { Executors.newSingleThreadExecutor() },
             configProvider = { config },
             discordProvider = { gateway },
+            telegramProvider = { telegramGateway },
         )
     server.start()
-    return DiscordServerFixture(server, gateway)
+    return DiscordServerFixture(server, gateway, telegramGateway)
 }
 
 private class FakeDiscordOpsGateway : DiscordOpsGateway {
@@ -457,4 +791,52 @@ private class FakeDiscordOpsGateway : DiscordOpsGateway {
 
     override fun mutateMember(request: DiscordMemberMutationRequest): CompletableFuture<Map<String, Any?>> =
         CompletableFuture.completedFuture(mapOf("userId" to request.userId))
+}
+
+private class FakeTelegramOpsGateway : TelegramOpsGateway {
+    var ready = true
+    var lastListedChatIds: Set<String> = emptySet()
+    var lastReadChatId: String? = null
+    var lastMessageRequest: TelegramMessageMutationRequest? = null
+    var lastChatRequest: TelegramChatMutationRequest? = null
+    var lastTopicRequest: TelegramTopicMutationRequest? = null
+    var lastInviteRequest: TelegramInviteMutationRequest? = null
+
+    override fun isReady(): Boolean = ready
+
+    override fun listChats(chatIds: Set<String>): CompletableFuture<Map<String, Any?>> {
+        lastListedChatIds = chatIds
+        return CompletableFuture.completedFuture(
+            mapOf("chats" to chatIds.map { mapOf("id" to it, "type" to "channel") }),
+        )
+    }
+
+    override fun readChat(chatId: String): CompletableFuture<Map<String, Any?>> {
+        lastReadChatId = chatId
+        return CompletableFuture.completedFuture(mapOf("id" to chatId, "type" to "channel"))
+    }
+
+    override fun mutateMessage(request: TelegramMessageMutationRequest): CompletableFuture<Map<String, Any?>> {
+        lastMessageRequest = request
+        return CompletableFuture.completedFuture(mapOf("chatId" to request.chatId, "messageId" to 42))
+    }
+
+    override fun mutateChat(request: TelegramChatMutationRequest): CompletableFuture<Map<String, Any?>> {
+        lastChatRequest = request
+        return CompletableFuture.completedFuture(
+            mapOf("chatId" to request.chatId, "updated" to listOf("title", "description")),
+        )
+    }
+
+    override fun mutateTopic(request: TelegramTopicMutationRequest): CompletableFuture<Map<String, Any?>> {
+        lastTopicRequest = request
+        return CompletableFuture.completedFuture(
+            mapOf("chatId" to request.chatId, "threadId" to (request.threadId ?: 77)),
+        )
+    }
+
+    override fun mutateInvite(request: TelegramInviteMutationRequest): CompletableFuture<Map<String, Any?>> {
+        lastInviteRequest = request
+        return CompletableFuture.completedFuture(mapOf("chatId" to request.chatId, "inviteLink" to "redacted"))
+    }
 }

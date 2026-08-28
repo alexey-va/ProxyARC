@@ -90,6 +90,8 @@ class JoinListener(
                 }
             }
         }
+        Velocity.telegramBot?.takeIf { it.isIdentityBackendAllowed(server) }
+            ?.refreshIdentity(event.player.uniqueId, username)
     }
 
     private fun sendMessageToAll(component: Component) {
