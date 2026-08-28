@@ -60,6 +60,7 @@ import org.telegram.telegrambots.meta.api.objects.chatmember.ChatMemberAdministr
 import org.telegram.telegrambots.meta.api.objects.chatmember.ChatMemberRestricted
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton
+import org.telegram.telegrambots.meta.exceptions.TelegramApiValidationException
 import ru.arc.Utils.plain
 import ru.arc.channelsync.ChannelSyncModule
 import ru.arc.channelsync.TelegramSyncMessage
@@ -96,7 +97,6 @@ open class TelegramBot(
     token: String = config.token,
     private val scheduler: TaskScheduler = Tasks.scheduler,
     requestExecutor: ((SendMessage) -> Unit)? = null,
-    private val blockingMethodExecutor: ((BotApiMethod<*>) -> Serializable)? = null,
     private val inboundRelay: TelegramInboundRelay = VelocityTelegramInboundRelay,
     private val identityService: TelegramIdentityService? = null,
     botOptions: DefaultBotOptions = DefaultBotOptions(),
@@ -538,12 +538,7 @@ open class TelegramBot(
                 executeWhenOpen(method).thenApply { topic -> topicMap(request.chatId, topic) }
             }
             TelegramTopicMutation.UPDATE -> {
-                val method = EditForumTopic()
-                method.chatId = request.chatId
-                method.messageThreadId = requireNotNull(request.threadId)
-                method.name = request.name
-                method.iconCustomEmojiId = request.iconCustomEmojiId
-                executeBlockingWhenOpen(method).thenApply { success -> topicMutationMap(request, success) }
+                executeWhenOpen(editForumTopicMethod(request)).thenApply { success -> topicMutationMap(request, success) }
             }
             TelegramTopicMutation.CLOSE ->
                 executeWhenOpen(CloseForumTopic(request.chatId, requireNotNull(request.threadId)))
@@ -721,14 +716,6 @@ open class TelegramBot(
             executeAsync(method)
         } catch (error: Exception) {
             CompletableFuture.failedFuture(error)
-        }
-    }
-
-    private fun <T : Serializable> executeBlockingWhenOpen(method: BotApiMethod<T>): CompletableFuture<T> {
-        if (closed.get()) return CompletableFuture.failedFuture(IllegalStateException("telegram bot is closed"))
-        return CompletableFuture.supplyAsync {
-            @Suppress("UNCHECKED_CAST")
-            (blockingMethodExecutor?.invoke(method) as T?) ?: execute(method)
         }
     }
 
@@ -985,6 +972,27 @@ open class TelegramBot(
             success: Boolean,
         ): Map<String, Any?> =
             mapOf("chatId" to chatId, "messageId" to messageId, "success" to success)
+    }
+}
+
+internal fun editForumTopicMethod(request: TelegramTopicMutationRequest): EditForumTopic =
+    OptionalIconEditForumTopic().apply {
+        chatId = request.chatId
+        messageThreadId = requireNotNull(request.threadId)
+        name = request.name
+        request.iconCustomEmojiId?.let { iconCustomEmojiId = it }
+    }
+
+/** TelegramBots 6.9.7.1 incorrectly requires optional icon_custom_emoji_id. */
+private class OptionalIconEditForumTopic : EditForumTopic() {
+    override fun validate() {
+        if (chatId.isNullOrEmpty()) throw TelegramApiValidationException("ChatId can't be empty", this)
+        if (messageThreadId <= 0) {
+            throw TelegramApiValidationException("Message Thread Id can't be empty", this)
+        }
+        if (name != null && name.length > 128) {
+            throw TelegramApiValidationException("Name must be less than 128 characters", this)
+        }
     }
 }
 
