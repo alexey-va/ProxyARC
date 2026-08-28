@@ -1004,7 +1004,7 @@ internal class DiscordOpsAdapter(
         if (channel is ThreadChannel) {
             payload["archived"] = channel.isArchived
             payload["locked"] = channel.isLocked
-            payload["invitable"] = channel.isInvitable
+            payload["invitable"] = threadInvitable(channel)
             payload["autoArchiveMinutes"] = channel.autoArchiveDuration.minutes
             payload["slowmodeSeconds"] = channel.slowmode
             payload["appliedTagIds"] = channel.appliedTags.map { it.id }
@@ -1173,6 +1173,9 @@ internal class DiscordOpsAdapter(
             ALL in allowedChannelIds ||
                 channelId in allowedChannelIds ||
                 (parentChannelId != null && parentChannelId in allowedChannelIds)
+
+        internal fun threadInvitable(channel: ThreadChannel): Boolean? =
+            if (channel.type == ChannelType.GUILD_PRIVATE_THREAD) channel.isInvitable else null
 
         private fun parentChannelId(channel: GuildChannel): String? =
             when (channel) {

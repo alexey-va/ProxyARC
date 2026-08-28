@@ -7,7 +7,9 @@ import io.mockk.mockk
 import io.mockk.verify
 import net.dv8tion.jda.api.JDA
 import net.dv8tion.jda.api.entities.Message
+import net.dv8tion.jda.api.entities.channel.ChannelType
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel
+import net.dv8tion.jda.api.entities.channel.concrete.ThreadChannel
 import net.dv8tion.jda.api.requests.restaction.MessageCreateAction
 import net.dv8tion.jda.api.utils.messages.MessageCreateData
 import ru.arc.ops.DiscordMessageMutation
@@ -46,6 +48,23 @@ class DiscordOpsAdapterTest : FreeSpec({
             parentChannelId = null,
             allowedChannelIds = setOf("*"),
         ) shouldBe true
+    }
+
+    "public thread payload does not read private-only invitable state" {
+        val thread = mockk<ThreadChannel>()
+        every { thread.type } returns ChannelType.GUILD_PUBLIC_THREAD
+
+        DiscordOpsAdapter.threadInvitable(thread) shouldBe null
+
+        verify(exactly = 0) { thread.isInvitable }
+    }
+
+    "private thread payload exposes invitable state" {
+        val thread = mockk<ThreadChannel>()
+        every { thread.type } returns ChannelType.GUILD_PRIVATE_THREAD
+        every { thread.isInvitable } returns true
+
+        DiscordOpsAdapter.threadInvitable(thread) shouldBe true
     }
 
     "send disables mentions and replied-user ping" {
