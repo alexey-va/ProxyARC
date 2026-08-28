@@ -113,7 +113,7 @@ internal class DiscordFeedService(
     ) {
         val channel = session.snapshot()?.channels?.join ?: return
         val title = joinTitle(playerName, joinType, override?.let(DiscordMessageCodec::sanitizeMinecraftFormatting))
-        val url = joinConfig.string("discord.url", "https://rus-crafting.ru")
+        val url = joinAuthorUrl(joinConfig.string("discord.url", ""))
         val icon =
             joinConfig.string("discord.icon", "https://cravatar.eu/helmavatar/%player_name%/128.png")
                 .replace("%player_name%", playerName)
@@ -291,6 +291,8 @@ internal class DiscordFeedService(
 
         internal fun playerListSignature(players: Collection<String>): String =
             players.sorted().joinToString("\n")
+
+        internal fun joinAuthorUrl(configured: String): String? = configured.trim().takeIf(String::isNotEmpty)
 
         internal fun networkSignature(snapshot: DiscordNetworkSnapshot): String =
             snapshot.players

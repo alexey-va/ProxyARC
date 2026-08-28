@@ -14,4 +14,10 @@ class DiscordIntegrationTextTest : FreeSpec({
 
         (DiscordFeedService.networkSignature(spawn) == DiscordFeedService.networkSignature(survival)) shouldBe false
     }
+
+    "join embed omits an unfinished website URL" {
+        DiscordFeedService.joinAuthorUrl("") shouldBe null
+        DiscordFeedService.joinAuthorUrl("   ") shouldBe null
+        DiscordFeedService.joinAuthorUrl("https://example.com") shouldBe "https://example.com"
+    }
 })

@@ -14,5 +14,5 @@ discord:
   leave:
     color: "#ff0000"
     message: "Игрок %player_name% покинул сервер!"
-  url: https://rus-crafting.ru
+  url: ""
   icon: https://cravatar.eu/helmavatar/%player_name%/128.png
