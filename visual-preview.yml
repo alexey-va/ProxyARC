@@ -8,6 +8,11 @@ resource-pack:
   url: https://storage.yandexcloud.net/ruscraftinresources/RusCraftingResource.zip
   sha256-url: https://storage.yandexcloud.net/ruscraftinresources/RusCraftingResource.zip.sha256
 
+custom-items:
+  arc:background:
+    material: GRAY_STAINED_GLASS_PANE
+    model: assets/arc/models/gui/background.json
+
 glyphs:
   - character: ""
     path: "@pack/assets/lzranks/textures/font/rank_icons/discord_icon.png"
@@ -19,6 +24,18 @@ glyphs:
     ascent: 8
 
 sources:
+  join-catalog:
+    path: src/main/resources/modules/join-messages.yml
+    root: catalog.join
+    include:
+      - '*.display-name'
+      - '*.message'
+  leave-catalog:
+    path: src/main/resources/modules/join-messages.yml
+    root: catalog.leave
+    include:
+      - '*.display-name'
+      - '*.message'
   discord-minecraft:
     path: src/main/resources/modules/discord-verification.yml
     root: messages.minecraft
@@ -58,11 +75,154 @@ sources:
       - minute-many
 
 placeholders:
+  player_name: Alexey23
   code: ABCD-EFGH
   command: /verify ABCD-EFGH
   minutes: 10
 
 surfaces:
+  inventories:
+    - id: join-phrases-page-1
+      title: join-catalog:join-01.display-name
+      rows: 6
+      filler: GRAY_STAINED_GLASS_PANE
+      background-item: arc:background
+      items:
+        - {slot: 0, material: AMETHYST_SHARD, name: join-catalog:join-01.display-name, lore: join-catalog:join-01.message}
+        - {slot: 1, material: APPLE, name: join-catalog:join-02.display-name, lore: join-catalog:join-02.message}
+        - {slot: 2, material: BAKED_POTATO, name: join-catalog:join-03.display-name, lore: join-catalog:join-03.message}
+        - {slot: 3, material: BEE_NEST, name: join-catalog:join-04.display-name, lore: join-catalog:join-04.message}
+        - {slot: 4, material: BELL, name: join-catalog:join-05.display-name, lore: join-catalog:join-05.message}
+        - {slot: 5, material: BLAZE_POWDER, name: join-catalog:join-06.display-name, lore: join-catalog:join-06.message}
+        - {slot: 6, material: BOOK, name: join-catalog:join-07.display-name, lore: join-catalog:join-07.message}
+        - {slot: 7, material: BOW, name: join-catalog:join-08.display-name, lore: join-catalog:join-08.message}
+        - {slot: 8, material: BREAD, name: join-catalog:join-09.display-name, lore: join-catalog:join-09.message}
+        - {slot: 9, material: BRICK, name: join-catalog:join-10.display-name, lore: join-catalog:join-10.message}
+        - {slot: 10, material: CAKE, name: join-catalog:join-11.display-name, lore: join-catalog:join-11.message}
+        - {slot: 11, material: CAMPFIRE, name: join-catalog:join-12.display-name, lore: join-catalog:join-12.message}
+        - {slot: 12, material: CARROT, name: join-catalog:join-13.display-name, lore: join-catalog:join-13.message}
+        - {slot: 13, material: CLOCK, name: join-catalog:join-14.display-name, lore: join-catalog:join-14.message}
+        - {slot: 14, material: COMPASS, name: join-catalog:join-15.display-name, lore: join-catalog:join-15.message}
+        - {slot: 15, material: COOKIE, name: join-catalog:join-16.display-name, lore: join-catalog:join-16.message}
+        - {slot: 16, material: COPPER_INGOT, name: join-catalog:join-17.display-name, lore: join-catalog:join-17.message}
+        - {slot: 17, material: DIAMOND, name: join-catalog:join-18.display-name, lore: join-catalog:join-18.message}
+        - {slot: 18, material: ECHO_SHARD, name: join-catalog:join-19.display-name, lore: join-catalog:join-19.message}
+        - {slot: 19, material: EGG, name: join-catalog:join-20.display-name, lore: join-catalog:join-20.message}
+        - {slot: 20, material: EMERALD, name: join-catalog:join-21.display-name, lore: join-catalog:join-21.message}
+        - {slot: 21, material: ENDER_EYE, name: join-catalog:join-22.display-name, lore: join-catalog:join-22.message}
+        - {slot: 22, material: FEATHER, name: join-catalog:join-23.display-name, lore: join-catalog:join-23.message}
+        - {slot: 23, material: FIREWORK_ROCKET, name: join-catalog:join-24.display-name, lore: join-catalog:join-24.message}
+        - {slot: 24, material: FLINT, name: join-catalog:join-25.display-name, lore: join-catalog:join-25.message}
+        - {slot: 25, material: GHAST_TEAR, name: join-catalog:join-26.display-name, lore: join-catalog:join-26.message}
+        - {slot: 26, material: GLOW_BERRIES, name: join-catalog:join-27.display-name, lore: join-catalog:join-27.message}
+        - {slot: 27, material: GLOW_INK_SAC, name: join-catalog:join-28.display-name, lore: join-catalog:join-28.message}
+        - {slot: 28, material: GOLD_INGOT, name: join-catalog:join-29.display-name, lore: join-catalog:join-29.message}
+        - {slot: 29, material: HEART_OF_THE_SEA, name: join-catalog:join-30.display-name, lore: join-catalog:join-30.message}
+        - {slot: 30, material: HONEY_BOTTLE, name: join-catalog:join-31.display-name, lore: join-catalog:join-31.message}
+        - {slot: 31, material: HONEYCOMB, name: join-catalog:join-32.display-name, lore: join-catalog:join-32.message}
+        - {slot: 32, material: IRON_INGOT, name: join-catalog:join-33.display-name, lore: join-catalog:join-33.message}
+        - {slot: 33, material: LANTERN, name: join-catalog:join-34.display-name, lore: join-catalog:join-34.message}
+        - {slot: 34, material: LAPIS_LAZULI, name: join-catalog:join-35.display-name, lore: join-catalog:join-35.message}
+        - {slot: 35, material: LEAD, name: join-catalog:join-36.display-name, lore: join-catalog:join-36.message}
+        - {slot: 36, material: LIGHTNING_ROD, name: join-catalog:join-37.display-name, lore: join-catalog:join-37.message}
+        - {slot: 37, material: MAGMA_CREAM, name: join-catalog:join-38.display-name, lore: join-catalog:join-38.message}
+        - {slot: 38, material: MAP, name: join-catalog:join-39.display-name, lore: join-catalog:join-39.message}
+        - {slot: 39, material: MELON_SLICE, name: join-catalog:join-40.display-name, lore: join-catalog:join-40.message}
+        - {slot: 40, material: NAME_TAG, name: join-catalog:join-41.display-name, lore: join-catalog:join-41.message}
+        - {slot: 41, material: NAUTILUS_SHELL, name: join-catalog:join-42.display-name, lore: join-catalog:join-42.message}
+        - {slot: 42, material: NETHER_STAR, name: join-catalog:join-43.display-name, lore: join-catalog:join-43.message}
+        - {slot: 43, material: NETHERITE_SCRAP, name: join-catalog:join-44.display-name, lore: join-catalog:join-44.message}
+        - {slot: 44, material: PAPER, name: join-catalog:join-45.display-name, lore: join-catalog:join-45.message}
+    - id: leave-phrases-page-1
+      title: leave-catalog:leave-01.display-name
+      rows: 6
+      filler: GRAY_STAINED_GLASS_PANE
+      background-item: arc:background
+      items:
+        - {slot: 0, material: TURTLE_HELMET, name: leave-catalog:leave-01.display-name, lore: leave-catalog:leave-01.message}
+        - {slot: 1, material: TRIDENT, name: leave-catalog:leave-02.display-name, lore: leave-catalog:leave-02.message}
+        - {slot: 2, material: TOTEM_OF_UNDYING, name: leave-catalog:leave-03.display-name, lore: leave-catalog:leave-03.message}
+        - {slot: 3, material: SUGAR, name: leave-catalog:leave-04.display-name, lore: leave-catalog:leave-04.message}
+        - {slot: 4, material: STRING, name: leave-catalog:leave-05.display-name, lore: leave-catalog:leave-05.message}
+        - {slot: 5, material: SPYGLASS, name: leave-catalog:leave-06.display-name, lore: leave-catalog:leave-06.message}
+        - {slot: 6, material: SPECTRAL_ARROW, name: leave-catalog:leave-07.display-name, lore: leave-catalog:leave-07.message}
+        - {slot: 7, material: SNOWBALL, name: leave-catalog:leave-08.display-name, lore: leave-catalog:leave-08.message}
+        - {slot: 8, material: SLIME_BALL, name: leave-catalog:leave-09.display-name, lore: leave-catalog:leave-09.message}
+        - {slot: 9, material: REDSTONE, name: leave-catalog:leave-10.display-name, lore: leave-catalog:leave-10.message}
+        - {slot: 10, material: RECOVERY_COMPASS, name: leave-catalog:leave-11.display-name, lore: leave-catalog:leave-11.message}
+        - {slot: 11, material: RABBIT_FOOT, name: leave-catalog:leave-12.display-name, lore: leave-catalog:leave-12.message}
+        - {slot: 12, material: PRISMARINE_CRYSTALS, name: leave-catalog:leave-13.display-name, lore: leave-catalog:leave-13.message}
+        - {slot: 13, material: PHANTOM_MEMBRANE, name: leave-catalog:leave-14.display-name, lore: leave-catalog:leave-14.message}
+        - {slot: 14, material: PAPER, name: leave-catalog:leave-15.display-name, lore: leave-catalog:leave-15.message}
+        - {slot: 15, material: NETHERITE_SCRAP, name: leave-catalog:leave-16.display-name, lore: leave-catalog:leave-16.message}
+        - {slot: 16, material: NETHER_STAR, name: leave-catalog:leave-17.display-name, lore: leave-catalog:leave-17.message}
+        - {slot: 17, material: NAUTILUS_SHELL, name: leave-catalog:leave-18.display-name, lore: leave-catalog:leave-18.message}
+        - {slot: 18, material: NAME_TAG, name: leave-catalog:leave-19.display-name, lore: leave-catalog:leave-19.message}
+        - {slot: 19, material: MELON_SLICE, name: leave-catalog:leave-20.display-name, lore: leave-catalog:leave-20.message}
+        - {slot: 20, material: MAP, name: leave-catalog:leave-21.display-name, lore: leave-catalog:leave-21.message}
+        - {slot: 21, material: MAGMA_CREAM, name: leave-catalog:leave-22.display-name, lore: leave-catalog:leave-22.message}
+        - {slot: 22, material: LIGHTNING_ROD, name: leave-catalog:leave-23.display-name, lore: leave-catalog:leave-23.message}
+        - {slot: 23, material: LEAD, name: leave-catalog:leave-24.display-name, lore: leave-catalog:leave-24.message}
+        - {slot: 24, material: LAPIS_LAZULI, name: leave-catalog:leave-25.display-name, lore: leave-catalog:leave-25.message}
+        - {slot: 25, material: LANTERN, name: leave-catalog:leave-26.display-name, lore: leave-catalog:leave-26.message}
+        - {slot: 26, material: IRON_INGOT, name: leave-catalog:leave-27.display-name, lore: leave-catalog:leave-27.message}
+        - {slot: 27, material: HONEYCOMB, name: leave-catalog:leave-28.display-name, lore: leave-catalog:leave-28.message}
+        - {slot: 28, material: HONEY_BOTTLE, name: leave-catalog:leave-29.display-name, lore: leave-catalog:leave-29.message}
+        - {slot: 29, material: HEART_OF_THE_SEA, name: leave-catalog:leave-30.display-name, lore: leave-catalog:leave-30.message}
+        - {slot: 30, material: GOLD_INGOT, name: leave-catalog:leave-31.display-name, lore: leave-catalog:leave-31.message}
+        - {slot: 31, material: GLOW_INK_SAC, name: leave-catalog:leave-32.display-name, lore: leave-catalog:leave-32.message}
+        - {slot: 32, material: GLOW_BERRIES, name: leave-catalog:leave-33.display-name, lore: leave-catalog:leave-33.message}
+        - {slot: 33, material: GHAST_TEAR, name: leave-catalog:leave-34.display-name, lore: leave-catalog:leave-34.message}
+        - {slot: 34, material: FLINT, name: leave-catalog:leave-35.display-name, lore: leave-catalog:leave-35.message}
+        - {slot: 35, material: FIREWORK_ROCKET, name: leave-catalog:leave-36.display-name, lore: leave-catalog:leave-36.message}
+        - {slot: 36, material: FEATHER, name: leave-catalog:leave-37.display-name, lore: leave-catalog:leave-37.message}
+        - {slot: 37, material: ENDER_EYE, name: leave-catalog:leave-38.display-name, lore: leave-catalog:leave-38.message}
+        - {slot: 38, material: EMERALD, name: leave-catalog:leave-39.display-name, lore: leave-catalog:leave-39.message}
+        - {slot: 39, material: EGG, name: leave-catalog:leave-40.display-name, lore: leave-catalog:leave-40.message}
+        - {slot: 40, material: ECHO_SHARD, name: leave-catalog:leave-41.display-name, lore: leave-catalog:leave-41.message}
+        - {slot: 41, material: DIAMOND, name: leave-catalog:leave-42.display-name, lore: leave-catalog:leave-42.message}
+        - {slot: 42, material: COPPER_INGOT, name: leave-catalog:leave-43.display-name, lore: leave-catalog:leave-43.message}
+        - {slot: 43, material: COOKIE, name: leave-catalog:leave-44.display-name, lore: leave-catalog:leave-44.message}
+        - {slot: 44, material: COMPASS, name: leave-catalog:leave-45.display-name, lore: leave-catalog:leave-45.message}
+    - id: join-phrases-page-2
+      title: join-catalog:join-46.display-name
+      rows: 3
+      filler: GRAY_STAINED_GLASS_PANE
+      background-item: arc:background
+      items:
+        - {slot: 0, material: PHANTOM_MEMBRANE, name: join-catalog:join-46.display-name, lore: join-catalog:join-46.message}
+        - {slot: 1, material: PRISMARINE_CRYSTALS, name: join-catalog:join-47.display-name, lore: join-catalog:join-47.message}
+        - {slot: 2, material: RABBIT_FOOT, name: join-catalog:join-48.display-name, lore: join-catalog:join-48.message}
+        - {slot: 3, material: RECOVERY_COMPASS, name: join-catalog:join-49.display-name, lore: join-catalog:join-49.message}
+        - {slot: 4, material: REDSTONE, name: join-catalog:join-50.display-name, lore: join-catalog:join-50.message}
+        - {slot: 5, material: SLIME_BALL, name: join-catalog:join-51.display-name, lore: join-catalog:join-51.message}
+        - {slot: 6, material: SNOWBALL, name: join-catalog:join-52.display-name, lore: join-catalog:join-52.message}
+        - {slot: 7, material: SPECTRAL_ARROW, name: join-catalog:join-53.display-name, lore: join-catalog:join-53.message}
+        - {slot: 8, material: SPYGLASS, name: join-catalog:join-54.display-name, lore: join-catalog:join-54.message}
+        - {slot: 9, material: STRING, name: join-catalog:join-55.display-name, lore: join-catalog:join-55.message}
+        - {slot: 10, material: SUGAR, name: join-catalog:join-56.display-name, lore: join-catalog:join-56.message}
+        - {slot: 11, material: TOTEM_OF_UNDYING, name: join-catalog:join-57.display-name, lore: join-catalog:join-57.message}
+        - {slot: 12, material: TRIDENT, name: join-catalog:join-58.display-name, lore: join-catalog:join-58.message}
+        - {slot: 13, material: TURTLE_HELMET, name: join-catalog:join-59.display-name, lore: join-catalog:join-59.message}
+    - id: leave-phrases-page-2
+      title: leave-catalog:leave-46.display-name
+      rows: 3
+      filler: GRAY_STAINED_GLASS_PANE
+      background-item: arc:background
+      items:
+        - {slot: 0, material: CLOCK, name: leave-catalog:leave-46.display-name, lore: leave-catalog:leave-46.message}
+        - {slot: 1, material: CARROT, name: leave-catalog:leave-47.display-name, lore: leave-catalog:leave-47.message}
+        - {slot: 2, material: CAMPFIRE, name: leave-catalog:leave-48.display-name, lore: leave-catalog:leave-48.message}
+        - {slot: 3, material: CAKE, name: leave-catalog:leave-49.display-name, lore: leave-catalog:leave-49.message}
+        - {slot: 4, material: BRICK, name: leave-catalog:leave-50.display-name, lore: leave-catalog:leave-50.message}
+        - {slot: 5, material: BREAD, name: leave-catalog:leave-51.display-name, lore: leave-catalog:leave-51.message}
+        - {slot: 6, material: BOW, name: leave-catalog:leave-52.display-name, lore: leave-catalog:leave-52.message}
+        - {slot: 7, material: BOOK, name: leave-catalog:leave-53.display-name, lore: leave-catalog:leave-53.message}
+        - {slot: 8, material: BLAZE_POWDER, name: leave-catalog:leave-54.display-name, lore: leave-catalog:leave-54.message}
+        - {slot: 9, material: BELL, name: leave-catalog:leave-55.display-name, lore: leave-catalog:leave-55.message}
+        - {slot: 10, material: BEE_NEST, name: leave-catalog:leave-56.display-name, lore: leave-catalog:leave-56.message}
+        - {slot: 11, material: BAKED_POTATO, name: leave-catalog:leave-57.display-name, lore: leave-catalog:leave-57.message}
+        - {slot: 12, material: APPLE, name: leave-catalog:leave-58.display-name, lore: leave-catalog:leave-58.message}
   chat-blocks:
     - id: Discord — /verify
       text:

@@ -5,7 +5,7 @@
 ## Velocity-only
 
 - **Bootstrap:** `VelocityArcRuntime.installScheduling(server, this)` before `ModuleRegistry.initAll()` in `Velocity.kt`
-- **Modules:** Logging, Redis, Config, Network, JoinMessages, PlayerList, Discord, Telegram, Assistant, Antibot, … — see `InfrastructureModules.kt`
+- **Modules:** Logging, Redis, Config, Network, JoinMessages, PlayerList, Discord, Telegram, Assistant, … — see `InfrastructureModules.kt`
 - **Scheduling:** `Tasks.*` only — never import `VelocityTaskScheduler` in feature code
 - **Signed chat:** chat mode may derive a logical `!`-prefixed message for
   proxy routing and Discord/Telegram bridges, but must not replace or deny the

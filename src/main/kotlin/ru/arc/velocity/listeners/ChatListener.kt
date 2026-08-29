@@ -47,7 +47,7 @@ class ChatListener(
         if (Velocity.liteBansHook?.isMuted(uuid, ip) == true) return
 
         val player = event.player
-        val firstJoinTime = Velocity.firstJoinData?.getFirstJoinTime(player.username)
+        val firstJoinTime = Velocity.firstJoinData?.joinedAt(player.username)
         val minPlayerTime = mainConfig.integer("discord.min-play-time-sec", 600) * 1000L
         if (firstJoinTime == null || firstJoinTime + minPlayerTime > System.currentTimeMillis()) return
         ArcLogging.debug("[ChatMode] bridge player={} action=forward-global-chat", username)

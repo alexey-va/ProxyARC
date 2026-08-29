@@ -1,7 +1,8 @@
 # ProxyARC
 
 RusCrafting's Velocity plugin for network routing, join flow, messaging,
-Discord/Telegram integration, assistant behavior, and antibot boundaries.
+Discord/Telegram integration, and assistant behavior. Connection filtering is
+owned by the network filter plugin, outside ProxyARC.
 
 ## Build
 
@@ -20,6 +21,14 @@ not required. For coordinated local development, opt in explicitly:
 ```
 
 The production artifact is `ztarget/ProxyARC.jar`.
+
+## Join and leave announcements
+
+`modules/join-messages.yml` is the network source of truth for default
+announcements and the selectable phrase catalog. Each phrase owns its stable
+id, MiniMessage text, GUI material/custom model data, optional permission, and
+rank label. ProxyARC publishes the validated catalog to Redis; Paper ARC keeps
+only GUI chrome locally and fails closed when the catalog is unavailable.
 
 ## Telegram channel
 

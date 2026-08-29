@@ -1,5 +1,6 @@
 package ru.arc.xserver
 
+import ru.arc.join.JoinAnnouncementKind
 import ru.arc.repository.Entity
 import ru.arc.repository.Mergeable
 import java.util.concurrent.ThreadLocalRandom
@@ -27,6 +28,13 @@ class JoinMessages(
 
     fun randomLeaveMessage(): String? = randomFrom(leaveMessages)
 
+    fun randomMessage(kind: JoinAnnouncementKind): String? =
+        when (kind) {
+            JoinAnnouncementKind.FIRST_TIME -> null
+            JoinAnnouncementKind.JOIN -> randomFrom(joinMessages)
+            JoinAnnouncementKind.LEAVE -> randomFrom(leaveMessages)
+        }
+
     override fun id(): String = player
 
     @Synchronized
@@ -37,8 +45,8 @@ class JoinMessages(
     }
 
     private fun randomFrom(messages: Set<String>): String? {
-        val snapshot = messages
+        val snapshot = messages.filter(String::isNotBlank)
         if (snapshot.isEmpty()) return null
-        return snapshot.elementAt(ThreadLocalRandom.current().nextInt(snapshot.size))
+        return snapshot[ThreadLocalRandom.current().nextInt(snapshot.size)]
     }
 }

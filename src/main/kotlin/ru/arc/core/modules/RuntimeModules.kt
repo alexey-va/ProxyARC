@@ -1,9 +1,14 @@
 package ru.arc.core.modules
 
-import ru.arc.config.ProxyConfigs
 import ru.arc.core.PluginModule
 import ru.arc.core.ScheduledTask
+import ru.arc.core.Tasks
 import ru.arc.core.repeating
+import ru.arc.join.JoinAnnouncementConfig
+import ru.arc.join.JoinAnnouncementService
+import ru.arc.join.RedisJoinMessageSource
+import ru.arc.join.VelocityJoinAnnouncementSink
+import ru.arc.join.VelocityProxyLifecycle
 import ru.arc.velocity.Velocity
 import ru.arc.velocity.listeners.ChatListener
 import ru.arc.velocity.listeners.JoinListener
@@ -19,9 +24,22 @@ object ListenersModule : PluginModule {
     override fun init() {
         val plugin = Velocity.requirePlugin()
         val server = Velocity.requireProxyServer()
+        val announcementService =
+            JoinAnnouncementService(
+                firstJoinData = checkNotNull(Velocity.firstJoinData) { "First-join data is not initialized" },
+                messageSource = RedisJoinMessageSource(),
+                sink =
+                    VelocityJoinAnnouncementSink(
+                        proxyServer = server,
+                        config = JoinAnnouncementConfig.load(Velocity.requireDataFolder()),
+                        logger = Velocity.requireLogger(),
+                    ),
+                scheduler = Tasks.scheduler,
+                lifecycle = VelocityProxyLifecycle,
+            )
         server.eventManager.register(
             plugin,
-            JoinListener(server, ProxyConfigs.module("join_config.yml")),
+            JoinListener(announcementService),
         )
         server.eventManager.register(
             plugin,

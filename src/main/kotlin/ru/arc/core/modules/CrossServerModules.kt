@@ -9,12 +9,17 @@ import kotlinx.coroutines.runBlocking
 import ru.arc.Common
 import ru.arc.chat.ChatModeService
 import ru.arc.core.PluginModule
+import ru.arc.join.JoinAnnouncementKind
+import ru.arc.join.JoinMessageCatalog
+import ru.arc.join.JoinMessageCatalogConfig
+import ru.arc.join.JoinMessageCatalogPublication
 import ru.arc.redis.RedisOperations
 import ru.arc.repository.CachedRepository
 import ru.arc.repository.redisRepo
 import ru.arc.velocity.Velocity
 import ru.arc.xserver.JoinMessages
 import ru.arc.xserver.PlayerListAnnouncer
+import java.nio.file.Path
 import java.util.concurrent.CompletableFuture
 import kotlin.time.Duration.Companion.seconds
 
@@ -38,6 +43,114 @@ object PlayerListModule : PluginModule {
     }
 
     override fun reload() {}
+}
+
+object JoinMessageCatalogModule : PluginModule {
+    override val name = "JoinMessageCatalog"
+    override val priority = 64
+
+    @Volatile
+    private var repository: CachedRepository<JoinMessageCatalog>? = null
+
+    @Volatile
+    private var scope: CoroutineScope? = null
+
+    @Volatile
+    private var dataRoot: Path? = null
+
+    private var publication: JoinMessageCatalogPublication? = null
+
+    override fun init() {
+        val redis = Velocity.redisManager ?: return
+        start(redis, Velocity.requireDataFolder())
+    }
+
+    @Synchronized
+    internal fun start(
+        redis: RedisOperations,
+        root: Path,
+    ) {
+        if (repository != null) return
+        val newScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        var startedRepository: CachedRepository<JoinMessageCatalog>? = null
+        try {
+            val newRepository =
+                redisRepo<JoinMessageCatalog>(
+                    redis = redis,
+                    gson = Common.gson,
+                    id = "join_message_catalog",
+                    storageKey = STORAGE_KEY,
+                    updateChannel = UPDATE_CHANNEL,
+                    scope = newScope,
+                ) {
+                    loadAllOnStart(true)
+                    enableCleanup(false)
+                    saveInterval(1.seconds)
+                }
+            startedRepository = newRepository
+            val newPublication =
+                JoinMessageCatalogPublication(
+                    current = { newRepository.getNow(JoinMessageCatalog.CATALOG_ID) },
+                    persist = { snapshot ->
+                        newRepository.save(snapshot).getOrThrow()
+                        newRepository.saveDirty().getOrThrow()
+                    },
+                )
+            repository = newRepository
+            scope = newScope
+            dataRoot = root
+            publication = newPublication
+            runBlocking {
+                newPublication.publish(JoinMessageCatalogConfig.load(root).snapshot())
+            }
+        } catch (e: Exception) {
+            repository = null
+            scope = null
+            dataRoot = null
+            publication = null
+            runBlocking { startedRepository?.shutdown() }
+            newScope.cancel()
+            throw e
+        }
+    }
+
+    internal fun selectedMessage(
+        messages: JoinMessages?,
+        kind: JoinAnnouncementKind,
+    ): String? {
+        val catalog = repository?.getNow(JoinMessageCatalog.CATALOG_ID) ?: return null
+        val selected =
+            when (kind) {
+                JoinAnnouncementKind.FIRST_TIME -> emptySet()
+                JoinAnnouncementKind.JOIN -> messages?.joinMessages.orEmpty()
+                JoinAnnouncementKind.LEAVE -> messages?.leaveMessages.orEmpty()
+            }
+        return catalog.randomSelectedMessage(kind, selected)
+    }
+
+    @Synchronized
+    override fun reload() {
+        val root = dataRoot ?: return
+        val currentPublication = publication ?: return
+        runBlocking {
+            currentPublication.publish(JoinMessageCatalogConfig.load(root).snapshot())
+        }
+    }
+
+    @Synchronized
+    override fun shutdown() {
+        val currentRepository = repository
+        repository = null
+        scope = null
+        dataRoot = null
+        publication = null
+        if (currentRepository != null) {
+            runBlocking { currentRepository.shutdown() }
+        }
+    }
+
+    internal const val STORAGE_KEY = "arc.join_message_catalog"
+    internal const val UPDATE_CHANNEL = "arc.join_message_catalog_update"
 }
 
 object JoinMessagesModule : PluginModule {

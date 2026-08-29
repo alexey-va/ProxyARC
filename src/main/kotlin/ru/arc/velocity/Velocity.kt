@@ -12,8 +12,6 @@ import com.velocitypowered.api.plugin.annotation.DataDirectory
 import com.velocitypowered.api.proxy.ProxyServer
 import net.kyori.adventure.text.Component
 import org.slf4j.Logger
-import ru.arc.Antibot
-import ru.arc.AntibotModule
 import ru.arc.activity.PlayerActivityTracker
 import ru.arc.Arc
 import ru.arc.ai.Assistant
@@ -30,6 +28,7 @@ import ru.arc.core.modules.ProxyArcReload
 import ru.arc.core.modules.ConfigModule
 import ru.arc.core.modules.FirstJoinModule
 import ru.arc.core.modules.JoinMessagesModule
+import ru.arc.core.modules.JoinMessageCatalogModule
 import ru.arc.core.modules.ChatModeModule
 import ru.arc.core.modules.ListenersModule
 import ru.arc.core.modules.LoggingModule
@@ -40,7 +39,6 @@ import ru.arc.core.modules.PlayerActivityModule
 import ru.arc.core.modules.ProxyTasksModule
 import ru.arc.core.modules.RedisModule
 import ru.arc.core.modules.RtpModule
-import ru.arc.core.modules.SaveModule
 import ru.arc.discord.DiscordBot
 import ru.arc.discord.DiscordModule
 import ru.arc.discord.VerifyCommand
@@ -123,16 +121,15 @@ class Velocity @Inject constructor(
             // Persistence & cross-server (50-69)
             FirstJoinModule,
             RtpModule,
-            SaveModule,
             PlayerActivityModule,
             PlayerListModule,
+            JoinMessageCatalogModule,
             JoinMessagesModule,
             ChatModeModule,
             // Integrations (70-89)
             DiscordModule,
             TelegramModule,
             ChannelSyncModule,
-            AntibotModule,
             AssistantModule,
             ProxyOpsHttpModule,
             // Runtime (90-99)
@@ -268,9 +265,6 @@ class Velocity @Inject constructor(
 
         @JvmField
         var llmClient: ru.arc.ai.llm.OpenRouterLlmClient? = null
-
-        @JvmField
-        var antibot: Antibot? = null
 
         @JvmField
         var chatAssistant: Assistant? = null

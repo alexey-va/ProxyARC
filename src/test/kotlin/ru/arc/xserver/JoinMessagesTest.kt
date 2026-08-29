@@ -3,6 +3,7 @@ package ru.arc.xserver
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import ru.arc.join.JoinAnnouncementKind
 
 class JoinMessagesTest : FreeSpec({
     "merge replaces both snapshots and copies timestamp" {
@@ -22,14 +23,15 @@ class JoinMessagesTest : FreeSpec({
         local.timestamp shouldBe 42
     }
 
-    "random selectors return null for empty sets and a configured message otherwise" {
+    "typed selector ignores blank phrases and chooses only from the requested kind" {
         val messages = JoinMessages("Alex")
-        messages.randomJoinMessage() shouldBe null
-        messages.randomLeaveMessage() shouldBe null
-        messages.joinMessages = setOf("only")
+        messages.randomMessage(JoinAnnouncementKind.JOIN) shouldBe null
+        messages.randomMessage(JoinAnnouncementKind.LEAVE) shouldBe null
+        messages.joinMessages = setOf("", "only")
         messages.leaveMessages = setOf("bye")
 
-        messages.randomJoinMessage() shouldBe "only"
-        messages.randomLeaveMessage() shouldBe "bye"
+        messages.randomMessage(JoinAnnouncementKind.JOIN) shouldBe "only"
+        messages.randomMessage(JoinAnnouncementKind.LEAVE) shouldBe "bye"
+        messages.randomMessage(JoinAnnouncementKind.FIRST_TIME) shouldBe null
     }
 })

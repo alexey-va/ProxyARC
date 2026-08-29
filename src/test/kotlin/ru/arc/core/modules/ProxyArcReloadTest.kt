@@ -10,6 +10,7 @@ class ProxyArcReloadTest : FreeSpec({
                 "Logging",
                 "Network",
                 "Metrics",
+                "JoinMessageCatalog",
                 "Telegram",
                 "ChannelSync",
                 "Assistant",

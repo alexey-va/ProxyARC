@@ -21,6 +21,7 @@ object ProxyArcReload {
             LoggingModule,
             NetworkModule,
             MetricsModule,
+            JoinMessageCatalogModule,
             TelegramModule,
             ChannelSyncModule,
             AssistantModule,
@@ -30,7 +31,6 @@ object ProxyArcReload {
     internal fun moduleNames(): List<String> = modules.map(PluginModule::name)
 
     fun reloadSupported(): ProxyArcReloadResult {
-        Velocity.firstJoinData?.save()
         ConfigManager.reloadAll()
         Velocity.config = ProxyConfigs.main()
         Velocity.dataFolder?.let { dataFolder ->

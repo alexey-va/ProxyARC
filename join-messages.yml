@@ -1,0 +1,831 @@
+# Единый источник объявлений и каталога фраз для всей сети.
+# ProxyARC публикует catalog в Redis; Paper ARC не хранит локальную копию списка.
+messages:
+  join-prefix: "<dark_green>● "
+  leave-prefix: "<dark_red>● "
+  first-time: "<gray>Игрок <green>%player_name% <gray>впервые на сервере!"
+  join: "<gray>Игрок <green>%player_name% <gray>присоединился!"
+  leave: "<gray>Игрок <red>%player_name% <gray>вышел!"
+
+catalog:
+  join:
+    join-01:
+      order: 1
+      message: "<green>%player_name%<gray> выполз из своей пещеры"
+      display-name: "<italic:false><gold>Вход · фраза 1"
+      material: AMETHYST_SHARD
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-02:
+      order: 2
+      message: "<red>%player_name%<gray> вернулся, потому что реальная жизнь — это для слабаков"
+      display-name: "<italic:false><gold>Вход · фраза 2"
+      material: APPLE
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-03:
+      order: 3
+      message: "<yellow>%player_name%<gray> появился, и теперь будет всех ебать"
+      display-name: "<italic:false><gold>Вход · фраза 3"
+      material: BAKED_POTATO
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-04:
+      order: 4
+      message: "<dark_aqua>%player_name%<gray> пришел, чтобы в очередной раз накосячить"
+      display-name: "<italic:false><gold>Вход · фраза 4"
+      material: BEE_NEST
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-05:
+      order: 5
+      message: "<light_purple>%player_name%<gray> как обычно — зашел с голой жопой"
+      display-name: "<italic:false><gold>Вход · фраза 5"
+      material: BELL
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-06:
+      order: 6
+      message: "<dark_red>%player_name%<gray> прибыл и готов на всё, лишь бы не работать"
+      display-name: "<italic:false><gold>Вход · фраза 6"
+      material: BLAZE_POWDER
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-07:
+      order: 7
+      message: "<blue>%player_name%<gray> снова тут, как будто бездельничать — это его работа"
+      display-name: "<italic:false><gold>Вход · фраза 7"
+      material: BOOK
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-08:
+      order: 8
+      message: "<green>%player_name%<gray> вернулся, надеясь, что его тут хоть кто-то ждал"
+      display-name: "<italic:false><gold>Вход · фраза 8"
+      material: BOW
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-09:
+      order: 9
+      message: "<gold>%player_name%<gray> зашел, чтобы проверить, не упал ли сервер без него"
+      display-name: "<italic:false><gold>Вход · фраза 9"
+      material: BREAD
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-10:
+      order: 10
+      message: "<dark_purple>%player_name%<gray> вернулся и будет снова тупить"
+      display-name: "<italic:false><gold>Вход · фраза 10"
+      material: BRICK
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-11:
+      order: 11
+      message: "<gray>%player_name%<gray> снова здесь, как будто ему больше нечем заняться"
+      display-name: "<italic:false><gold>Вход · фраза 11"
+      material: CAKE
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-12:
+      order: 12
+      message: "<red>%player_name%<gray> вошел в игру, как бы это не кончилось катастрофой"
+      display-name: "<italic:false><gold>Вход · фраза 12"
+      material: CAMPFIRE
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-13:
+      order: 13
+      message: "<dark_aqua>%player_name%<gray> зашел в надежде, что его не убьют в первую минуту"
+      display-name: "<italic:false><gold>Вход · фраза 13"
+      material: CARROT
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-14:
+      order: 14
+      message: "<dark_green>%player_name%<gray> опять тут, как будто в жизни у него всё нормально"
+      display-name: "<italic:false><gold>Вход · фраза 14"
+      material: CLOCK
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-15:
+      order: 15
+      message: "<dark_gray>%player_name%<gray> прибыл на сервер, чтобы очередной раз обосраться"
+      display-name: "<italic:false><gold>Вход · фраза 15"
+      material: COMPASS
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-16:
+      order: 16
+      message: "<light_purple>%player_name%<gray> пришел, потому что где-то еще хуже"
+      display-name: "<italic:false><gold>Вход · фраза 16"
+      material: COOKIE
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-17:
+      order: 17
+      message: "<dark_red>%player_name%<gray> снова в деле, жди беды"
+      display-name: "<italic:false><gold>Вход · фраза 17"
+      material: COPPER_INGOT
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-18:
+      order: 18
+      message: "<green>%player_name%<gray> залетел как долбоёб и готов умирать"
+      display-name: "<italic:false><gold>Вход · фраза 18"
+      material: DIAMOND
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-19:
+      order: 19
+      message: "<yellow>%player_name%<gray> пришел на сервер, как на работу — с болью и страданиями"
+      display-name: "<italic:false><gold>Вход · фраза 19"
+      material: ECHO_SHARD
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-20:
+      order: 20
+      message: "<gold>%player_name%<gray> снова тут, хотя мог бы делать что-то полезное"
+      display-name: "<italic:false><gold>Вход · фраза 20"
+      material: EGG
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-21:
+      order: 21
+      message: "<green>%player_name% <gray>зашел - руина на месте"
+      display-name: "<italic:false><gold>Вход · фраза 21"
+      material: EMERALD
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-22:
+      order: 22
+      message: "<dark_green>%player_name%<gray> вернулся, чтобы снова всех заебать"
+      display-name: "<italic:false><gold>Вход · фраза 22"
+      material: ENDER_EYE
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-23:
+      order: 23
+      message: "<yellow>%player_name%<gray> пришел, чтобы умереть раз 50"
+      display-name: "<italic:false><gold>Вход · фраза 23"
+      material: FEATHER
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-24:
+      order: 24
+      message: "<dark_red>%player_name%<gray> пришел и снова будет тупить"
+      display-name: "<italic:false><gold>Вход · фраза 24"
+      material: FIREWORK_ROCKET
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-25:
+      order: 25
+      message: "<blue>%player_name%<gray> снова тут, как будто кто-то его ждал"
+      display-name: "<italic:false><gold>Вход · фраза 25"
+      material: FLINT
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-26:
+      order: 26
+      message: "<light_purple>%player_name%<gray> вернулся, но надолго ли?"
+      display-name: "<italic:false><gold>Вход · фраза 26"
+      material: GHAST_TEAR
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-27:
+      order: 27
+      message: "<gold>%player_name%<gray> пришел, чтобы застроить все говном"
+      display-name: "<italic:false><gold>Вход · фраза 27"
+      material: GLOW_BERRIES
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-28:
+      order: 28
+      message: "<red>%player_name%<gray> появился, и сервер уже не тот"
+      display-name: "<italic:false><gold>Вход · фраза 28"
+      material: GLOW_INK_SAC
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-29:
+      order: 29
+      message: "<dark_aqua>%player_name%<gray> вернулся с отпуска, жаль серверу"
+      display-name: "<italic:false><gold>Вход · фраза 29"
+      material: GOLD_INGOT
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-30:
+      order: 30
+      message: "<gray>%player_name%<gray> снова тут, и это плохие новости"
+      display-name: "<italic:false><gold>Вход · фраза 30"
+      material: HEART_OF_THE_SEA
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-31:
+      order: 31
+      message: "<dark_purple>%player_name%<gray> появился, как будто что-то важное происходит"
+      display-name: "<italic:false><gold>Вход · фраза 31"
+      material: HONEY_BOTTLE
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-32:
+      order: 32
+      message: "<green>%player_name%<gray> залетел, как на последний день"
+      display-name: "<italic:false><gold>Вход · фраза 32"
+      material: HONEYCOMB
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-33:
+      order: 33
+      message: "<dark_gray>%player_name%<gray> вошел в игру, и пиздец как всё изменится"
+      display-name: "<italic:false><gold>Вход · фраза 33"
+      material: IRON_INGOT
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-34:
+      order: 34
+      message: "<red>%player_name%<gray> вернулся, но сейчас точно что-то сломает"
+      display-name: "<italic:false><gold>Вход · фраза 34"
+      material: LANTERN
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-35:
+      order: 35
+      message: "<yellow>%player_name%<gray> прибежал как ветер, но ненадолго"
+      display-name: "<italic:false><gold>Вход · фраза 35"
+      material: LAPIS_LAZULI
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-36:
+      order: 36
+      message: "<blue>%player_name%<gray> снова тут, чтобы умереть самым тупым способом"
+      display-name: "<italic:false><gold>Вход · фраза 36"
+      material: LEAD
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-37:
+      order: 37
+      message: "<gold>%player_name%<gray> ворвался как гром среди ясного неба"
+      display-name: "<italic:false><gold>Вход · фраза 37"
+      material: LIGHTNING_ROD
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-38:
+      order: 38
+      message: "<dark_green>%player_name%<gray> снова тут, и все начинают напрягаться"
+      display-name: "<italic:false><gold>Вход · фраза 38"
+      material: MAGMA_CREAM
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-39:
+      order: 39
+      message: "<light_purple>%player_name%<gray> залетел, как будто ему больше негде быть"
+      display-name: "<italic:false><gold>Вход · фраза 39"
+      material: MAP
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-40:
+      order: 40
+      message: "<red>%player_name%<gray> появился, и сервер начал гореть"
+      display-name: "<italic:false><gold>Вход · фраза 40"
+      material: MELON_SLICE
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-41:
+      order: 41
+      message: "<dark_aqua>%player_name%<gray> вернулся, но точно на беду"
+      display-name: "<italic:false><gold>Вход · фраза 41"
+      material: NAME_TAG
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-42:
+      order: 42
+      message: "<dark_green>%player_name%<gray> пришел и жопой чувствует беду"
+      display-name: "<italic:false><gold>Вход · фраза 42"
+      material: NAUTILUS_SHELL
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-43:
+      order: 43
+      message: "<blue>%player_name%<gray> снова тут, чтобы сломать не только блоки, но и сервер"
+      display-name: "<italic:false><gold>Вход · фраза 43"
+      material: NETHER_STAR
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-44:
+      order: 44
+      message: "<dark_purple>%player_name%<gray> появился и уже на грани отключки"
+      display-name: "<italic:false><gold>Вход · фраза 44"
+      material: NETHERITE_SCRAP
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-45:
+      order: 45
+      message: "<light_purple>%player_name%<gray> пришел, как будто это его последний шанс на жизнь"
+      display-name: "<italic:false><gold>Вход · фраза 45"
+      material: PAPER
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-46:
+      order: 46
+      message: "<dark_aqua>%player_name%<gray> влетел, как пьяный крипер на скорости"
+      display-name: "<italic:false><gold>Вход · фраза 46"
+      material: PHANTOM_MEMBRANE
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-47:
+      order: 47
+      message: "<gold>%player_name%<gray> вернулся, как проклятие на 100 лет"
+      display-name: "<italic:false><gold>Вход · фраза 47"
+      material: PRISMARINE_CRYSTALS
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-48:
+      order: 48
+      message: "<red>%player_name%<gray> зашел на сервер, и сервер пожалел об этом"
+      display-name: "<italic:false><gold>Вход · фраза 48"
+      material: RABBIT_FOOT
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-49:
+      order: 49
+      message: "<green>%player_name%<gray> снова тут, как будто мы этого ждали"
+      display-name: "<italic:false><gold>Вход · фраза 49"
+      material: RECOVERY_COMPASS
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-50:
+      order: 50
+      message: "<yellow>%player_name%<gray> появился, как таракан после ядерного взрыва"
+      display-name: "<italic:false><gold>Вход · фраза 50"
+      material: REDSTONE
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-51:
+      order: 51
+      message: "<dark_red>%player_name%<gray> вернулся, чтобы навести полный хаос"
+      display-name: "<italic:false><gold>Вход · фраза 51"
+      material: SLIME_BALL
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-52:
+      order: 52
+      message: "<light_purple>%player_name%<gray> снова тут, и никто не знает, зачем"
+      display-name: "<italic:false><gold>Вход · фраза 52"
+      material: SNOWBALL
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-53:
+      order: 53
+      message: "<blue>%player_name%<gray> залетел, как НЛО на район"
+      display-name: "<italic:false><gold>Вход · фраза 53"
+      material: SPECTRAL_ARROW
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-54:
+      order: 54
+      message: "<dark_green>%player_name%<gray> пришел, и сейчас начнется жесть"
+      display-name: "<italic:false><gold>Вход · фраза 54"
+      material: SPYGLASS
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-55:
+      order: 55
+      message: "<gold>%player_name%<gray> ворвался, как будто ему всё можно"
+      display-name: "<italic:false><gold>Вход · фраза 55"
+      material: STRING
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-56:
+      order: 56
+      message: "<dark_purple>%player_name%<gray> появился, и сервер готов к концу света"
+      display-name: "<italic:false><gold>Вход · фраза 56"
+      material: SUGAR
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-57:
+      order: 57
+      message: "<dark_aqua>%player_name%<gray> вернулся, как баг, который никак не фиксят"
+      display-name: "<italic:false><gold>Вход · фраза 57"
+      material: TOTEM_OF_UNDYING
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-58:
+      order: 58
+      message: "<gray>%player_name%<gray> пришел, как гость на вечеринку, которой никто не ждал"
+      display-name: "<italic:false><gold>Вход · фраза 58"
+      material: TRIDENT
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    join-59:
+      order: 59
+      message: "<dark_red>%player_name%<gray> ворвался, как последняя капля терпения"
+      display-name: "<italic:false><gold>Вход · фраза 59"
+      material: TURTLE_HELMET
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+  leave:
+    leave-01:
+      order: 1
+      message: "<green>%player_name%<gray> съебался в туман"
+      display-name: "<italic:false><gold>Выход · фраза 1"
+      material: TURTLE_HELMET
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-02:
+      order: 2
+      message: "<yellow>%player_name%<gray> испарился, потому что реальная жизнь зовет... или нет"
+      display-name: "<italic:false><gold>Выход · фраза 2"
+      material: TRIDENT
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-03:
+      order: 3
+      message: "<dark_aqua>%player_name%<gray> свалил, оставив после себя одни проблемы"
+      display-name: "<italic:false><gold>Выход · фраза 3"
+      material: TOTEM_OF_UNDYING
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-04:
+      order: 4
+      message: "<dark_purple>%player_name%<gray> ушел, потому что тут хрен делать"
+      display-name: "<italic:false><gold>Выход · фраза 4"
+      material: SUGAR
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-05:
+      order: 5
+      message: "<gold>%player_name%<gray> исчез, как последний шанс на победу"
+      display-name: "<italic:false><gold>Выход · фраза 5"
+      material: STRING
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-06:
+      order: 6
+      message: "<dark_aqua>%player_name%<gray> свалил, потому что всё это задолбало"
+      display-name: "<italic:false><gold>Выход · фраза 6"
+      material: SPYGLASS
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-07:
+      order: 7
+      message: "<dark_red>%player_name%<gray> свалил, оставив все на остальных дебилов"
+      display-name: "<italic:false><gold>Выход · фраза 7"
+      material: SPECTRAL_ARROW
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-08:
+      order: 8
+      message: "<gray>%player_name%<gray> вышел, потому что не выдержал накала тупости"
+      display-name: "<italic:false><gold>Выход · фраза 8"
+      material: SNOWBALL
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-09:
+      order: 9
+      message: "<dark_purple>%player_name%<gray> слился, как крыса"
+      display-name: "<italic:false><gold>Выход · фраза 9"
+      material: SLIME_BALL
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-10:
+      order: 10
+      message: "<blue>%player_name%<gray> ушел, потому что кто-то в реале орет \"Убери мусор!\""
+      display-name: "<italic:false><gold>Выход · фраза 10"
+      material: REDSTONE
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-11:
+      order: 11
+      message: "<light_purple>%player_name%<gray> исчез, как будто его никогда не было"
+      display-name: "<italic:false><gold>Выход · фраза 11"
+      material: RECOVERY_COMPASS
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-12:
+      order: 12
+      message: "<dark_gray>%player_name%<gray> свалил, как только понял, что тут ему не светит"
+      display-name: "<italic:false><gold>Выход · фраза 12"
+      material: RABBIT_FOOT
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-13:
+      order: 13
+      message: "<red>%player_name%<gray> свалил, пока никто не заметил"
+      display-name: "<italic:false><gold>Выход · фраза 13"
+      material: PRISMARINE_CRYSTALS
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-14:
+      order: 14
+      message: "<green>%player_name%<gray> оставил все планы на потом... или на никогда"
+      display-name: "<italic:false><gold>Выход · фраза 14"
+      material: PHANTOM_MEMBRANE
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-15:
+      order: 15
+      message: "<yellow>%player_name%<gray> испарился, потому что задолбали все"
+      display-name: "<italic:false><gold>Выход · фраза 15"
+      material: PAPER
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-16:
+      order: 16
+      message: "<blue>%player_name%<gray> исчез, оставив после себя только ошибки"
+      display-name: "<italic:false><gold>Выход · фраза 16"
+      material: NETHERITE_SCRAP
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-17:
+      order: 17
+      message: "<gold>%player_name%<gray> свалил, оставив всем прощальный плевок"
+      display-name: "<italic:false><gold>Выход · фраза 17"
+      material: NETHER_STAR
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-18:
+      order: 18
+      message: "<dark_red>%player_name%<gray> ушел, как король, но никто этого не заметил"
+      display-name: "<italic:false><gold>Выход · фраза 18"
+      material: NAUTILUS_SHELL
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-19:
+      order: 19
+      message: "<dark_aqua>%player_name%<gray> свалил, как трус, но мы всё понимаем"
+      display-name: "<italic:false><gold>Выход · фраза 19"
+      material: NAME_TAG
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-20:
+      order: 20
+      message: "<green>%player_name%<gray> всё заруинил и свалил"
+      display-name: "<italic:false><gold>Выход · фраза 20"
+      material: MELON_SLICE
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-21:
+      order: 21
+      message: "<dark_green>%player_name%<gray> исчез в тумане, оставив бардак"
+      display-name: "<italic:false><gold>Выход · фраза 21"
+      material: MAP
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-22:
+      order: 22
+      message: "<red>%player_name%<gray> испарился, как последний шанс на успех"
+      display-name: "<italic:false><gold>Выход · фраза 22"
+      material: MAGMA_CREAM
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-23:
+      order: 23
+      message: "<dark_purple>%player_name%<gray> ушел, потому что где-то его ждет кровать"
+      display-name: "<italic:false><gold>Выход · фраза 23"
+      material: LIGHTNING_ROD
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-24:
+      order: 24
+      message: "<yellow>%player_name%<gray> свалил, как только запахло жареным"
+      display-name: "<italic:false><gold>Выход · фраза 24"
+      material: LEAD
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-25:
+      order: 25
+      message: "<blue>%player_name%<gray> покинул сервер, потому что кому-то пора на работу"
+      display-name: "<italic:false><gold>Выход · фраза 25"
+      material: LAPIS_LAZULI
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-26:
+      order: 26
+      message: "<gold>%player_name%<gray> исчез, как будто его тут не было"
+      display-name: "<italic:false><gold>Выход · фраза 26"
+      material: LANTERN
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-27:
+      order: 27
+      message: "<dark_aqua>%player_name%<gray> свалил, оставив кучу проблем"
+      display-name: "<italic:false><gold>Выход · фраза 27"
+      material: IRON_INGOT
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-28:
+      order: 28
+      message: "<gray>%player_name%<gray> вышел, и сервер вздохнул с облегчением"
+      display-name: "<italic:false><gold>Выход · фраза 28"
+      material: HONEYCOMB
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-29:
+      order: 29
+      message: "<light_purple>%player_name%<gray> покинул мир, и все стало спокойнее"
+      display-name: "<italic:false><gold>Выход · фраза 29"
+      material: HONEY_BOTTLE
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-30:
+      order: 30
+      message: "<dark_green>%player_name%<gray> свалил в закат, как герой, которого никто не звал"
+      display-name: "<italic:false><gold>Выход · фраза 30"
+      material: HEART_OF_THE_SEA
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-31:
+      order: 31
+      message: "<red>%player_name%<gray> исчез, оставив всех в полной жопе"
+      display-name: "<italic:false><gold>Выход · фраза 31"
+      material: GOLD_INGOT
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-32:
+      order: 32
+      message: "<yellow>%player_name%<gray> испарился, как только начались реальные проблемы"
+      display-name: "<italic:false><gold>Выход · фраза 32"
+      material: GLOW_INK_SAC
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-33:
+      order: 33
+      message: "<blue>%player_name%<gray> вышел, потому что задолбало умирать"
+      display-name: "<italic:false><gold>Выход · фраза 33"
+      material: GLOW_BERRIES
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-34:
+      order: 34
+      message: "<dark_gray>%player_name%<gray> свалил, как будто никто и не заметил"
+      display-name: "<italic:false><gold>Выход · фраза 34"
+      material: GHAST_TEAR
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-35:
+      order: 35
+      message: "<green>%player_name%<gray> исчез в тумане, оставив сервер в руинах"
+      display-name: "<italic:false><gold>Выход · фраза 35"
+      material: FLINT
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-36:
+      order: 36
+      message: "<light_purple>%player_name%<gray> вышел, как только начал пахнуть жареным"
+      display-name: "<italic:false><gold>Выход · фраза 36"
+      material: FIREWORK_ROCKET
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-37:
+      order: 37
+      message: "<gold>%player_name%<gray> свалил, как только начались реальные траблы"
+      display-name: "<italic:false><gold>Выход · фраза 37"
+      material: FEATHER
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-38:
+      order: 38
+      message: "<dark_red>%player_name%<gray> ушел, и всем стало легче"
+      display-name: "<italic:false><gold>Выход · фраза 38"
+      material: ENDER_EYE
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-39:
+      order: 39
+      message: "<dark_aqua>%player_name%<gray> покинул сервер, оставив всех в замешательстве"
+      display-name: "<italic:false><gold>Выход · фраза 39"
+      material: EMERALD
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-40:
+      order: 40
+      message: "<blue>%player_name%<gray> испарился, как последний шанс на адекватность"
+      display-name: "<italic:false><gold>Выход · фраза 40"
+      material: EGG
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-41:
+      order: 41
+      message: "<yellow>%player_name%<gray> свалил, как будто ему тут вообще не рады"
+      display-name: "<italic:false><gold>Выход · фраза 41"
+      material: ECHO_SHARD
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-42:
+      order: 42
+      message: "<dark_purple>%player_name%<gray> исчез, как надежда на нормальную игру"
+      display-name: "<italic:false><gold>Выход · фраза 42"
+      material: DIAMOND
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-43:
+      order: 43
+      message: "<red>%player_name%<gray> вышел, потому что понял, что это всё бессмысленно"
+      display-name: "<italic:false><gold>Выход · фраза 43"
+      material: COPPER_INGOT
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-44:
+      order: 44
+      message: "<light_purple>%player_name%<gray> исчез, как мама из-за плохих оценок"
+      display-name: "<italic:false><gold>Выход · фраза 44"
+      material: COOKIE
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-45:
+      order: 45
+      message: "<gold>%player_name%<gray> свалил, как интернет при плохой погоде"
+      display-name: "<italic:false><gold>Выход · фраза 45"
+      material: COMPASS
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-46:
+      order: 46
+      message: "<green>%player_name%<gray> вышел, потому что кто-то закричал \"реальная жизнь!\""
+      display-name: "<italic:false><gold>Выход · фраза 46"
+      material: CLOCK
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-47:
+      order: 47
+      message: "<dark_aqua>%player_name%<gray> исчез, как будто он что-то потерял"
+      display-name: "<italic:false><gold>Выход · фраза 47"
+      material: CARROT
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-48:
+      order: 48
+      message: "<dark_green>%player_name%<gray> испарился, как надежда на лучшую жизнь"
+      display-name: "<italic:false><gold>Выход · фраза 48"
+      material: CAMPFIRE
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-49:
+      order: 49
+      message: "<yellow>%player_name%<gray> ушел, и все задумались о смысле жизни"
+      display-name: "<italic:false><gold>Выход · фраза 49"
+      material: CAKE
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-50:
+      order: 50
+      message: "<red>%player_name%<gray> свалил, как когда кто-то сказал \"Пора спать\""
+      display-name: "<italic:false><gold>Выход · фраза 50"
+      material: BRICK
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-51:
+      order: 51
+      message: "<blue>%player_name%<gray> испарился, как моя мотивация работать"
+      display-name: "<italic:false><gold>Выход · фраза 51"
+      material: BREAD
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-52:
+      order: 52
+      message: "<light_purple>%player_name%<gray> ушел, потому что ему больше нечего терять"
+      display-name: "<italic:false><gold>Выход · фраза 52"
+      material: BOW
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-53:
+      order: 53
+      message: "<green>%player_name%<gray> свалил, как будто его не было на вечеринке"
+      display-name: "<italic:false><gold>Выход · фраза 53"
+      material: BOOK
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-54:
+      order: 54
+      message: "<gold>%player_name%<gray> исчез, оставив за собой след из ошибок"
+      display-name: "<italic:false><gold>Выход · фраза 54"
+      material: BLAZE_POWDER
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-55:
+      order: 55
+      message: "<dark_gray>%player_name%<gray> свалил, как последний ломтик пиццы"
+      display-name: "<italic:false><gold>Выход · фраза 55"
+      material: BELL
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-56:
+      order: 56
+      message: "<red>%player_name%<gray> вышел, как если бы батя зашел в комнату"
+      display-name: "<italic:false><gold>Выход · фраза 56"
+      material: BEE_NEST
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-57:
+      order: 57
+      message: "<dark_aqua>%player_name%<gray> исчез, как последний пакет чипсов"
+      display-name: "<italic:false><gold>Выход · фраза 57"
+      material: BAKED_POTATO
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
+    leave-58:
+      order: 58
+      message: "<gray>%player_name%<gray> свалил, как грузовик с твоими мечтами"
+      display-name: "<italic:false><gold>Выход · фраза 58"
+      material: APPLE
+      custom-model-data: 0
+      rank: "<italic:false><green>Для всех"
