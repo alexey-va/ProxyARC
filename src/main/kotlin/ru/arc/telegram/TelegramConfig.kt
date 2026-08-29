@@ -44,6 +44,9 @@ open class TelegramConfig(
             return TelegramDestination(chatId, threadId)
         }
 
+    open val informationUrl: String?
+        get() = publicTelegramUrl(config.string("channels.information.url", ""))
+
     open val mirrorGeneralToInformation: Boolean
         get() = config.bool("channels.information.mirror-general", true)
 
@@ -154,6 +157,11 @@ open class TelegramConfig(
                 "minecraft-unlink-success" to "Telegram-аккаунт отвязан.",
                 "minecraft-unlink-not-linked" to "Telegram-аккаунт не был привязан.",
                 "private-only" to "Команды привязки работают только в личном чате с ботом.",
+                "welcome-linked" to "Вы привязаны к Minecraft-аккаунту %player_name%.",
+                "welcome-not-linked" to
+                    "Minecraft-аккаунт пока не привязан. В игре выполните /verify telegram, затем отправьте сюда /verify КОД.",
+                "help" to
+                    "Доступные команды:\n/start — открыть главное меню\n/verify КОД — привязать Minecraft\n/status — проверить привязку\n/unlink confirm — отвязать аккаунт\n/help — показать эту справку",
                 "status-linked" to "Привязан Minecraft-аккаунт: %player_name%.",
                 "status-not-linked" to "Аккаунт не привязан. Получите код в игре: /verify telegram",
                 "verified" to "Telegram привязан к Minecraft-аккаунту %player_name%.",
@@ -181,8 +189,25 @@ open class TelegramConfig(
         internal fun botUrl(username: String): String? {
             val normalized = username.removePrefix("@").trim()
             if (!BOT_USERNAME.matches(normalized)) return null
-            val uri = runCatching { URI("https://t.me/$normalized") }.getOrNull() ?: return null
-            return if (uri.scheme?.lowercase(Locale.ROOT) == "https" && uri.host == "t.me") uri.toString() else null
+            return publicTelegramUrl("https://t.me/$normalized")
+        }
+
+        internal fun publicTelegramUrl(value: String): String? {
+            val uri = runCatching { URI(value.trim()) }.getOrNull() ?: return null
+            val username = uri.path?.removePrefix("/") ?: return null
+            return if (
+                uri.scheme?.lowercase(Locale.ROOT) == "https" &&
+                uri.host?.lowercase(Locale.ROOT) == "t.me" &&
+                uri.port == -1 &&
+                uri.userInfo == null &&
+                uri.query == null &&
+                uri.fragment == null &&
+                BOT_USERNAME.matches(username)
+            ) {
+                "https://t.me/$username"
+            } else {
+                null
+            }
         }
 
         private val BOT_USERNAME = Regex("[A-Za-z0-9_]{5,32}")
@@ -196,6 +221,7 @@ class TestTelegramConfig(
     override val chatDestination: TelegramDestination? = null,
     override val generalDestination: TelegramDestination? = null,
     override val informationDestination: TelegramDestination? = null,
+    override val informationUrl: String? = null,
     override val mirrorGeneralToInformation: Boolean = true,
     override val chatFormat: String = "<white></white> <dark_gray>| <gray>%sender% <dark_gray>» <white>%message%",
     override val discordFormat: String = "**%sender%** » %message%",

@@ -120,10 +120,18 @@ Useful commands:
 /verify telegram unlink confirm
 
 # Private chat with the Telegram bot
+/start
 /verify <code>
 /verify
+/status
 /unlink confirm
+/help
 ```
+
+The bot publishes the same commands into Telegram's private-chat command menu.
+`/start`, `/status`, and `/verify` without a code report the authenticated
+Telegram user's current link. Linked and newly verified users receive an inline
+button to `channels.information.url`.
 
 Codes are single-purpose, hashed at rest, expiring and rate-limited. Links, challenges and an audit tail are atomically stored in `data/telegram-identities.json` with owner-only permissions.
 

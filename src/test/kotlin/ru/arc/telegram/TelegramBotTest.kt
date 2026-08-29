@@ -4,22 +4,29 @@ import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import org.telegram.telegrambots.meta.api.methods.BotApiMethod
+import org.telegram.telegrambots.meta.api.methods.GetMe
+import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage
 import org.telegram.telegrambots.meta.api.objects.Chat
 import org.telegram.telegrambots.meta.api.objects.Message
 import org.telegram.telegrambots.meta.api.objects.MessageEntity
 import org.telegram.telegrambots.meta.api.objects.Update
 import org.telegram.telegrambots.meta.api.objects.User
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup
+import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScopeAllPrivateChats
 import org.telegram.telegrambots.meta.generics.BotSession
 import ru.arc.core.TestTaskScheduler
 import ru.arc.ops.TelegramTopicMutation
 import ru.arc.ops.TelegramTopicMutationRequest
 import java.nio.file.Files
+import java.util.concurrent.CompletableFuture
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -52,6 +59,37 @@ class TelegramBotTest : FreeSpec({
         bot.close()
         scheduler.executeImmediate()
         executions.get() shouldBe 1
+    }
+
+    "connectivity probe registers the private player command menu before becoming ready" {
+        val methods = mutableListOf<BotApiMethod<*>>()
+        val bot =
+            TelegramBot(
+                config = TestTelegramConfig(identityEnabled = true),
+                scheduler = TestTaskScheduler(),
+                apiExecutor = { method ->
+                    methods += method
+                    when (method) {
+                        is GetMe -> CompletableFuture.completedFuture<Any>(User(123L, "RusCrafting bot", true))
+                        is SetMyCommands -> CompletableFuture.completedFuture<Any>(true)
+                        else -> CompletableFuture.failedFuture<Any>(IllegalArgumentException("unexpected method"))
+                    }
+                },
+            )
+
+        bot.probeConnectivity().join()
+
+        val menu = methods.filterIsInstance<SetMyCommands>().single()
+        (menu.scope is BotCommandScopeAllPrivateChats) shouldBe true
+        menu.commands.map { it.command to it.description }.shouldContainExactly(
+            "start" to "Открыть главное меню",
+            "verify" to "Привязать Minecraft по коду",
+            "status" to "Проверить привязку",
+            "unlink" to "Отвязать Minecraft-аккаунт",
+            "help" to "Показать доступные команды",
+        )
+        bot.isReady() shouldBe true
+        bot.close()
     }
 
     "forum topic updates validate without an optional custom emoji" {
@@ -274,7 +312,11 @@ class TelegramBotTest : FreeSpec({
         val challenge = identity.issueChallenge(playerUuid, "PlayerOne") as TelegramChallengeIssueResult.Issued
         val bot =
             TelegramBot(
-                config = TestTelegramConfig(identityEnabled = true),
+                config =
+                    TestTelegramConfig(
+                        identityEnabled = true,
+                        informationUrl = "https://t.me/ruscrafting",
+                    ),
                 scheduler = scheduler,
                 requestExecutor = requests::add,
                 identityService = identity,
@@ -294,7 +336,158 @@ class TelegramBotTest : FreeSpec({
         scheduler.executeImmediate()
 
         identity.findByTelegramUserId(777L)?.playerUuid shouldBe playerUuid
-        requests.single().text shouldBe "Telegram привязан к Minecraft-аккаунту PlayerOne."
+        val reply = requests.single()
+        reply.text shouldBe "Telegram привязан к Minecraft-аккаунту PlayerOne."
+        val button = (reply.replyMarkup as InlineKeyboardMarkup).keyboard.single().single()
+        button.url shouldBe "https://t.me/ruscrafting"
+        bot.close()
+    }
+
+    "private start shows the linked Minecraft account and the public Telegram community" {
+        val scheduler = TestTaskScheduler()
+        val requests = mutableListOf<SendMessage>()
+        val identity = testIdentityService()
+        val playerUuid = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        val challenge = identity.issueChallenge(playerUuid, "PlayerOne") as TelegramChallengeIssueResult.Issued
+        identity.completeChallenge(challenge.code, 777L, "player_tg", "Telegram user")
+        val bot =
+            TelegramBot(
+                config =
+                    TestTelegramConfig(
+                        identityEnabled = true,
+                        informationUrl = "https://t.me/ruscrafting",
+                    ),
+                scheduler = scheduler,
+                requestExecutor = requests::add,
+                identityService = identity,
+            )
+
+        bot.onUpdateReceived(
+            telegramUpdate(
+                chatId = 777,
+                threadId = null,
+                username = "player_tg",
+                text = "/start",
+                userId = 777L,
+                chatType = "private",
+            ),
+        )
+        scheduler.executeImmediate()
+        scheduler.executeImmediate()
+
+        val reply = requests.single()
+        reply.text shouldContain "Вы привязаны"
+        reply.text shouldContain "PlayerOne"
+        val button = (reply.replyMarkup as InlineKeyboardMarkup).keyboard.single().single()
+        button.text shouldBe "Перейти в Telegram RusCrafting"
+        button.url shouldBe "https://t.me/ruscrafting"
+        bot.close()
+    }
+
+    "private start tells an unlinked player how to obtain and submit one code" {
+        val scheduler = TestTaskScheduler()
+        val requests = mutableListOf<SendMessage>()
+        val bot =
+            TelegramBot(
+                config = TestTelegramConfig(identityEnabled = true),
+                scheduler = scheduler,
+                requestExecutor = requests::add,
+                identityService = testIdentityService(),
+            )
+
+        bot.onUpdateReceived(
+            telegramUpdate(
+                chatId = 777,
+                threadId = null,
+                username = "player_tg",
+                text = "/start",
+                userId = 777L,
+                chatType = "private",
+            ),
+        )
+        scheduler.executeImmediate()
+        scheduler.executeImmediate()
+
+        val reply = requests.single().text
+        reply shouldContain "/verify telegram"
+        reply shouldContain "/verify КОД"
+        bot.close()
+    }
+
+    "private status reports the current link and keeps the community one tap away" {
+        val scheduler = TestTaskScheduler()
+        val requests = mutableListOf<SendMessage>()
+        val identity = testIdentityService()
+        val playerUuid = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        val challenge = identity.issueChallenge(playerUuid, "PlayerOne") as TelegramChallengeIssueResult.Issued
+        identity.completeChallenge(challenge.code, 777L, "player_tg", "Telegram user")
+        val bot =
+            TelegramBot(
+                config =
+                    TestTelegramConfig(
+                        identityEnabled = true,
+                        informationUrl = "https://t.me/ruscrafting",
+                    ),
+                scheduler = scheduler,
+                requestExecutor = requests::add,
+                identityService = identity,
+            )
+
+        bot.onUpdateReceived(
+            telegramUpdate(777, null, "player_tg", "/status", userId = 777L, chatType = "private"),
+        )
+        scheduler.executeImmediate()
+        scheduler.executeImmediate()
+
+        val reply = requests.single()
+        reply.text shouldContain "PlayerOne"
+        val button = (reply.replyMarkup as InlineKeyboardMarkup).keyboard.single().single()
+        button.url shouldBe "https://t.me/ruscrafting"
+        bot.close()
+    }
+
+    "private help explains every player command" {
+        val scheduler = TestTaskScheduler()
+        val requests = mutableListOf<SendMessage>()
+        val bot =
+            TelegramBot(
+                config = TestTelegramConfig(identityEnabled = true),
+                scheduler = scheduler,
+                requestExecutor = requests::add,
+                identityService = testIdentityService(),
+            )
+
+        bot.onUpdateReceived(
+            telegramUpdate(777, null, "player_tg", "/help", userId = 777L, chatType = "private"),
+        )
+        scheduler.executeImmediate()
+        scheduler.executeImmediate()
+
+        val reply = requests.single().text
+        listOf("/start", "/verify", "/status", "/unlink", "/help").forEach { command ->
+            reply shouldContain command
+        }
+        bot.close()
+    }
+
+    "unknown private slash command returns the command help" {
+        val scheduler = TestTaskScheduler()
+        val requests = mutableListOf<SendMessage>()
+        val bot =
+            TelegramBot(
+                config = TestTelegramConfig(identityEnabled = true),
+                scheduler = scheduler,
+                requestExecutor = requests::add,
+                identityService = testIdentityService(),
+            )
+
+        bot.onUpdateReceived(
+            telegramUpdate(777, null, "player_tg", "/wat", userId = 777L, chatType = "private"),
+        )
+        scheduler.executeImmediate()
+        scheduler.executeImmediate()
+
+        requests.single().text shouldContain "/help"
         bot.close()
     }
 

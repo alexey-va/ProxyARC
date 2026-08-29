@@ -26,6 +26,8 @@ channels:
     chat-id: 0
     thread-id: 0
     mirror-general: true
+    # Public community URL shown after account-link actions.
+    url: ""
 
 chat-format: "<white></white> <dark_gray>| <gray>%sender% <dark_gray>» <white>%message%"
 discord-format: "**%sender%** » %message%"
@@ -60,6 +62,15 @@ identity:
     minecraft-unlink-success: "Telegram-аккаунт отвязан."
     minecraft-unlink-not-linked: "Telegram-аккаунт не был привязан."
     private-only: "Команды привязки работают только в личном чате с ботом."
+    welcome-linked: "Вы привязаны к Minecraft-аккаунту %player_name%."
+    welcome-not-linked: "Minecraft-аккаунт пока не привязан. В игре выполните /verify telegram, затем отправьте сюда /verify КОД."
+    help: |-
+      Доступные команды:
+      /start — открыть главное меню
+      /verify КОД — привязать Minecraft
+      /status — проверить привязку
+      /unlink confirm — отвязать аккаунт
+      /help — показать эту справку
     status-linked: "Привязан Minecraft-аккаунт: %player_name%."
     status-not-linked: "Аккаунт не привязан. Получите код в игре: /verify telegram"
     verified: "Telegram привязан к Minecraft-аккаунту %player_name%."

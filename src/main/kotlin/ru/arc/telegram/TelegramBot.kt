@@ -8,6 +8,7 @@ import org.telegram.telegrambots.bots.DefaultBotOptions
 import org.telegram.telegrambots.bots.TelegramLongPollingBot
 import org.telegram.telegrambots.meta.api.methods.GetMe
 import org.telegram.telegrambots.meta.api.methods.BotApiMethod
+import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands
 import org.telegram.telegrambots.meta.api.methods.forum.CloseForumTopic
 import org.telegram.telegrambots.meta.api.methods.forum.CloseGeneralForumTopic
 import org.telegram.telegrambots.meta.api.methods.forum.CreateForumTopic
@@ -54,6 +55,8 @@ import org.telegram.telegrambots.meta.api.objects.ChatPermissions
 import org.telegram.telegrambots.meta.api.objects.InputFile
 import org.telegram.telegrambots.meta.api.objects.Message
 import org.telegram.telegrambots.meta.api.objects.Update
+import org.telegram.telegrambots.meta.api.objects.commands.BotCommand
+import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScopeAllPrivateChats
 import org.telegram.telegrambots.meta.api.objects.forum.ForumTopic
 import org.telegram.telegrambots.meta.api.objects.chatmember.ChatMember
 import org.telegram.telegrambots.meta.api.objects.chatmember.ChatMemberAdministrator
@@ -97,6 +100,7 @@ open class TelegramBot(
     token: String = config.token,
     private val scheduler: TaskScheduler = Tasks.scheduler,
     requestExecutor: ((SendMessage) -> Unit)? = null,
+    private val apiExecutor: ((BotApiMethod<*>) -> CompletableFuture<*>)? = null,
     private val inboundRelay: TelegramInboundRelay = VelocityTelegramInboundRelay,
     private val identityService: TelegramIdentityService? = null,
     botOptions: DefaultBotOptions = DefaultBotOptions(),
@@ -208,7 +212,13 @@ open class TelegramBot(
     ): Boolean {
         val parts = text.trim().split(Regex("\\s+"), limit = 3)
         val command = parts.firstOrNull()?.substringBefore('@')?.lowercase() ?: return false
-        if (command != "/verify" && command != "/unlink") return false
+        if (command !in setOf("/start", "/status", "/verify", "/unlink", "/help")) {
+            if (command.startsWith("/") && message.chat.type == "private") {
+                replyIdentity(message, config.identityMessage("help"))
+                return true
+            }
+            return false
+        }
         val identity = identityService
         if (!config.identityEnabled || identity == null) {
             replyIdentity(message, config.identityMessage("minecraft-unavailable"))
@@ -224,6 +234,11 @@ open class TelegramBot(
             if (closed.get()) return@runAsync
             val response =
                 when (command) {
+                    "/start", "/status" ->
+                        identity.findByTelegramUserId(author.id)?.let { link ->
+                            config.identityMessage("welcome-linked", mapOf("player_name" to link.playerName))
+                        } ?: config.identityMessage("welcome-not-linked")
+                    "/help" -> config.identityMessage("help")
                     "/verify" ->
                         if (parts.size == 1) {
                             identity.findByTelegramUserId(author.id)?.let { link ->
@@ -274,7 +289,11 @@ open class TelegramBot(
                             }
                         }
                 }
-            replyIdentity(message, response)
+            val showCommunity =
+                command == "/start" ||
+                    command == "/status" ||
+                    (command == "/verify" && identity.findByTelegramUserId(author.id) != null)
+            replyIdentity(message, response, showCommunity)
         }
         return true
     }
@@ -282,13 +301,30 @@ open class TelegramBot(
     private fun replyIdentity(
         source: Message,
         text: String,
+        showCommunity: Boolean = false,
     ) {
         enqueue(
             SendMessage(source.chatId.toString(), text).also { reply ->
                 reply.replyToMessageId = source.messageId
+                if (showCommunity) {
+                    reply.replyMarkup = communityKeyboard()
+                }
             },
         )
     }
+
+    private fun communityKeyboard(): InlineKeyboardMarkup? =
+        config.informationUrl?.let { url ->
+            InlineKeyboardMarkup(
+                listOf(
+                    listOf(
+                        InlineKeyboardButton("Перейти в Telegram RusCrafting").also { button ->
+                            button.url = url
+                        },
+                    ),
+                ),
+            )
+        }
 
     internal fun isIdentityEnabled(): Boolean = config.identityEnabled && identityService != null
 
@@ -410,9 +446,12 @@ open class TelegramBot(
     }
 
     internal fun probeConnectivity(): CompletableFuture<Unit> =
-        executeWhenOpen(GetMe()).thenApply { botUser ->
+        executeWhenOpen(GetMe()).thenCompose { botUser ->
             require(botUser.id > 0L) { "Telegram getMe returned an invalid bot identity" }
-            connected.set(true)
+            executeWhenOpen(privateCommandMenu()).thenApply { registered ->
+                require(registered) { "Telegram rejected the private command menu" }
+                connected.set(true)
+            }
         }
 
     override fun isReady(): Boolean = connected.get() && !closed.get()
@@ -713,10 +752,11 @@ open class TelegramBot(
         }
     }
 
+    @Suppress("UNCHECKED_CAST")
     private fun <T : Serializable> executeWhenOpen(method: BotApiMethod<T>): CompletableFuture<T> {
         if (closed.get()) return CompletableFuture.failedFuture(IllegalStateException("telegram bot is closed"))
         return try {
-            executeAsync(method)
+            apiExecutor?.invoke(method) as? CompletableFuture<T> ?: executeAsync(method)
         } catch (error: Exception) {
             CompletableFuture.failedFuture(error)
         }
@@ -740,6 +780,19 @@ open class TelegramBot(
         private fun retryMinutes(retryAt: Long): Long =
             TimeUnit.MILLISECONDS.toMinutes((retryAt - System.currentTimeMillis()).coerceAtLeast(0) + 59_999)
                 .coerceAtLeast(1)
+
+        private fun privateCommandMenu(): SetMyCommands =
+            SetMyCommands().also { menu ->
+                menu.scope = BotCommandScopeAllPrivateChats()
+                menu.commands =
+                    listOf(
+                        BotCommand("start", "Открыть главное меню"),
+                        BotCommand("verify", "Привязать Minecraft по коду"),
+                        BotCommand("status", "Проверить привязку"),
+                        BotCommand("unlink", "Отвязать Minecraft-аккаунт"),
+                        BotCommand("help", "Показать доступные команды"),
+                    )
+            }
 
         internal fun splitMessage(message: String): List<String> {
             var remaining = message.trim()

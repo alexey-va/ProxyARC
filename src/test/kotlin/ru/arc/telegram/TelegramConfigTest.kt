@@ -31,6 +31,23 @@ class TelegramConfigTest : FreeSpec({
         )
     }
 
+    "loads the public Telegram community URL from the information channel config" {
+        val root = Files.createTempDirectory("telegram-community-url-")
+        Files.createDirectories(root.resolve("modules"))
+        Files.writeString(
+            root.resolve("modules/telegram.yml"),
+            """
+            channels:
+              information:
+                url: "https://t.me/ruscrafting"
+            """.trimIndent(),
+        )
+
+        val config = TelegramConfig.load(root)
+
+        config.informationUrl shouldBe "https://t.me/ruscrafting"
+    }
+
     "legacy chat id and topics remain valid fallbacks" {
         val root = Files.createTempDirectory("telegram-legacy-config-")
         ProxyConfigs.module(root, "telegram.yml").also { config ->
