@@ -4,24 +4,53 @@ import ru.arc.config.ConfigManager
 import ru.arc.config.ProxyConfigs
 import ru.arc.ai.AssistantModule
 import ru.arc.core.ModuleRegistry
+import ru.arc.core.PluginModule
+import ru.arc.redis.RedisModuleConfig
 import ru.arc.ops.ProxyOpsHttpModule
 import ru.arc.channelsync.ChannelSyncModule
 import ru.arc.telegram.TelegramModule
 import ru.arc.velocity.Velocity
 
 /**
- * Safe hot-reload for config-backed modules.
- * Does not restart Discord/JDA, Redis, or SaveModule executor.
+ * Safe hot-reload for configuration-backed modules that own replaceable runtime state.
+ * Discord/JDA and Redis keep their process-bound connections until the next Velocity restart.
  */
 object ProxyArcReload {
-    fun configsAndAssistant() {
+    private val modules: List<PluginModule> =
+        listOf(
+            LoggingModule,
+            NetworkModule,
+            MetricsModule,
+            TelegramModule,
+            ChannelSyncModule,
+            AssistantModule,
+            ProxyOpsHttpModule,
+        )
+
+    internal fun moduleNames(): List<String> = modules.map(PluginModule::name)
+
+    fun reloadSupported(): ProxyArcReloadResult {
         Velocity.firstJoinData?.save()
         ConfigManager.reloadAll()
         Velocity.config = ProxyConfigs.main()
-        ModuleRegistry.reload(MetricsModule)
-        ModuleRegistry.reload(AssistantModule)
-        ModuleRegistry.reload(TelegramModule)
-        ModuleRegistry.reload(ChannelSyncModule)
-        ModuleRegistry.reload(ProxyOpsHttpModule)
+        Velocity.dataFolder?.let { dataFolder ->
+            Velocity.serverName = RedisModuleConfig.load(dataFolder).serverName
+        }
+
+        val reloaded = mutableListOf<String>()
+        val failed = mutableListOf<String>()
+        modules.forEach { module ->
+            if (ModuleRegistry.reload(module)) {
+                reloaded += module.name
+            } else {
+                failed += module.name
+            }
+        }
+        return ProxyArcReloadResult(reloaded = reloaded, failed = failed)
     }
 }
+
+data class ProxyArcReloadResult(
+    val reloaded: List<String>,
+    val failed: List<String>,
+)

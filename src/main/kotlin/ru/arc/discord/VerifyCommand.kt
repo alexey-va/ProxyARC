@@ -5,6 +5,7 @@ import com.velocitypowered.api.proxy.Player
 import ru.arc.core.Tasks
 import ru.arc.telegram.TelegramChallengeIssueResult
 import ru.arc.telegram.TelegramConfig
+import ru.arc.telegram.TelegramIdentityLink
 import ru.arc.telegram.TelegramUnlinkResult
 import ru.arc.telegram.TelegramVerificationMessages
 import ru.arc.velocity.Velocity
@@ -20,6 +21,26 @@ internal data class VerificationInvocation(
     val platform: VerificationPlatform,
     val arguments: List<String>,
 )
+
+internal fun telegramAccountLabel(link: TelegramIdentityLink): String =
+    link.telegramUsername
+        ?.trim()
+        ?.removePrefix("@")
+        ?.takeIf(String::isNotBlank)
+        ?.let { "@$it" }
+        ?: link.telegramDisplayName.trim().takeIf(String::isNotBlank)
+        ?: "Telegram ID ${link.telegramUserId}"
+
+internal fun discordAccountLabel(
+    username: String?,
+    discordUserId: String,
+): String =
+    username
+        ?.trim()
+        ?.removePrefix("@")
+        ?.takeIf(String::isNotBlank)
+        ?.let { "@$it" }
+        ?: "Discord ID $discordUserId"
 
 internal fun resolveVerificationInvocation(
     defaultPlatform: VerificationPlatform?,
@@ -113,7 +134,7 @@ internal class VerifyCommand(
                     is TelegramChallengeIssueResult.Issued ->
                         messages.challenge(result.code, retryMinutes(result.expiresAt))
                     is TelegramChallengeIssueResult.AlreadyLinked ->
-                        messages.minecraft("already-linked", "player_name" to result.link.playerName)
+                        messages.minecraft("already-linked", "player_name" to telegramAccountLabel(result.link))
                     is TelegramChallengeIssueResult.RateLimited ->
                         messages.minecraft(
                             "rate-limited",
@@ -191,7 +212,12 @@ internal class VerifyCommand(
                         ),
                     )
                 is DiscordChallengeIssueResult.AlreadyLinked ->
-                    player.sendMessage(messages.minecraft("already-linked", "player_name" to result.link.playerName))
+                    player.sendMessage(
+                        messages.minecraft(
+                            "already-linked",
+                            "player_name" to bot.identityAccountLabel(result.link),
+                        ),
+                    )
                 DiscordChallengeIssueResult.NotLinked ->
                     player.sendMessage(messages.minecraft("recovery-not-linked"))
                 is DiscordChallengeIssueResult.RateLimited ->
@@ -212,13 +238,14 @@ internal class VerifyCommand(
         messages: DiscordVerificationMessages,
     ) {
         Tasks.scheduler.runAsync {
-            val link = Velocity.discordBot?.findIdentityByPlayer(player.uniqueId)
+            val bot = Velocity.discordBot
+            val link = bot?.findIdentityByPlayer(player.uniqueId)
             if (!player.isActive) return@runAsync
             player.sendMessage(
                 if (link == null) {
                     messages.minecraft("status-not-linked")
                 } else {
-                    messages.minecraft("status-linked", "player_name" to link.playerName)
+                    messages.minecraft("status-linked", "player_name" to bot.identityAccountLabel(link))
                 },
             )
         }

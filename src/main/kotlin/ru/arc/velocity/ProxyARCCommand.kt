@@ -22,7 +22,7 @@ class ProxyARCCommand : SimpleCommand {
             commandSource.sendMessage(
                 Utils.mm(
                     "<green>ProxyARC\n" +
-                        "<gray>/proxyarc reload — конфиги и промпт\n" +
+                        "<gray>/proxyarc reload — конфиги и безопасные модули\n" +
                         "<gray>/proxyarc restart [-delay 30s] — countdown и graceful restart\n" +
                         "<gray>/proxyarc restart cancel — отменить countdown\n" +
                         "<gray>/proxyarc cleardiscord <channelId> start|stop",
@@ -33,9 +33,19 @@ class ProxyARCCommand : SimpleCommand {
         }
         when {
             args[0].equals("reload", ignoreCase = true) -> {
-                ProxyArcReload.configsAndAssistant()
+                val result = ProxyArcReload.reloadSupported()
+                val reloaded = result.reloaded.joinToString(", ")
+                val failed = result.failed.joinToString(", ")
+                val message =
+                    if (result.failed.isEmpty()) {
+                        "<green>Конфиги и модули перезагружены: $reloaded. " +
+                            "Discord и Redis применятся после restart velocity."
+                    } else {
+                        "<yellow>Перезагружены: $reloaded. Не удалось: $failed. " +
+                            "Discord и Redis применятся после restart velocity."
+                    }
                 commandSource.sendMessage(
-                    Utils.mm("<green>Конфиги и промпт скорена перезагружены. Discord/Redis — только restart velocity."),
+                    Utils.mm(message),
                 )
             }
             args[0].equals("restart", ignoreCase = true) -> handleRestart(commandSource, args)

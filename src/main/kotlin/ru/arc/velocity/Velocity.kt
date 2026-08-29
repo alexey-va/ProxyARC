@@ -183,7 +183,7 @@ class Velocity @Inject constructor(
 
     @Subscribe
     fun onProxyReload(@Suppress("UNUSED_PARAMETER") event: ProxyReloadEvent) {
-        ProxyArcReload.configsAndAssistant()
+        ProxyArcReload.reloadSupported()
     }
 
     @Subscribe

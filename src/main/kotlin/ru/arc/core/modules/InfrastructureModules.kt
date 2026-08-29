@@ -166,5 +166,5 @@ object NetworkModule : PluginModule {
         Velocity.networkRegistry = null
     }
 
-    override fun reload() {}
+    override fun reload() = init()
 }

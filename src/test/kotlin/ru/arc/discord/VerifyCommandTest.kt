@@ -10,11 +10,43 @@ import net.kyori.adventure.text.event.ClickEvent
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+import ru.arc.telegram.TelegramIdentityLink
 import java.nio.file.Files
+import java.util.UUID
 
 class VerifyCommandTest : FreeSpec({
     val plain = PlainTextComponentSerializer.plainText()
     val inviteUrl = "https://discord.gg/TJUXMGJD9q"
+
+    "already-linked messages identify the external account instead of repeating the Minecraft name" {
+        telegramAccountLabel(
+            TelegramIdentityLink(
+                playerUuid = UUID.fromString("11111111-1111-1111-1111-111111111111"),
+                playerName = "Groceramse",
+                telegramUserId = 123456789L,
+                telegramUsername = "grocer_telegram",
+                telegramDisplayName = "Alexey",
+                linkedAt = 1L,
+                updatedAt = 1L,
+            ),
+        ) shouldBe "@grocer_telegram"
+        discordAccountLabel("grocer.discord", "987654321") shouldBe "@grocer.discord"
+    }
+
+    "external account labels have useful fallbacks when a username is unavailable" {
+        telegramAccountLabel(
+            TelegramIdentityLink(
+                playerUuid = UUID.fromString("11111111-1111-1111-1111-111111111111"),
+                playerName = "Groceramse",
+                telegramUserId = 123456789L,
+                telegramUsername = null,
+                telegramDisplayName = "Алексей",
+                linkedAt = 1L,
+                updatedAt = 1L,
+            ),
+        ) shouldBe "Алексей"
+        discordAccountLabel(null, "987654321") shouldBe "Discord ID 987654321"
+    }
 
     "verification code is one isolated and actionable chat block" {
         val messages = verificationConfig(Files.createTempDirectory("verify-command-message")).messages

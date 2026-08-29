@@ -349,6 +349,12 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
     internal fun findIdentityByDiscordUser(discordUserId: String): DiscordIdentityLink? =
         identities?.findByDiscordUserId(discordUserId)
 
+    internal fun identityAccountLabel(link: DiscordIdentityLink): String =
+        discordAccountLabel(
+            username = session.jda()?.getUserById(link.discordUserId)?.name,
+            discordUserId = link.discordUserId,
+        )
+
     internal fun reconcileIdentity(
         playerUuid: UUID,
         playerName: String,
