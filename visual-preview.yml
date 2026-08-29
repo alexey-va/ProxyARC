@@ -8,37 +8,102 @@ resource-pack:
   url: https://storage.yandexcloud.net/ruscraftinresources/RusCraftingResource.zip
   sha256-url: https://storage.yandexcloud.net/ruscraftinresources/RusCraftingResource.zip.sha256
 
+glyphs:
+  - character: ""
+    path: "@pack/assets/lzranks/textures/font/rank_icons/discord_icon.png"
+    height: 9
+    ascent: 8
+  - character: ""
+    path: "@pack/assets/arc/textures/icons/chat/telegram.png"
+    height: 9
+    ascent: 8
+
 sources:
+  discord-minecraft:
+    path: src/main/resources/modules/discord-verification.yml
+    root: messages.minecraft
+    include:
+      - identity
   discord-verification:
     path: src/main/resources/modules/discord-verification.yml
     root: messages.minecraft.challenge
     include:
+      - layout
+      - link-title
       - code-format
       - code-row
-      - code-hover
-      - code-row-hover
       - copy-hint
+      - invite-label
       - command-hint
+      - expiry
+      - minute-many
+  telegram-minecraft:
+    path: src/main/resources/modules/telegram.yml
+    root: identity.minecraft
+    include:
+      - identity
   telegram-verification:
     path: src/main/resources/modules/telegram.yml
     root: identity.minecraft.challenge
     include:
+      - layout
+      - title
       - code-format
       - code-row
-      - code-hover
-      - code-row-hover
       - copy-hint
+      - bot-link-label
       - command-format
-      - command-hover
       - command-hint
+      - expiry
+      - minute-many
 
 placeholders:
   code: ABCD-EFGH
   command: /verify ABCD-EFGH
+  minutes: 10
 
 surfaces:
-  chat:
-    - source: discord-verification
-      include: ['*']
-    - source: telegram-verification
-      include: ['*']
+  chat-blocks:
+    - id: Discord — /verify
+      text:
+        template: discord-verification:layout
+        components:
+          title:
+            join:
+              - discord-minecraft:identity
+              - discord-verification:link-title
+            separator: " "
+          code_row:
+            template: discord-verification:code-row
+            components:
+              code: discord-verification:code-format
+          copy_hint: discord-verification:copy-hint
+          invite_link: discord-verification:invite-label
+          command_hint: discord-verification:command-hint
+          expiry:
+            template: discord-verification:expiry
+            components:
+              minute_word: discord-verification:minute-many
+    - id: Telegram — /verify
+      text:
+        template: telegram-verification:layout
+        components:
+          title:
+            join:
+              - telegram-minecraft:identity
+              - telegram-verification:title
+            separator: " "
+          code_row:
+            template: telegram-verification:code-row
+            components:
+              code: telegram-verification:code-format
+          copy_hint: telegram-verification:copy-hint
+          bot_link: telegram-verification:bot-link-label
+          command_hint:
+            template: telegram-verification:command-hint
+            components:
+              command: telegram-verification:command-format
+          expiry:
+            template: telegram-verification:expiry
+            components:
+              minute_word: telegram-verification:minute-many
