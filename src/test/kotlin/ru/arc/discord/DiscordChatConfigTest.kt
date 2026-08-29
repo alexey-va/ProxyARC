@@ -17,13 +17,13 @@ class DiscordChatConfigTest : FreeSpec({
         val config = DiscordChatConfig.load(root).also(DiscordChatConfig::validate)
 
         config.minecraftFormat shouldBe
-            "<white></white> <dark_gray>| <gray>%player_name% <dark_gray>» <white>%message%"
+            "<white></white>󰼑 <dark_gray>| <gray>%player_name% <dark_gray>» <white>%message%"
         PlainTextComponentSerializer.plainText().serialize(
             config.minecraftMessage("GrocerMC", Component.text("123")),
-        ) shouldBe " | GrocerMC » 123"
+        ) shouldBe "󰼑 | GrocerMC » 123"
         PlainTextComponentSerializer.plainText().serialize(
             config.minecraftReplyMessage("GrocerMC", "Alex", "старое", Component.text("123")),
-        ) shouldBe " | GrocerMC ← 123"
+        ) shouldBe "󰼑 | GrocerMC ← 123"
     }
 
     "renders Telegram placeholders in one pass" {

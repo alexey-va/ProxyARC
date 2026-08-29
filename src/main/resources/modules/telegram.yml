@@ -29,7 +29,8 @@ channels:
     # Public community URL shown after account-link actions.
     url: ""
 
-chat-format: "<white></white> <dark_gray>| <gray>%sender% <dark_gray>» <white>%message%"
+# U+F0F11 shifts the separator left by one pixel after the wider Telegram glyph.
+chat-format: "<white></white>󰼑 <dark_gray>| <gray>%sender% <dark_gray>» <white>%message%"
 discord-format: "**%sender%** » %message%"
 
 # One Minecraft UUID may be linked to both Discord and Telegram. The game issues a

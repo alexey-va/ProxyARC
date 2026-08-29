@@ -51,7 +51,7 @@ open class TelegramConfig(
         get() = config.bool("channels.information.mirror-general", true)
 
     open val chatFormat: String
-        get() = config.string("chat-format", "<white></white> <dark_gray>| <gray>%sender% <dark_gray>» <white>%message%")
+        get() = config.string("chat-format", "<white></white>󰼑 <dark_gray>| <gray>%sender% <dark_gray>» <white>%message%")
 
     open val discordFormat: String
         get() = config.string("discord-format", "**%sender%** » %message%")
@@ -223,7 +223,7 @@ class TestTelegramConfig(
     override val informationDestination: TelegramDestination? = null,
     override val informationUrl: String? = null,
     override val mirrorGeneralToInformation: Boolean = true,
-    override val chatFormat: String = "<white></white> <dark_gray>| <gray>%sender% <dark_gray>» <white>%message%",
+    override val chatFormat: String = "<white></white>󰼑 <dark_gray>| <gray>%sender% <dark_gray>» <white>%message%",
     override val discordFormat: String = "**%sender%** » %message%",
     override val identityEnabled: Boolean = false,
     override val identityPrivateChatOnly: Boolean = true,

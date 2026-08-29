@@ -223,7 +223,7 @@ class TelegramBotTest : FreeSpec({
 
         relay.discordChat shouldBe "**%message%** » <click:run_command:'/op me'>hello</click>"
         PlainTextComponentSerializer.plainText().serialize(relay.minecraftChat) shouldBe
-            " | %message% » <click:run_command:'/op me'>hello</click>"
+            "󰼑 | %message% » <click:run_command:'/op me'>hello</click>"
         relay.generalCalls shouldBe 0
         bot.close()
     }
@@ -451,7 +451,11 @@ class TelegramBotTest : FreeSpec({
         val requests = mutableListOf<SendMessage>()
         val bot =
             TelegramBot(
-                config = TestTelegramConfig(identityEnabled = true),
+                config =
+                    TestTelegramConfig(
+                        identityEnabled = true,
+                        informationUrl = "https://t.me/ruscrafting",
+                    ),
                 scheduler = scheduler,
                 requestExecutor = requests::add,
                 identityService = testIdentityService(),
@@ -463,10 +467,14 @@ class TelegramBotTest : FreeSpec({
         scheduler.executeImmediate()
         scheduler.executeImmediate()
 
-        val reply = requests.single().text
+        val response = requests.single()
+        val reply = response.text
         listOf("/start", "/verify", "/status", "/unlink", "/help").forEach { command ->
             reply shouldContain command
         }
+        val button = (response.replyMarkup as InlineKeyboardMarkup).keyboard.single().single()
+        button.text shouldBe "Перейти в Telegram RusCrafting"
+        button.url shouldBe "https://t.me/ruscrafting"
         bot.close()
     }
 

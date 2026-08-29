@@ -14,7 +14,7 @@ internal class DiscordChatConfig(
     val minecraftReplyFormat: String get() =
         config.string(
             "formats.minecraft-reply",
-            "<white></white> <dark_gray>| <gray>%player_name% <hover:show_text:'<gray>%reply_name%: %reply_preview%'><dark_gray>←</dark_gray></hover> <white>%message%",
+            "<white></white>󰼑 <dark_gray>| <gray>%player_name% <hover:show_text:'<gray>%reply_name%: %reply_preview%'><dark_gray>←</dark_gray></hover> <white>%message%",
         ).trim()
     val telegramFormat: String get() = config.string("formats.telegram", "").trim()
 

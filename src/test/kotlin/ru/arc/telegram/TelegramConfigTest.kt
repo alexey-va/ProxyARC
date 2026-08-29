@@ -48,6 +48,15 @@ class TelegramConfigTest : FreeSpec({
         config.informationUrl shouldBe "https://t.me/ruscrafting"
     }
 
+    "loads the one-pixel negative space after the Telegram chat icon" {
+        val root = Files.createTempDirectory("telegram-chat-spacing-")
+
+        val config = TelegramConfig.load(root)
+
+        config.chatFormat shouldBe
+            "<white></white>󰼑 <dark_gray>| <gray>%sender% <dark_gray>» <white>%message%"
+    }
+
     "legacy chat id and topics remain valid fallbacks" {
         val root = Files.createTempDirectory("telegram-legacy-config-")
         ProxyConfigs.module(root, "telegram.yml").also { config ->

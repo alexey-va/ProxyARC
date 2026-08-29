@@ -292,6 +292,7 @@ open class TelegramBot(
             val showCommunity =
                 command == "/start" ||
                     command == "/status" ||
+                    command == "/help" ||
                     (command == "/verify" && identity.findByTelegramUserId(author.id) != null)
             replyIdentity(message, response, showCommunity)
         }

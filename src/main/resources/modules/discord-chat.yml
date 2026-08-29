@@ -1,8 +1,9 @@
 # Discord -> Minecraft uses MiniMessage. Keep both placeholders exactly once.
 # U+E2A1 is the active ItemsAdder font image `lzranks:discord_icon`.
+# U+F0F11 is the shared ItemsAdder negative space with an advance of -1 px.
 formats:
-  minecraft: "<white></white> <dark_gray>| <gray>%player_name% <dark_gray>» <white>%message%"
-  minecraft-reply: "<white></white> <dark_gray>| <gray>%player_name% <hover:show_text:'<gray>%reply_name%: %reply_preview%'><dark_gray>←</dark_gray></hover> <white>%message%"
+  minecraft: "<white></white>󰼑 <dark_gray>| <gray>%player_name% <dark_gray>» <white>%message%"
+  minecraft-reply: "<white></white>󰼑 <dark_gray>| <gray>%player_name% <hover:show_text:'<gray>%reply_name%: %reply_preview%'><dark_gray>←</dark_gray></hover> <white>%message%"
 
   # Discord -> Telegram is plain bridge text.
   telegram: "%player_name% » %message%"
