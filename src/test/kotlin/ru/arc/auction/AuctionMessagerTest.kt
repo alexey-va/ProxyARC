@@ -5,6 +5,9 @@ import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import java.util.UUID
 
+private fun item(id: UUID, display: String): String =
+    """[{"uuid":"$id","display":"$display","priority":1,"exist":true}]"""
+
 class AuctionMessagerTest : FreeSpec({
     "resolves Discord bot when an update arrives instead of capturing startup state" {
         var providerCalls = 0
@@ -31,6 +34,38 @@ class AuctionMessagerTest : FreeSpec({
         }
     }
 
+    "full snapshots replace only the publishing server" {
+        val messager = AuctionMessager("partial", "all") { null }
+        val spawnItem = UUID.randomUUID()
+        val survivalItem = UUID.randomUUID()
+
+        messager.consume("all", item(spawnItem, "Stone"), "spawn")
+        messager.consume("all", item(survivalItem, "Diamond"), "survival")
+        messager.consume("all", "[]", "spawn")
+
+        messager.map.keys shouldBe setOf(survivalItem)
+    }
+
+    "same listing received from multiple servers is deduplicated" {
+        val messager = AuctionMessager("partial", "all") { null }
+        val itemId = UUID.randomUUID()
+
+        messager.consume("all", item(itemId, "Stone"), "spawn")
+        messager.consume("all", item(itemId, "Stone"), "survival")
+
+        messager.map.keys shouldBe setOf(itemId)
+    }
+
+    "malformed full snapshot does not erase the previous server snapshot" {
+        val messager = AuctionMessager("partial", "all") { null }
+        val itemId = UUID.randomUUID()
+
+        messager.consume("all", item(itemId, "Stone"), "spawn")
+        messager.consume("all", "{not-json", "spawn")
+
+        messager.map.keys shouldBe setOf(itemId)
+    }
+
     "sale event validation rejects spoofed player names" {
         AuctionMessager.validSale(
             AuctionSaleEventDto(
@@ -44,4 +79,5 @@ class AuctionMessagerTest : FreeSpec({
             ),
         ) shouldBe false
     }
+
 })

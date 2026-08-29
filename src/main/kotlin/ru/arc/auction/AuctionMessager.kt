@@ -22,13 +22,13 @@ class AuctionMessager(
     @JvmField
     val map: MutableMap<UUID, AuctionItemDto> = ConcurrentHashMap()
 
+    private val snapshotsByOrigin = mutableMapOf<String, MutableMap<UUID, AuctionItemDto>>()
+
+    @Synchronized
     override fun consume(channel: String, message: String, originServer: String) {
         if (channel == channelSales) {
             consumeSale(message, originServer)
             return
-        }
-        if (channel == channelAll) {
-            map.clear()
         }
 
         val listType = object : TypeToken<List<AuctionItemDto>>() {}.type
@@ -39,26 +39,42 @@ class AuctionMessager(
                     return
                 } ?: emptyList()
 
-        for (auctionItemDto in auctionItemDtos) {
-            try {
-                if (auctionItemDto.exist) {
-                    map[UUID.fromString(auctionItemDto.uuid)] = auctionItemDto
-                } else {
-                    map.remove(UUID.fromString(auctionItemDto.uuid))
-                }
-            } catch (e: Exception) {
-                log.warn("Ignoring invalid auction item from {}: {}", originServer, auctionItemDto, e)
-            }
+        val origin = originServer.ifBlank { UNKNOWN_ORIGIN }
+        if (channel == channelAll) {
+            val replacement = mutableMapOf<UUID, AuctionItemDto>()
+            applyUpdate(replacement, auctionItemDtos, origin)
+            snapshotsByOrigin[origin] = replacement
+        } else {
+            val snapshot = snapshotsByOrigin.getOrPut(origin) { mutableMapOf() }
+            applyUpdate(snapshot, auctionItemDtos, origin)
         }
 
-        val dtos = map.values
-            .sortedBy { it.priority }
+        map.clear()
+        snapshotsByOrigin.toSortedMap().values.forEach { snapshot ->
+            snapshot.forEach { (id, item) -> map[id] = item }
+        }
 
-        val discordBot = discordBotProvider()
-        if (discordBot != null) {
-            discordBot.updateAuctionItems(dtos)
-        } else {
-            log.debug("Skipping auction Discord update because the bot is not ready")
+        val dtos = map.values.sortedBy { it.priority }
+        discordBotProvider()?.updateAuctionItems(dtos)
+            ?: log.debug("Skipping auction Discord update because the bot is not ready")
+    }
+
+    private fun applyUpdate(
+        snapshot: MutableMap<UUID, AuctionItemDto>,
+        updates: List<AuctionItemDto>,
+        originServer: String,
+    ) {
+        for (item in updates) {
+            try {
+                val id = UUID.fromString(item.uuid)
+                if (item.exist) {
+                    snapshot[id] = item
+                } else {
+                    snapshot.remove(id)
+                }
+            } catch (e: Exception) {
+                log.warn("Ignoring invalid auction item from {}: {}", originServer, item, e)
+            }
         }
     }
 
@@ -89,5 +105,6 @@ class AuctionMessager(
                 event.price.length <= 100 && event.occurredAt >= 0
 
         private val PLAYER_NAME = Regex("[A-Za-z0-9_]{1,16}")
+        private const val UNKNOWN_ORIGIN = "unknown"
     }
 }
