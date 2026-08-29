@@ -6,7 +6,6 @@ import org.slf4j.LoggerFactory
 import ru.arc.discord.DiscordBot
 import ru.arc.velocity.Velocity
 import ru.arc.redis.ChannelListener
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 class AuctionMessager(
@@ -20,9 +19,9 @@ class AuctionMessager(
     private val gson = Gson()
 
     @JvmField
-    val map: MutableMap<UUID, AuctionItemDto> = ConcurrentHashMap()
+    val map: MutableMap<String, AuctionItemDto> = ConcurrentHashMap()
 
-    private val snapshotsByOrigin = mutableMapOf<String, MutableMap<UUID, AuctionItemDto>>()
+    private val snapshotsByOrigin = mutableMapOf<String, MutableMap<String, AuctionItemDto>>()
 
     @Synchronized
     override fun consume(channel: String, message: String, originServer: String) {
@@ -41,7 +40,7 @@ class AuctionMessager(
 
         val origin = originServer.ifBlank { UNKNOWN_ORIGIN }
         if (channel == channelAll) {
-            val replacement = mutableMapOf<UUID, AuctionItemDto>()
+            val replacement = mutableMapOf<String, AuctionItemDto>()
             applyUpdate(replacement, auctionItemDtos, origin)
             snapshotsByOrigin[origin] = replacement
         } else {
@@ -60,13 +59,14 @@ class AuctionMessager(
     }
 
     private fun applyUpdate(
-        snapshot: MutableMap<UUID, AuctionItemDto>,
+        snapshot: MutableMap<String, AuctionItemDto>,
         updates: List<AuctionItemDto>,
         originServer: String,
     ) {
         for (item in updates) {
             try {
-                val id = UUID.fromString(item.uuid)
+                val id = item.uuid?.trim()?.takeIf(::validListingId)
+                    ?: error("invalid listing id")
                 if (item.exist) {
                     snapshot[id] = item
                 } else {
@@ -106,5 +106,8 @@ class AuctionMessager(
 
         private val PLAYER_NAME = Regex("[A-Za-z0-9_]{1,16}")
         private const val UNKNOWN_ORIGIN = "unknown"
+
+        private fun validListingId(value: String): Boolean =
+            value.length in 1..128 && value.none { it.isWhitespace() || it.isISOControl() }
     }
 }
