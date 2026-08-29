@@ -185,7 +185,7 @@ class TelegramBotTest : FreeSpec({
 
         relay.discordChat shouldBe "**%message%** » <click:run_command:'/op me'>hello</click>"
         PlainTextComponentSerializer.plainText().serialize(relay.minecraftChat) shouldBe
-            "T %message% » <click:run_command:'/op me'>hello</click>"
+            " | %message% » <click:run_command:'/op me'>hello</click>"
         relay.generalCalls shouldBe 0
         bot.close()
     }

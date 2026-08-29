@@ -62,13 +62,16 @@ messages:
 
   # MiniMessage. Dynamic values use non-parsing tags such as <player_name> and <minutes>.
   minecraft:
-    format: "<#92bed8><identity> <#666666>• <message>"
+    identity: ""
+    format: "<white><identity></white> <message>"
     only-player: "<#c42323>Только для игроков."
     unavailable: "<#c42323>Проверка Discord временно недоступна."
     backend-required: "<#ff9f0f>Сначала войдите на игровой сервер."
-    usage: "<#ff9f0f>/verify [status|recover|unlink confirm]"
+    usage: "<#ff9f0f>/discord [status|recover|unlink confirm]"
     issue-failed-unchanged: "<#c42323>Сервис недоступен. Данные не изменены."
-    already-linked: "<#e6fff3>Уже связан. Перенос: <#92bed8>/verify recover<#e6fff3>."
+    already-linked: "<#e6fff3>Уже привязан: <#92bed8><player_name><#e6fff3>. <invite_link>"
+    link-label: "<#92bed8><underlined>[Discord]</underlined>"
+    link-hover: "<#969696>Открыть Discord RusCrafting"
     recovery-not-linked: "<#e6fff3>Аккаунт не связан. Используйте <#92bed8>/verify<#e6fff3>."
     rate-limited: "<#ff9f0f>Новый код можно получить через <minutes> мин."
     issue-failed-saved: "<#c42323>Сервис недоступен. Данные сохранены."

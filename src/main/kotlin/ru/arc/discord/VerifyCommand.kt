@@ -2,27 +2,64 @@ package ru.arc.discord
 
 import com.velocitypowered.api.command.SimpleCommand
 import com.velocitypowered.api.proxy.Player
-import net.kyori.adventure.text.Component
 import ru.arc.core.Tasks
 import ru.arc.telegram.TelegramChallengeIssueResult
+import ru.arc.telegram.TelegramConfig
 import ru.arc.telegram.TelegramUnlinkResult
+import ru.arc.telegram.TelegramVerificationMessages
 import ru.arc.velocity.Velocity
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 
-class VerifyCommand : SimpleCommand {
+internal enum class VerificationPlatform {
+    DISCORD,
+    TELEGRAM,
+}
+
+internal data class VerificationInvocation(
+    val platform: VerificationPlatform,
+    val arguments: List<String>,
+)
+
+internal fun resolveVerificationInvocation(
+    defaultPlatform: VerificationPlatform?,
+    arguments: List<String>,
+): VerificationInvocation {
+    if (defaultPlatform != null) return VerificationInvocation(defaultPlatform, arguments)
+    return when (arguments.firstOrNull()) {
+        "discord" -> VerificationInvocation(VerificationPlatform.DISCORD, arguments.drop(1))
+        "telegram" -> VerificationInvocation(VerificationPlatform.TELEGRAM, arguments.drop(1))
+        else -> VerificationInvocation(VerificationPlatform.DISCORD, arguments)
+    }
+}
+
+internal class VerifyCommand(
+    private val defaultPlatform: VerificationPlatform? = null,
+) : SimpleCommand {
     override fun execute(invocation: SimpleCommand.Invocation) {
-        val messages = messages()
+        val arguments = invocation.arguments().map(String::lowercase)
+        val request = resolveVerificationInvocation(defaultPlatform, arguments)
         val player = invocation.source() as? Player
         if (player == null) {
-            invocation.source().sendMessage(messages.minecraft("only-player"))
+            val response =
+                when (request.platform) {
+                    VerificationPlatform.DISCORD -> messages().minecraft("only-player")
+                    VerificationPlatform.TELEGRAM -> telegramMessages().minecraft("only-player")
+                }
+            invocation.source().sendMessage(response)
             return
         }
-        val arguments = invocation.arguments().map(String::lowercase)
-        if (arguments.firstOrNull() == "telegram") {
-            executeTelegram(player, arguments.drop(1))
-            return
+        when (request.platform) {
+            VerificationPlatform.DISCORD -> executeDiscord(player, request.arguments, messages())
+            VerificationPlatform.TELEGRAM -> executeTelegram(player, request.arguments)
         }
+    }
+
+    private fun executeDiscord(
+        player: Player,
+        arguments: List<String>,
+        messages: DiscordVerificationMessages,
+    ) {
         val bot = Velocity.discordBot
         if (bot == null || !bot.isVerificationEnabled()) {
             player.sendMessage(messages.minecraft("unavailable"))
@@ -46,97 +83,84 @@ class VerifyCommand : SimpleCommand {
         player: Player,
         arguments: List<String>,
     ) {
+        val messages = telegramMessages()
         val bot = Velocity.telegramBot
         if (bot == null || !bot.isIdentityEnabled()) {
-            player.sendMessage(Component.text("Привязка Telegram временно недоступна."))
+            player.sendMessage(messages.minecraft("unavailable"))
             return
         }
         val backend = player.currentServer.map { it.serverInfo.name }.orElse(null)
         if (!player.isActive || backend == null || !bot.isIdentityBackendAllowed(backend)) {
-            player.sendMessage(Component.text("Сначала войдите на игровой сервер."))
+            player.sendMessage(messages.minecraft("backend-required"))
             return
         }
         when (arguments) {
-            emptyList<String>() -> issueTelegram(player, bot)
-            listOf("status") -> showTelegramStatus(player, bot)
-            listOf("unlink", "confirm") -> unlinkTelegram(player, bot)
-            else -> player.sendMessage(Component.text("Использование: /verify telegram [status|unlink confirm]"))
+            emptyList<String>() -> issueTelegram(player, bot, messages)
+            listOf("status") -> showTelegramStatus(player, bot, messages)
+            listOf("unlink", "confirm") -> unlinkTelegram(player, bot, messages)
+            else -> player.sendMessage(messages.minecraft("usage"))
         }
     }
 
     private fun issueTelegram(
         player: Player,
         bot: ru.arc.telegram.TelegramBot,
+        messages: TelegramVerificationMessages,
     ) {
         Tasks.scheduler.runAsync {
             val response =
                 when (val result = bot.issueIdentityChallenge(player.uniqueId, player.username)) {
                     is TelegramChallengeIssueResult.Issued ->
-                        botIdentityMessage(
-                            "minecraft-challenge",
-                            mapOf(
-                                "code" to result.code,
-                                "bot_username" to bot.botUsername,
-                                "minutes" to retryMinutes(result.expiresAt).toString(),
-                            ),
-                        )
+                        messages.challenge(result.code, retryMinutes(result.expiresAt))
                     is TelegramChallengeIssueResult.AlreadyLinked ->
-                        botIdentityMessage(
-                            "minecraft-telegram-already-linked",
-                            mapOf("player_name" to result.link.playerName),
-                        )
+                        messages.minecraft("already-linked", "player_name" to result.link.playerName)
                     is TelegramChallengeIssueResult.RateLimited ->
-                        botIdentityMessage(
-                            "minecraft-rate-limited",
-                            mapOf("minutes" to retryMinutes(result.retryAt).toString()),
+                        messages.minecraft(
+                            "rate-limited",
+                            "minutes" to retryMinutes(result.retryAt).toString(),
                         )
-                    TelegramChallengeIssueResult.Unavailable -> botIdentityMessage("minecraft-unavailable")
+                    TelegramChallengeIssueResult.Unavailable -> messages.minecraft("unavailable")
                 }
-            if (player.isActive) player.sendMessage(Component.text(response))
+            if (player.isActive) player.sendMessage(response)
         }
     }
 
     private fun showTelegramStatus(
         player: Player,
         bot: ru.arc.telegram.TelegramBot,
+        messages: TelegramVerificationMessages,
     ) {
         Tasks.scheduler.runAsync {
             val link = bot.findIdentityByPlayer(player.uniqueId)
             val response =
                 if (link == null) {
-                    botIdentityMessage("minecraft-status-not-linked")
+                    messages.minecraft("status-not-linked")
                 } else {
-                    botIdentityMessage(
-                        "minecraft-status-linked",
-                        mapOf(
-                            "telegram_username" to (link.telegramUsername ?: link.telegramUserId.toString()),
-                            "player_name" to link.playerName,
-                        ),
+                    messages.minecraft(
+                        "status-linked",
+                        "telegram_username" to (link.telegramUsername?.let { "@$it" } ?: link.telegramUserId.toString()),
+                        "player_name" to link.playerName,
                     )
                 }
-            if (player.isActive) player.sendMessage(Component.text(response))
+            if (player.isActive) player.sendMessage(response)
         }
     }
 
     private fun unlinkTelegram(
         player: Player,
         bot: ru.arc.telegram.TelegramBot,
+        messages: TelegramVerificationMessages,
     ) {
         Tasks.scheduler.runAsync {
             val response =
                 when (bot.unlinkIdentityByMinecraft(player.uniqueId)) {
-                    is TelegramUnlinkResult.Unlinked -> botIdentityMessage("minecraft-unlink-success")
-                    TelegramUnlinkResult.NotLinked -> botIdentityMessage("minecraft-unlink-not-linked")
-                    TelegramUnlinkResult.Unavailable -> botIdentityMessage("minecraft-unavailable")
+                    is TelegramUnlinkResult.Unlinked -> messages.minecraft("unlink-success")
+                    TelegramUnlinkResult.NotLinked -> messages.minecraft("unlink-not-linked")
+                    TelegramUnlinkResult.Unavailable -> messages.minecraft("unavailable")
                 }
-            if (player.isActive) player.sendMessage(Component.text(response))
+            if (player.isActive) player.sendMessage(response)
         }
     }
-
-    private fun botIdentityMessage(
-        key: String,
-        values: Map<String, String> = emptyMap(),
-    ): String = Velocity.telegramBot?.identityMessage(key, values) ?: "Привязка Telegram временно недоступна."
 
     private fun issue(
         player: Player,
@@ -167,7 +191,7 @@ class VerifyCommand : SimpleCommand {
                         ),
                     )
                 is DiscordChallengeIssueResult.AlreadyLinked ->
-                    player.sendMessage(messages.minecraft("already-linked"))
+                    player.sendMessage(messages.minecraft("already-linked", "player_name" to result.link.playerName))
                 DiscordChallengeIssueResult.NotLinked ->
                     player.sendMessage(messages.minecraft("recovery-not-linked"))
                 is DiscordChallengeIssueResult.RateLimited ->
@@ -222,27 +246,37 @@ class VerifyCommand : SimpleCommand {
     }
 
     override fun suggest(invocation: SimpleCommand.Invocation): List<String> {
-        val args = invocation.arguments()
-        return when (args.size) {
-            0, 1 -> listOf("status", "recover", "unlink", "telegram").filter { it.startsWith(args.firstOrNull().orEmpty(), true) }
+        val args = invocation.arguments().toList()
+        if (defaultPlatform != null) return suggestPlatform(defaultPlatform, args)
+        if (args.size <= 1) {
+            return listOf("discord", "telegram", "status", "recover", "unlink")
+                .filter { it.startsWith(args.firstOrNull().orEmpty(), true) }
+        }
+        return when {
+            args[0].equals("discord", true) -> suggestPlatform(VerificationPlatform.DISCORD, args.drop(1))
+            args[0].equals("telegram", true) -> suggestPlatform(VerificationPlatform.TELEGRAM, args.drop(1))
+            else -> suggestPlatform(VerificationPlatform.DISCORD, args)
+        }
+    }
+
+    private fun suggestPlatform(
+        platform: VerificationPlatform,
+        args: List<String>,
+    ): List<String> =
+        when (args.size) {
+            0, 1 ->
+                when (platform) {
+                    VerificationPlatform.DISCORD -> listOf("status", "recover", "unlink")
+                    VerificationPlatform.TELEGRAM -> listOf("status", "unlink")
+                }.filter { it.startsWith(args.firstOrNull().orEmpty(), true) }
             2 ->
-                when {
-                    args[0].equals("unlink", true) && "confirm".startsWith(args[1], true) -> listOf("confirm")
-                    args[0].equals("telegram", true) ->
-                        listOf("status", "unlink").filter { it.startsWith(args[1], true) }
-                    else -> emptyList()
-                }
-            3 ->
-                if (args[0].equals("telegram", true) && args[1].equals("unlink", true) &&
-                    "confirm".startsWith(args[2], true)
-                ) {
+                if (args[0].equals("unlink", true) && "confirm".startsWith(args[1], true)) {
                     listOf("confirm")
                 } else {
                     emptyList()
                 }
             else -> emptyList()
         }
-    }
 
     override fun suggestAsync(invocation: SimpleCommand.Invocation): CompletableFuture<List<String>> =
         CompletableFuture.completedFuture(suggest(invocation))
@@ -251,6 +285,9 @@ class VerifyCommand : SimpleCommand {
 
     private fun messages(): DiscordVerificationMessages =
         Velocity.discordBot?.verificationMessages() ?: DiscordVerificationMessages.load()
+
+    private fun telegramMessages(): TelegramVerificationMessages =
+        Velocity.telegramBot?.verificationMessages() ?: TelegramVerificationMessages(TelegramConfig.load())
 
     private fun retryMinutes(retryAt: Long): Long =
         TimeUnit.MILLISECONDS.toMinutes((retryAt - System.currentTimeMillis()).coerceAtLeast(0) + 59_999)

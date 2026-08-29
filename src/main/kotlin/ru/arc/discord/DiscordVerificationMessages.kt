@@ -2,6 +2,7 @@ package ru.arc.discord
 
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.event.ClickEvent
+import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
@@ -13,6 +14,7 @@ internal class DiscordVerificationMessages(
     private val config: Config,
 ) {
     val identity: String get() = raw("identity").trim()
+    private val minecraftIdentity: String get() = raw("minecraft.identity").trim()
     val inviteUrl: String get() = raw("invite-url").trim()
 
     fun minecraft(
@@ -20,12 +22,17 @@ internal class DiscordVerificationMessages(
         vararg values: Pair<String, String>,
     ): Component {
         require(key in MINECRAFT_MESSAGE_KEYS) { "unknown Minecraft verification message: $key" }
-        val body = parse(raw("minecraft.$key"), values.toMap())
+        val body =
+            parse(
+                raw("minecraft.$key"),
+                values.toMap(),
+                components = mapOf("invite_link" to inviteLink("minecraft.link-label", "minecraft.link-hover")),
+            )
         return parse(
             raw("minecraft.format"),
             components =
                 mapOf(
-                    "identity" to Component.text(identity),
+                    "identity" to Component.text(minecraftIdentity),
                     "message" to body,
                 ),
         )
@@ -56,7 +63,13 @@ internal class DiscordVerificationMessages(
         expiresInMinutes: Long,
         recovery: Boolean,
     ): Component {
-        require(CODE.matches(code)) { "invalid Discord verification code" }
+        val compactCode = code.replace("-", "")
+        require(
+            CODE.matches(compactCode) &&
+                (code == compactCode || code == compactCode.chunked(4).joinToString("-")),
+        ) {
+            "invalid Discord verification code"
+        }
         require(DiscordVerificationConfig.validInviteUrl(inviteUrl)) { "invalid Discord invite URL" }
 
         val copyEvent = ClickEvent.copyToClipboard(code)
@@ -78,17 +91,15 @@ internal class DiscordVerificationMessages(
                 click = copyEvent,
                 hover = parse(raw("minecraft.challenge.code-row-hover")),
             )
-        val inviteLink =
-            interactive(
-                parse(raw("minecraft.challenge.invite-label")),
-                click = ClickEvent.openUrl(inviteUrl),
-                hover = parse(raw("minecraft.challenge.invite-hover")),
-            )
+        val inviteLink = inviteLink("minecraft.challenge.invite-label", "minecraft.challenge.invite-hover")
         val titleKey = if (recovery) "recovery-title" else "link-title"
         val minuteWord = minuteWord(expiresInMinutes)
         val components =
             mapOf(
-                "title" to parse(raw("minecraft.challenge.$titleKey")),
+                "title" to
+                    Component.text(minecraftIdentity, NamedTextColor.WHITE)
+                        .append(Component.space())
+                        .append(parse(raw("minecraft.challenge.$titleKey"))),
                 "code_row" to codeRow,
                 "copy_hint" to parse(raw("minecraft.challenge.copy-hint")),
                 "invite_link" to inviteLink,
@@ -173,6 +184,9 @@ internal class DiscordVerificationMessages(
     fun validate(requireInviteUrl: Boolean) {
         require(identity.isNotBlank() && identity.length <= 24) {
             "messages.identity must be 1..24 characters"
+        }
+        require(minecraftIdentity.isNotBlank() && minecraftIdentity.length <= 24) {
+            "messages.minecraft.identity must be 1..24 characters"
         }
         if (requireInviteUrl) {
             require(DiscordVerificationConfig.validInviteUrl(inviteUrl)) {
@@ -291,6 +305,20 @@ internal class DiscordVerificationMessages(
             .clickEvent(click)
             .hoverEvent(hover)
 
+    private fun inviteLink(
+        labelPath: String,
+        hoverPath: String,
+    ): Component =
+        if (DiscordVerificationConfig.validInviteUrl(inviteUrl)) {
+            interactive(
+                parse(raw(labelPath)),
+                click = ClickEvent.openUrl(inviteUrl),
+                hover = parse(raw(hoverPath)),
+            )
+        } else {
+            Component.empty()
+        }
+
     companion object {
         private val CODE = Regex("[A-Z0-9]{6,16}")
         private const val MAX_TEMPLATE_LENGTH = 4_096
@@ -390,7 +418,14 @@ internal class DiscordVerificationMessages(
                 "status-reason-none",
             )
         private val REQUIRED_STRING_KEYS =
-            setOf("identity", "minecraft.format", "discord.format") +
+            setOf(
+                "identity",
+                "minecraft.identity",
+                "minecraft.format",
+                "minecraft.link-label",
+                "minecraft.link-hover",
+                "discord.format",
+            ) +
                 MINECRAFT_MESSAGE_KEYS.map { "minecraft.$it" } +
                 CHALLENGE_STRING_KEYS.map { "minecraft.challenge.$it" } +
                 ADMIN_STATUS_STRING_KEYS.map { "minecraft.admin.$it" } +

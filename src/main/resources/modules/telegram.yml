@@ -27,7 +27,7 @@ channels:
     thread-id: 0
     mirror-general: true
 
-chat-format: "<blue>T <gray>%sender% <dark_gray>» <white>%message%"
+chat-format: "<white></white> <dark_gray>| <gray>%sender% <dark_gray>» <white>%message%"
 discord-format: "**%sender%** » %message%"
 
 # One Minecraft UUID may be linked to both Discord and Telegram. The game issues a
@@ -72,6 +72,49 @@ identity:
     unlink-not-linked: "Telegram не привязан."
     unlink-confirm: "Для отвязки отправьте /unlink confirm"
     usage: "Использование: /verify <код>, /verify, /unlink confirm"
+  minecraft:
+    identity: ""
+    format: "<white><identity></white> <message>"
+    only-player: "<#c42323>Только для игроков."
+    unavailable: "<#c42323>Привязка Telegram временно недоступна."
+    backend-required: "<#ff9f0f>Сначала войдите на игровой сервер."
+    usage: "<#ff9f0f>/telegram [status|unlink confirm]"
+    already-linked: "<#e6fff3>Уже привязан: <#92bed8><player_name><#e6fff3>. <bot_link>"
+    link-label: "<#92bed8><underlined>[Telegram]</underlined>"
+    link-hover: "<#969696>Открыть Telegram-бот RusCrafting"
+    rate-limited: "<#ff9f0f>Новый код можно получить через <minutes> мин."
+    status-linked: "<#2bba43>Привязан: <#92bed8><telegram_username><#2bba43>."
+    status-not-linked: "<#e6fff3>Telegram-аккаунт не связан."
+    unlink-success: "<#2bba43>Telegram-аккаунт отвязан."
+    unlink-not-linked: "<#e6fff3>Telegram-аккаунт не был привязан."
+    challenge:
+      layout:
+        - ""
+        - "  <title>"
+        - ""
+        - "  <code_row>"
+        - "  <copy_hint>"
+        - ""
+        - "  <bot_link>"
+        - "  <command_hint>"
+        - ""
+        - "  <expiry>"
+        - ""
+      title: "<#92bed8><bold>Привязка Telegram-аккаунта</bold>"
+      code-format: "<#ffacd5><bold><code></bold>"
+      code-row: "<#8c8c8c>Код для Telegram: <code>"
+      code-hover: "<#969696>Нажмите, чтобы скопировать"
+      code-row-hover: "<#969696>Скопировать код"
+      copy-hint: "<#969696>Нажмите строку — код скопируется."
+      bot-link-label: "<#92bed8><bold><underlined>Открыть Telegram-бот RusCrafting</underlined></bold>"
+      bot-link-hover: "<#969696>Открыть личный чат с ботом"
+      command-format: "<#92bed8><command>"
+      command-hover: "<#969696>Нажмите, чтобы скопировать команду"
+      command-hint: "<#e6fff3>В личном чате отправьте <command><#e6fff3>."
+      expiry: "<#969696>Код действует <minutes> <minute_word>."
+      minute-one: "минуту"
+      minute-few: "минуты"
+      minute-many: "минут"
 
 messages:
   join: "Игрок %player_name% присоединился к серверу"

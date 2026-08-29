@@ -106,6 +106,7 @@ open class TelegramBot(
     private val closed = AtomicBoolean(false)
     private val connected = AtomicBoolean(false)
     private val requestExecutor: (SendMessage) -> Unit = requestExecutor ?: { execute(it) }
+    private val minecraftIdentityMessages by lazy { TelegramVerificationMessages(config) }
 
     override fun onUpdateReceived(update: Update) {
         val edited = update.editedMessage ?: update.editedChannelPost
@@ -295,6 +296,8 @@ open class TelegramBot(
         key: String,
         values: Map<String, String> = emptyMap(),
     ): String = config.identityMessage(key, values)
+
+    internal fun verificationMessages(): TelegramVerificationMessages = minecraftIdentityMessages
 
     internal fun isIdentityBackendAllowed(backend: String): Boolean =
         backend.lowercase() in config.identityAllowedBackends

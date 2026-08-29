@@ -4,7 +4,9 @@ import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.config.EmptyConfig
 import ru.arc.config.ProxyConfigs
+import java.net.URI
 import java.nio.file.Path
+import java.util.Locale
 
 data class TelegramDestination(
     val chatId: String,
@@ -46,7 +48,7 @@ open class TelegramConfig(
         get() = config.bool("channels.information.mirror-general", true)
 
     open val chatFormat: String
-        get() = config.string("chat-format", "<blue>T <gray>%sender% <dark_gray>» <white>%message%")
+        get() = config.string("chat-format", "<white></white> <dark_gray>| <gray>%sender% <dark_gray>» <white>%message%")
 
     open val discordFormat: String
         get() = config.string("discord-format", "**%sender%** » %message%")
@@ -94,6 +96,12 @@ open class TelegramConfig(
         return message
     }
 
+    internal fun minecraftIdentityString(path: String): String =
+        config.string("identity.minecraft.$path", "")
+
+    internal fun minecraftIdentityLines(path: String): List<String> =
+        config.stringList("identity.minecraft.$path")
+
     open fun joinMessage(kind: String): String =
         config.string("messages.$kind", DEFAULT_JOIN_MESSAGES.getValue(kind))
 
@@ -109,6 +117,7 @@ open class TelegramConfig(
         require(botUsername.isNotBlank()) { "telegram username must not be blank" }
         if (identityEnabled) {
             require(identityAllowedBackends.isNotEmpty()) { "Telegram identity allowed backends must not be empty" }
+            TelegramVerificationMessages(this).validate()
         }
     }
 
@@ -161,11 +170,22 @@ open class TelegramConfig(
 
         fun load(): TelegramConfig = load(ProxyConfigs.dataRoot())
 
-        fun load(dataRoot: Path): TelegramConfig =
-            TelegramConfig(
-                config = ConfigManager.of(dataRoot, "${ConfigManager.MODULE_YAML_DIR}/telegram.yml"),
+        fun load(dataRoot: Path): TelegramConfig {
+            val config = ConfigManager.ofModule(dataRoot, "telegram.yml")
+            return TelegramConfig(
+                config = config,
                 legacyCredentials = ConfigManager.of(dataRoot, "telegram.yml"),
             )
+        }
+
+        internal fun botUrl(username: String): String? {
+            val normalized = username.removePrefix("@").trim()
+            if (!BOT_USERNAME.matches(normalized)) return null
+            val uri = runCatching { URI("https://t.me/$normalized") }.getOrNull() ?: return null
+            return if (uri.scheme?.lowercase(Locale.ROOT) == "https" && uri.host == "t.me") uri.toString() else null
+        }
+
+        private val BOT_USERNAME = Regex("[A-Za-z0-9_]{5,32}")
     }
 }
 
@@ -177,7 +197,7 @@ class TestTelegramConfig(
     override val generalDestination: TelegramDestination? = null,
     override val informationDestination: TelegramDestination? = null,
     override val mirrorGeneralToInformation: Boolean = true,
-    override val chatFormat: String = "<blue>T <gray>%sender% <dark_gray>» <white>%message%",
+    override val chatFormat: String = "<white></white> <dark_gray>| <gray>%sender% <dark_gray>» <white>%message%",
     override val discordFormat: String = "**%sender%** » %message%",
     override val identityEnabled: Boolean = false,
     override val identityPrivateChatOnly: Boolean = true,

@@ -44,6 +44,7 @@ import ru.arc.core.modules.SaveModule
 import ru.arc.discord.DiscordBot
 import ru.arc.discord.DiscordModule
 import ru.arc.discord.VerifyCommand
+import ru.arc.discord.VerificationPlatform
 import ru.arc.FirstJoinData
 import ru.arc.hooks.HooksModule
 import ru.arc.hooks.LiteBansHook
@@ -155,6 +156,20 @@ class Velocity @Inject constructor(
                 .plugin(this)
                 .build()
         commandManager.register(verifyMetadata, VerifyCommand())
+
+        val discordMetadata =
+            commandManager
+                .metaBuilder("discord")
+                .plugin(this)
+                .build()
+        commandManager.register(discordMetadata, VerifyCommand(VerificationPlatform.DISCORD))
+
+        val telegramMetadata =
+            commandManager
+                .metaBuilder("telegram")
+                .plugin(this)
+                .build()
+        commandManager.register(telegramMetadata, VerifyCommand(VerificationPlatform.TELEGRAM))
 
         rtpRequestManager?.let { manager ->
             val rtpMetadata =
