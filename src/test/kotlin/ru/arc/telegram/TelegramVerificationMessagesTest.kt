@@ -5,7 +5,9 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.TextComponent
 import net.kyori.adventure.text.event.ClickEvent
+import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import ru.arc.config.ConfigManager
 import java.nio.file.Files
@@ -36,12 +38,29 @@ class TelegramVerificationMessagesTest : FreeSpec({
             "   Привязка Telegram-аккаунта\n" +
             "\n" +
             "  Код для Telegram: ABCD-EFGH\n" +
-            "  Нажмите строку — код скопируется.\n" +
+            "  Нажмите строку — команда /verify скопируется.\n" +
             "\n" +
             "  Открыть Telegram-бот RusCrafting\n" +
             "  В личном чате отправьте /verify ABCD-EFGH.\n" +
             "\n" +
             "  Код действует 10 минут.\n"
+
+        val code = message.descendants().filterIsInstance<TextComponent>().single { it.content() == "ABCD-EFGH" }
+        code.hasDecoration(TextDecoration.UNDERLINED) shouldBe true
+        val codeClickOwner =
+            message.descendants().first {
+                plain.serialize(it).contains("ABCD-EFGH") &&
+                    it.clickEvent()?.action() == ClickEvent.Action.COPY_TO_CLIPBOARD
+            }
+        codeClickOwner.clickEvent()?.value() shouldBe "/verify ABCD-EFGH"
+
+        val codeRow =
+            message.descendants().first {
+                plain.serialize(it).contains("Код для Telegram: ABCD-EFGH") &&
+                    it.clickEvent()?.action() == ClickEvent.Action.COPY_TO_CLIPBOARD
+            }
+        codeRow.clickEvent()?.value() shouldBe "/verify ABCD-EFGH"
+
         val botLink =
             message.descendants().first {
                 plain.serialize(it).contains("Открыть Telegram-бот RusCrafting") &&

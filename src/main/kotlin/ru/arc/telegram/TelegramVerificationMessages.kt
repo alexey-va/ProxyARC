@@ -46,14 +46,15 @@ internal class TelegramVerificationMessages(
         ) {
             "invalid Telegram verification code"
         }
-        val copyCode = ClickEvent.copyToClipboard(code)
+        val command = "/verify $code"
+        val copyCommand = ClickEvent.copyToClipboard(command)
         val codeComponent =
             interactive(
                 parse(
                     raw("challenge.code-format"),
                     components = mapOf("code" to Component.text(code)),
                 ),
-                click = copyCode,
+                click = copyCommand,
                 hover = parse(raw("challenge.code-hover")),
             )
         val codeRow =
@@ -62,17 +63,16 @@ internal class TelegramVerificationMessages(
                     raw("challenge.code-row"),
                     components = mapOf("code" to codeComponent),
                 ),
-                click = copyCode,
+                click = copyCommand,
                 hover = parse(raw("challenge.code-row-hover")),
             )
-        val command = "/verify $code"
         val commandComponent =
             interactive(
                 parse(
                     raw("challenge.command-format"),
                     components = mapOf("command" to Component.text(command)),
                 ),
-                click = ClickEvent.copyToClipboard(command),
+                click = copyCommand,
                 hover = parse(raw("challenge.command-hover")),
             )
         val components =

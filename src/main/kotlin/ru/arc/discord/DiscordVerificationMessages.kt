@@ -72,7 +72,8 @@ internal class DiscordVerificationMessages(
         }
         require(DiscordVerificationConfig.validInviteUrl(inviteUrl)) { "invalid Discord invite URL" }
 
-        val copyEvent = ClickEvent.copyToClipboard(code)
+        val command = "/verify $code"
+        val copyEvent = ClickEvent.copyToClipboard(command)
         val codeComponent =
             interactive(
                 parse(
@@ -432,7 +433,7 @@ internal class DiscordVerificationMessages(
                 DISCORD_MESSAGE_KEYS.map { "discord.$it" } +
                 DISCORD_COMMAND_DESCRIPTION_KEYS.map { "discord.commands.$it" }
         private val CHALLENGE_LAYOUT_TAGS =
-            setOf("title", "code_row", "copy_hint", "invite_link", "command_hint", "input_hint", "expiry")
+            setOf("title", "code_row", "copy_hint", "invite_link", "command_hint", "expiry")
         private val ADMIN_STATUS_LAYOUT_TAGS =
             setOf("title", "minecraft", "uuid", "discord", "sync", "age", "reason")
 

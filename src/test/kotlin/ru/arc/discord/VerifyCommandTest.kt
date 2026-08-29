@@ -26,11 +26,10 @@ class VerifyCommandTest : FreeSpec({
             "   Привязка Discord-аккаунта\n" +
             "\n" +
             "  Код для Discord: ABCD-EFGH\n" +
-            "  Нажмите строку — код скопируется.\n" +
+            "  Нажмите строку — команда /verify скопируется.\n" +
             "\n" +
             "  Открыть Discord RusCrafting\n" +
-            "  В Discord введите /verify\n" +
-            "  В поле code вставьте скопированный код.\n" +
+            "  В Discord вставьте команду и выполните её.\n" +
             "\n" +
             "  Код действует 10 минут.\n"
         rendered shouldNotContain "\\n"
@@ -39,13 +38,14 @@ class VerifyCommandTest : FreeSpec({
         val code = message.descendants().filterIsInstance<TextComponent>().single { it.content() == "ABCD-EFGH" }
         code.color() shouldBe TextColor.color(0xFFACD5)
         code.hasDecoration(TextDecoration.BOLD) shouldBe true
+        code.hasDecoration(TextDecoration.UNDERLINED) shouldBe true
         val codeClickOwner =
             message.descendants().first {
                 plain.serialize(it).contains("ABCD-EFGH") &&
                     it.clickEvent()?.action() == ClickEvent.Action.COPY_TO_CLIPBOARD
             }
         codeClickOwner.clickEvent()?.action() shouldBe ClickEvent.Action.COPY_TO_CLIPBOARD
-        codeClickOwner.clickEvent()?.value() shouldBe "ABCD-EFGH"
+        codeClickOwner.clickEvent()?.value() shouldBe "/verify ABCD-EFGH"
 
         val codeRow =
             message.descendants().first {
@@ -53,7 +53,7 @@ class VerifyCommandTest : FreeSpec({
                     it.clickEvent()?.action() == ClickEvent.Action.COPY_TO_CLIPBOARD
             }
         codeRow.clickEvent()?.action() shouldBe ClickEvent.Action.COPY_TO_CLIPBOARD
-        codeRow.clickEvent()?.value() shouldBe "ABCD-EFGH"
+        codeRow.clickEvent()?.value() shouldBe "/verify ABCD-EFGH"
 
         val invite = message.descendants().filterIsInstance<TextComponent>().single { it.content() == "Открыть Discord RusCrafting" }
         invite.hasDecoration(TextDecoration.BOLD) shouldBe true
@@ -74,11 +74,10 @@ class VerifyCommandTest : FreeSpec({
             "   Перенос привязки Discord\n" +
             "\n" +
             "  Код для Discord: ZXCV5678\n" +
-            "  Нажмите строку — код скопируется.\n" +
+            "  Нажмите строку — команда /verify скопируется.\n" +
             "\n" +
             "  Открыть Discord RusCrafting\n" +
-            "  В Discord введите /verify\n" +
-            "  В поле code вставьте скопированный код.\n" +
+            "  В Discord вставьте команду и выполните её.\n" +
             "\n" +
             "  Код действует 1 минуту.\n"
     }
