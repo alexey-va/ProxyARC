@@ -10,6 +10,7 @@ import net.kyori.adventure.text.event.ClickEvent
 import net.kyori.adventure.text.format.TextDecoration
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import ru.arc.config.ConfigManager
+import ru.arc.config.ProxyConfigs
 import java.nio.file.Files
 
 class TelegramVerificationMessagesTest : FreeSpec({
@@ -69,19 +70,25 @@ class TelegramVerificationMessagesTest : FreeSpec({
         botLink.clickEvent()?.value() shouldBe "https://t.me/RusCrafting"
     }
 
-    "already linked Telegram response keeps the bot link clickable" {
+    "already linked Telegram response opens the public community instead of the verification bot" {
         val root = Files.createTempDirectory("telegram-verification-linked-")
+        ProxyConfigs.module(root, "telegram.yml").also { config ->
+            config.setString("username", "ruscrafting_bot")
+            config.setString("channels.information.url", "https://t.me/ruscrafting")
+            config.saveStrict()
+        }
+        ConfigManager.clear()
         val messages = TelegramVerificationMessages(TelegramConfig.load(root))
 
         val linked = messages.minecraft("already-linked", "player_name" to "GrocerMC")
 
         plain.serialize(linked) shouldContain "Уже привязан: GrocerMC. [Telegram]"
-        val botLink =
+        val communityLink =
             linked.descendants().first {
                 plain.serialize(it).contains("[Telegram]") &&
                     it.clickEvent()?.action() == ClickEvent.Action.OPEN_URL
             }
-        botLink.clickEvent()?.value() shouldBe "https://t.me/RusCrafting"
+        communityLink.clickEvent()?.value() shouldBe "https://t.me/ruscrafting"
     }
 
     "linked Telegram status stays compact for a maximum-length username" {

@@ -23,7 +23,12 @@ internal class TelegramVerificationMessages(
             parse(
                 raw(key),
                 values.toMap(),
-                components = mapOf("bot_link" to botLink("link-label", "link-hover")),
+                components =
+                    mapOf(
+                        // Keep the legacy tag resolvable while tracked configs migrate to the accurate name.
+                        "bot_link" to communityLink("link-label", "link-hover"),
+                        "community_link" to communityLink("link-label", "link-hover"),
+                    ),
             )
         return parse(
             raw("format"),
@@ -156,6 +161,18 @@ internal class TelegramVerificationMessages(
         hoverPath: String,
     ): Component =
         botUrl?.let { url ->
+            interactive(
+                parse(raw(labelPath)),
+                click = ClickEvent.openUrl(url),
+                hover = parse(raw(hoverPath)),
+            )
+        } ?: Component.empty()
+
+    private fun communityLink(
+        labelPath: String,
+        hoverPath: String,
+    ): Component =
+        config.informationUrl?.let { url ->
             interactive(
                 parse(raw(labelPath)),
                 click = ClickEvent.openUrl(url),
