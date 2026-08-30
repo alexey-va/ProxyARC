@@ -12,7 +12,7 @@ Requirements: Java 25 and the checked-in Gradle 9.2.1 wrapper.
 ./gradlew clean test build
 ```
 
-The default build resolves immutable `arc-core 2.0.0` artifacts anonymously
+The default build resolves immutable `arc-core 2.2.0` artifacts anonymously
 from the public RusCrafting Maven repository. A neighboring core checkout is
 not required. For coordinated local development, opt in explicitly:
 
@@ -21,6 +21,25 @@ not required. For coordinated local development, opt in explicitly:
 ```
 
 The production artifact is `ztarget/ProxyARC.jar`.
+
+## Vote callback ingress
+
+`modules/votes.yml` owns a separate loopback-only HTTP listener for four exact
+monitoring callback routes. The listener is disabled by default, has bounded
+workers, request queues and bodies, authenticates every provider contract, and
+persists an idempotent event to shared MySQL before returning success. Provider
+and MySQL secrets are read from `plugins/proxyarc/.env`; the tracked YAML never
+contains them.
+
+The public TLS proxy may forward only these paths to the dedicated listener:
+
+- `/callbacks/minecraft-rating`
+- `/callbacks/hotmc`
+- `/callbacks/monitoring-minecraft`
+- `/callbacks/gamemonitoring`
+
+The callback module does not expose or register metrics. ProxyARC's older,
+explicit metrics module is independent from vote ingress.
 
 ## Join and leave announcements
 

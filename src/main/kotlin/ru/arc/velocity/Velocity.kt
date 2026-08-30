@@ -17,6 +17,7 @@ import ru.arc.Arc
 import ru.arc.ai.Assistant
 import ru.arc.ai.AssistantModule
 import ru.arc.ops.ProxyOpsHttpModule
+import ru.ruscrafting.votes.velocity.ProxyVotesModule
 import ru.arc.portal.PortalBridgeModule
 import ru.arc.portal.PortalBridgeService
 import ru.arc.ai.tools.Tool
@@ -133,6 +134,7 @@ class Velocity @Inject constructor(
             TelegramModule,
             ChannelSyncModule,
             AssistantModule,
+            ProxyVotesModule,
             ProxyOpsHttpModule,
             PortalBridgeModule,
             // Runtime (90-99)

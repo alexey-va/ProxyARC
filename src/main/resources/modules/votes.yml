@@ -1,0 +1,83 @@
+# Vote callback ingress is opt-in and owns a separate loopback-only listener.
+# Secrets belong in plugins/proxyarc/.env (0600), never in this file.
+server-id: velocity
+
+locale:
+  default: ru
+  use-client-locale: false
+
+http:
+  enabled: false
+  bind-address: 127.0.0.1
+  port: 25826
+  worker-threads: 2
+  queue-capacity: 64
+  maximum-body-bytes: 16384
+  persistence-timeout-ms: 10000
+  trust-single-forwarded-client-ip: true
+
+mysql:
+  enabled: false
+  host: 10.0.0.2
+  port: 25000
+  database: common
+  username: classic
+  password-env: ARC_VOTES_MYSQL_PASSWORD
+  ssl-mode: DISABLED
+  minimum-idle: 1
+  maximum-pool-size: 4
+  connection-timeout-ms: 10000
+  socket-timeout-ms: 30000
+  validation-timeout-ms: 5000
+  max-lifetime-ms: 1700000
+  fail-fast: true
+
+reward:
+  enabled: false
+  amount: 100.00
+  currency-label: монет
+
+monitorings:
+  minecraft-rating:
+    enabled: false
+    display-name: MinecraftRating
+    vote-url: https://minecraftrating.ru/projects/rus-crafting/
+    secret-env: ARC_VOTES_MINECRAFT_RATING_SECRET
+    maximum-age-seconds: 691200
+    maximum-future-skew-seconds: 300
+    enforce-ip-allowlist: false
+    allowed-ips: []
+
+  hotmc:
+    enabled: false
+    display-name: HotMC
+    vote-url: https://hotmc.ru/minecraft-server-242482
+    secret-env: ARC_VOTES_HOTMC_SECRET
+    maximum-age-seconds: 691200
+    maximum-future-skew-seconds: 300
+    enforce-ip-allowlist: true
+    allowed-ips:
+      - 176.108.255.82
+      - 109.207.174.67
+      - 31.44.5.3
+
+  monitoring-minecraft:
+    enabled: false
+    display-name: MonitoringMinecraft
+    vote-url: https://monitoringminecraft.com/server/43/
+    secret-env: ARC_VOTES_MONITORING_MINECRAFT_SECRET
+    expected-server-id: '43'
+    maximum-age-seconds: 691200
+    maximum-future-skew-seconds: 300
+    enforce-ip-allowlist: false
+    allowed-ips: []
+
+  game-monitoring:
+    enabled: false
+    display-name: GameMonitoring
+    vote-url: https://gamemonitoring.ru/minecraft/servers/14210383/vote
+    webhook-token-env: ARC_VOTES_GAME_MONITORING_WEBHOOK_TOKEN
+    expected-entity-type: server
+    expected-entity-id: '14210383'
+    enforce-ip-allowlist: false
+    allowed-ips: []

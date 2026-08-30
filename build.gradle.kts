@@ -8,6 +8,12 @@ group = "ru.arc"
 version = "1.0-SNAPSHOT"
 description = "ProxyARC Velocity plugin"
 
+val integrationTestSourceSet = sourceSets.create("integrationTest") {
+    kotlin.srcDir("src/integrationTest/kotlin")
+    compileClasspath += sourceSets.main.get().output + sourceSets.test.get().output
+    runtimeClasspath += sourceSets.main.get().output + sourceSets.test.get().output
+}
+
 java { toolchain { languageVersion.set(JavaLanguageVersion.of(25)) } }
 kotlin { jvmToolchain(25) }
 
@@ -24,12 +30,13 @@ repositories {
 }
 
 dependencies {
-    implementation("ru.ruscrafting.arc:arc-core:2.0.0")
-    implementation("ru.ruscrafting.arc:arc-core-logging:2.0.0")
-    implementation("ru.ruscrafting.arc:arc-core-metrics:2.0.0")
-    implementation("ru.ruscrafting.arc:arc-core-redis:2.0.0")
-    implementation("ru.ruscrafting.arc:arc-core-velocity:2.0.0")
-    implementation("ru.ruscrafting.arc:arc-core-ai:2.0.0")
+    implementation("ru.ruscrafting.arc:arc-core:2.2.0")
+    implementation("ru.ruscrafting.arc:arc-core-logging:2.2.0")
+    implementation("ru.ruscrafting.arc:arc-core-metrics:2.2.0")
+    implementation("ru.ruscrafting.arc:arc-core-redis:2.2.0")
+    implementation("ru.ruscrafting.arc:arc-core-velocity:2.2.0")
+    implementation("ru.ruscrafting.arc:arc-core-ai:2.2.0")
+    implementation("ru.ruscrafting.arc:arc-core-sql:2.2.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.10.2")
 
@@ -52,14 +59,19 @@ dependencies {
     implementation("net.kyori:adventure-text-serializer-plain:4.17.0")
     implementation("net.kyori:adventure-text-serializer-legacy:4.17.0")
     implementation("pl.tkowalcz.tjahzi:log4j2-appender-nodep:0.9.17")
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.15.2")
-    implementation("com.fasterxml.jackson.core:jackson-core:2.15.2")
-    implementation("com.fasterxml.jackson.core:jackson-annotations:2.15.2")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.18.10")
+    implementation("com.fasterxml.jackson.core:jackson-core:2.18.10")
+    implementation("com.fasterxml.jackson.core:jackson-annotations:2.18.10")
 
     testImplementation("io.kotest:kotest-runner-junit5:6.0.7")
     testImplementation("io.kotest:kotest-assertions-core:6.0.7")
     testImplementation("io.mockk:mockk:1.14.7")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+
+    "integrationTestImplementation"(sourceSets.test.get().output)
+    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:2.2.0")
+    configurations["integrationTestImplementation"].extendsFrom(configurations["testImplementation"])
+    configurations["integrationTestRuntimeOnly"].extendsFrom(configurations["testRuntimeOnly"])
 }
 
 val runtimeClasspathConfiguration = configurations.named("runtimeClasspath")
@@ -81,6 +93,15 @@ tasks {
         useJUnitPlatform {
             excludeTags("live")
         }
+    }
+
+    register<Test>("integrationTest") {
+        description = "Runs disposable MySQL integration tests in CI."
+        group = "verification"
+        testClassesDirs = integrationTestSourceSet.output.classesDirs
+        classpath = integrationTestSourceSet.runtimeClasspath
+        useJUnitPlatform()
+        shouldRunAfter(test)
     }
 
     register<Test>("liveTest") {

@@ -7,6 +7,7 @@ import ru.arc.core.ModuleRegistry
 import ru.arc.core.PluginModule
 import ru.arc.redis.RedisModuleConfig
 import ru.arc.ops.ProxyOpsHttpModule
+import ru.ruscrafting.votes.velocity.ProxyVotesModule
 import ru.arc.channelsync.ChannelSyncModule
 import ru.arc.telegram.TelegramModule
 import ru.arc.portal.PortalBridgeModule
@@ -26,6 +27,7 @@ object ProxyArcReload {
             TelegramModule,
             ChannelSyncModule,
             AssistantModule,
+            ProxyVotesModule,
             ProxyOpsHttpModule,
             PortalBridgeModule,
         )
