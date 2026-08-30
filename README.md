@@ -34,4 +34,10 @@ only GUI chrome locally and fails closed when the catalog is unavailable.
 
 Telegram can bridge Minecraft and Discord chat topics, translate verified mentions and formatting, link the same Minecraft identity to both platforms, and mirror Discord general messages into a public information channel. Channel metadata and posts are managed through deny-by-default ops endpoints with exact chat allowlists and mutation confirmations.
 
+## Website portal bridge
+
+The optional portal bridge mirrors both fixed chats, online presence, and the
+existing Discord/Telegram identity links to the website without creating a
+second link command. See [`docs/portal-bridge.md`](docs/portal-bridge.md).
+
 Setup, permissions, configuration and request contracts are documented in [docs/telegram-channel-ops.md](docs/telegram-channel-ops.md).

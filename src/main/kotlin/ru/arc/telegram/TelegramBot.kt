@@ -66,6 +66,9 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 import org.telegram.telegrambots.meta.exceptions.TelegramApiValidationException
 import ru.arc.Utils.plain
 import ru.arc.channelsync.ChannelSyncModule
+import ru.arc.portal.PortalChatChannel
+import ru.arc.portal.PortalChatMessage
+import ru.arc.portal.PortalChatSource
 import ru.arc.channelsync.TelegramSyncMessage
 import ru.arc.channelsync.TelegramSyncEntity
 import ru.arc.core.TaskScheduler
@@ -136,6 +139,25 @@ open class TelegramBot(
         )
 
         val sender = telegramSender(incoming)
+        val portalChannel =
+            when {
+                config.chatDestination?.matches(chatId, threadId) == true -> PortalChatChannel.GAME
+                config.generalDestination?.matches(chatId, threadId) == true -> PortalChatChannel.COMMUNITY
+                else -> null
+            }
+        if (portalChannel != null) {
+            Velocity.portalBridge?.publishChat(
+                PortalChatMessage(
+                    sourceEventId = "telegram:$chatId:${incoming.messageId}",
+                    source = PortalChatSource.TELEGRAM,
+                    channel = portalChannel,
+                    authorUuid = author?.let { identityService?.findByTelegramUserId(it.id)?.playerUuid },
+                    authorName = sender,
+                    content = text,
+                    createdAt = incoming.date.toLong() * 1_000,
+                ),
+            )
+        }
         val syncMessage =
             TelegramSyncMessage(
                 chatId = chatId,
@@ -356,6 +378,9 @@ open class TelegramBot(
 
     internal fun findIdentityByTelegramUsername(username: String): TelegramIdentityLink? =
         identityService?.findByTelegramUsername(username)
+
+    internal fun identitySnapshot(): List<TelegramIdentityLink>? =
+        identityService?.takeIf { config.identityEnabled }?.allLinks()
 
     internal fun refreshIdentity(
         playerUuid: UUID,

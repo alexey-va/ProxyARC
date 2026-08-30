@@ -1,0 +1,10 @@
+# One-way website mirror. Keep the bearer token identical to
+# PORTAL_BRIDGE_TOKEN on the website API host and outside committed production config.
+enabled: false
+base-url: "https://rus-crafting.ru"
+bridge-token: ""
+presence-interval: 60s
+identity-interval: 30s
+connect-timeout: 5s
+request-timeout: 8s
+max-in-flight: 32

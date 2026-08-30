@@ -10,6 +10,9 @@ import ru.arc.channelsync.ChannelSyncModule
 import ru.arc.channelsync.DiscordSyncMessage
 import ru.arc.channelsync.telegramHtmlEscape
 import ru.arc.ops.TelegramParseMode
+import ru.arc.portal.PortalChatChannel
+import ru.arc.portal.PortalChatMessage
+import ru.arc.portal.PortalChatSource
 import ru.arc.velocity.Velocity
 
 internal class DiscordChatService(
@@ -23,6 +26,25 @@ internal class DiscordChatService(
         if (event.author.isBot || event.message.isWebhookMessage) return
         val snapshot = session.snapshot() ?: return
         val (genericMessage, technical) = codec.discordToChannelSync(event.message)
+        val portalChannel =
+            when (event.channel.id) {
+                snapshot.channels.chat.id -> PortalChatChannel.GAME
+                snapshot.channels.general.id -> PortalChatChannel.COMMUNITY
+                else -> null
+            }
+        if (portalChannel != null && genericMessage.isNotBlank()) {
+            Velocity.portalBridge?.publishChat(
+                PortalChatMessage(
+                    sourceEventId = "discord:${event.channel.id}:${event.messageId}",
+                    source = PortalChatSource.DISCORD,
+                    channel = portalChannel,
+                    authorUuid = Velocity.discordBot?.findIdentityByDiscordUser(event.author.id)?.playerUuid,
+                    authorName = inboundAuthor(event),
+                    content = genericMessage,
+                    createdAt = event.message.timeCreated.toInstant().toEpochMilli(),
+                ),
+            )
+        }
         if (genericMessage.isNotBlank() &&
             Velocity.channelSync?.relayDiscord(
                 DiscordSyncMessage(

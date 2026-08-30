@@ -349,6 +349,9 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
     internal fun findIdentityByDiscordUser(discordUserId: String): DiscordIdentityLink? =
         identities?.findByDiscordUserId(discordUserId)
 
+    internal fun identitySnapshot(): List<DiscordIdentityLink>? =
+        identities?.takeIf { it.isAvailable() }?.allLinks()
+
     internal fun identityAccountLabel(link: DiscordIdentityLink): String =
         discordAccountLabel(
             username = session.jda()?.getUserById(link.discordUserId)?.name,

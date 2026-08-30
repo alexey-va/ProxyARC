@@ -17,6 +17,8 @@ import ru.arc.Arc
 import ru.arc.ai.Assistant
 import ru.arc.ai.AssistantModule
 import ru.arc.ops.ProxyOpsHttpModule
+import ru.arc.portal.PortalBridgeModule
+import ru.arc.portal.PortalBridgeService
 import ru.arc.ai.tools.Tool
 import ru.arc.ai.tools.Tools
 import ru.arc.config.Config
@@ -132,6 +134,7 @@ class Velocity @Inject constructor(
             ChannelSyncModule,
             AssistantModule,
             ProxyOpsHttpModule,
+            PortalBridgeModule,
             // Runtime (90-99)
             ListenersModule,
             ProxyTasksModule,
@@ -250,6 +253,9 @@ class Velocity @Inject constructor(
 
         @JvmField
         var channelSync: ChannelSyncService? = null
+
+        @JvmField
+        var portalBridge: PortalBridgeService? = null
 
         @JvmField
         var firstJoinData: FirstJoinData? = null

@@ -10,7 +10,11 @@ import ru.arc.config.Config
 import ru.arc.config.ProxyConfigs
 import ru.arc.core.Tasks
 import ru.arc.logging.ArcLogging
+import ru.arc.portal.PortalChatChannel
+import ru.arc.portal.PortalChatMessage
+import ru.arc.portal.PortalChatSource
 import ru.arc.velocity.Velocity
+import java.util.UUID
 
 class ChatListener(
     private val proxyServer: ProxyServer,
@@ -51,6 +55,17 @@ class ChatListener(
         val minPlayerTime = mainConfig.integer("discord.min-play-time-sec", 600) * 1000L
         if (firstJoinTime == null || firstJoinTime + minPlayerTime > System.currentTimeMillis()) return
         ArcLogging.debug("[ChatMode] bridge player={} action=forward-global-chat", username)
+        Velocity.portalBridge?.publishChat(
+            PortalChatMessage(
+                sourceEventId = "minecraft:${UUID.randomUUID()}",
+                source = PortalChatSource.MINECRAFT,
+                channel = PortalChatChannel.GAME,
+                authorUuid = uuid,
+                authorName = username,
+                content = message,
+                createdAt = System.currentTimeMillis(),
+            ),
+        )
         Tasks.scheduler.runAsync {
             val pattern = mainConfig.string("discord.chat-pattern", "**%player_name%** » %message%")
             var chatMessage = pattern.replace("%player_name%", username).replace("%message%", message)

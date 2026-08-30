@@ -9,6 +9,7 @@ import ru.arc.redis.RedisModuleConfig
 import ru.arc.ops.ProxyOpsHttpModule
 import ru.arc.channelsync.ChannelSyncModule
 import ru.arc.telegram.TelegramModule
+import ru.arc.portal.PortalBridgeModule
 import ru.arc.velocity.Velocity
 
 /**
@@ -26,6 +27,7 @@ object ProxyArcReload {
             ChannelSyncModule,
             AssistantModule,
             ProxyOpsHttpModule,
+            PortalBridgeModule,
         )
 
     internal fun moduleNames(): List<String> = modules.map(PluginModule::name)

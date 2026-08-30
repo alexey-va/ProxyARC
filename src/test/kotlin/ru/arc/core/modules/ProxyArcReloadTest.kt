@@ -15,6 +15,7 @@ class ProxyArcReloadTest : FreeSpec({
                 "ChannelSync",
                 "Assistant",
                 "ProxyOpsHttp",
+                "PortalBridge",
             )
     }
 })

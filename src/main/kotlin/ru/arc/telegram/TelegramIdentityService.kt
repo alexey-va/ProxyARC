@@ -134,6 +134,9 @@ class TelegramIdentityService internal constructor(
     fun findByTelegramUserId(telegramUserId: Long): TelegramIdentityLink? =
         safely(null) { store.read { state -> state.links.firstOrNull { it.telegramUserId == telegramUserId }?.toDomain() } }
 
+    fun allLinks(): List<TelegramIdentityLink> =
+        safely(emptyList()) { store.read { state -> state.links.map { it.toDomain() } } }
+
     fun findByTelegramUsername(username: String): TelegramIdentityLink? {
         val normalized = normalizeUsername(username) ?: return null
         return safely(null) {
