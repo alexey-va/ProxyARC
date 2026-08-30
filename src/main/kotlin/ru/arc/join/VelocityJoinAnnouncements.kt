@@ -33,16 +33,30 @@ class VelocityJoinAnnouncementSink(
     private val logger: Logger,
 ) : JoinAnnouncementSink {
     override fun publish(announcement: PublishedAnnouncement) {
-        val joinType = announcement.kind.toDiscordJoinType()
-        deliver("Discord", announcement) {
-            Velocity.discordBot?.sendJoinEmbed(announcement.playerName, joinType, announcement.customMessage)
-        }
-        deliver("Telegram", announcement) {
-            Velocity.telegramBot?.sendJoinMessage(announcement.playerName, joinType, announcement.customMessage)
-        }
-        deliver("Minecraft", announcement) {
-            val component = mm(config.minecraftMessage(announcement))
-            proxyServer.allPlayers.forEach { player -> player.sendMessage(component) }
+        announcement.destinations().forEach { destination ->
+            when (destination) {
+                JoinAnnouncementDestination.DISCORD ->
+                    deliver("Discord", announcement) {
+                        Velocity.discordBot?.sendJoinEmbed(
+                            announcement.playerName,
+                            announcement.kind.toDiscordJoinType(),
+                            announcement.customMessage,
+                        )
+                    }
+                JoinAnnouncementDestination.TELEGRAM ->
+                    deliver("Telegram", announcement) {
+                        Velocity.telegramBot?.sendJoinMessage(
+                            announcement.playerName,
+                            announcement.kind.toDiscordJoinType(),
+                            announcement.customMessage,
+                        )
+                    }
+                JoinAnnouncementDestination.MINECRAFT ->
+                    deliver("Minecraft", announcement) {
+                        val component = mm(config.minecraftMessage(announcement))
+                        proxyServer.allPlayers.forEach { player -> player.sendMessage(component) }
+                    }
+            }
         }
     }
 
@@ -62,6 +76,23 @@ class VelocityJoinAnnouncementSink(
         }
     }
 }
+
+internal enum class JoinAnnouncementDestination {
+    DISCORD,
+    TELEGRAM,
+    MINECRAFT,
+}
+
+internal fun PublishedAnnouncement.destinations(): List<JoinAnnouncementDestination> =
+    if (publishExternally) {
+        listOf(
+            JoinAnnouncementDestination.DISCORD,
+            JoinAnnouncementDestination.TELEGRAM,
+            JoinAnnouncementDestination.MINECRAFT,
+        )
+    } else {
+        listOf(JoinAnnouncementDestination.MINECRAFT)
+    }
 
 object VelocityProxyLifecycle : ProxyLifecycle {
     override val shuttingDown: Boolean get() = Velocity.isShuttingDown.get()

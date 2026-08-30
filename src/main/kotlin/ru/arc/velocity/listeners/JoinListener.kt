@@ -29,9 +29,7 @@ class JoinListener(
         announcements.onPostLogin(
             VelocityAnnouncementPlayer(player),
             AnnouncementPermissions(
-                first = player.hasPermission("arc.join-message.first"),
-                join = player.hasPermission("arc.join-message.join"),
-                leave = player.hasPermission("arc.join-message.leave"),
+                external = player.hasPermission(EXTERNAL_JOIN_ANNOUNCEMENT_PERMISSION),
             ),
         )
     }
@@ -69,6 +67,7 @@ class JoinListener(
     }
 
     companion object {
+        internal const val EXTERNAL_JOIN_ANNOUNCEMENT_PERMISSION = "arc.join-message.external"
         private val log = LoggerFactory.getLogger(JoinListener::class.java)
     }
 }

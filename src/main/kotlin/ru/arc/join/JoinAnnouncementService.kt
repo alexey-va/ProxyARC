@@ -15,15 +15,14 @@ enum class JoinAnnouncementKind {
 }
 
 data class AnnouncementPermissions(
-    val first: Boolean,
-    val join: Boolean,
-    val leave: Boolean,
+    val external: Boolean,
 )
 
 data class PublishedAnnouncement(
     val playerName: String,
     val kind: JoinAnnouncementKind,
     val customMessage: String?,
+    val publishExternally: Boolean,
 )
 
 interface AnnouncementPlayer {
@@ -74,23 +73,23 @@ class JoinAnnouncementService(
             }
         }
         val kind =
-            when {
-                firstJoin.firstTime && permissions.first -> JoinAnnouncementKind.FIRST_TIME
-                !firstJoin.firstTime && permissions.join -> JoinAnnouncementKind.JOIN
-                else -> null
-            } ?: return
+            if (firstJoin.firstTime) {
+                JoinAnnouncementKind.FIRST_TIME
+            } else {
+                JoinAnnouncementKind.JOIN
+            }
 
         scheduler.runLater(20) {
             if (!isCurrent(session)) return@runLater
             if (kind == JoinAnnouncementKind.FIRST_TIME) {
-                sink.publish(PublishedAnnouncement(player.playerName, kind, null))
+                sink.publish(PublishedAnnouncement(player.playerName, kind, null, permissions.external))
             } else {
                 messageSource.load(player.playerName, kind).whenComplete { customMessage, error ->
                     if (!isCurrent(session)) return@whenComplete
                     if (error != null) {
                         log.warn("Could not load {} message for {}", kind, player.playerName, error)
                     }
-                    sink.publish(PublishedAnnouncement(player.playerName, kind, customMessage))
+                    sink.publish(PublishedAnnouncement(player.playerName, kind, customMessage, permissions.external))
                 }
             }
         }
@@ -100,10 +99,6 @@ class JoinAnnouncementService(
         val current = sessions[player.playerId] ?: return
         if (current.player.connectionIdentity === player.connectionIdentity) {
             if (!sessions.remove(player.playerId, current)) return
-            if (!current.permissions.leave) {
-                latestGeneration.remove(player.playerId, current.generation)
-                return
-            }
             scheduler.runLater(20) {
                 if (!isLatestDisconnected(current)) return@runLater
                 messageSource.load(player.playerName, JoinAnnouncementKind.LEAVE).whenComplete { customMessage, error ->
@@ -111,7 +106,14 @@ class JoinAnnouncementService(
                     if (error != null) {
                         log.warn("Could not load leave message for {}", player.playerName, error)
                     }
-                    sink.publish(PublishedAnnouncement(player.playerName, JoinAnnouncementKind.LEAVE, customMessage))
+                    sink.publish(
+                        PublishedAnnouncement(
+                            player.playerName,
+                            JoinAnnouncementKind.LEAVE,
+                            customMessage,
+                            current.permissions.external,
+                        ),
+                    )
                     latestGeneration.remove(player.playerId, current.generation)
                 }
             }

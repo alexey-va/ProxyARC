@@ -51,7 +51,7 @@ class JoinListenerLifecycleTest : FreeSpec({
             player(
                 playerId,
                 "Alex",
-                permissions = setOf("arc.join-message.first", "arc.join-message.leave"),
+                permissions = setOf(JoinListener.EXTERNAL_JOIN_ANNOUNCEMENT_PERMISSION),
             )
         val announcements = RecordingSessionAnnouncements()
         val announcer = PlayerListAnnouncer(emptyInterface(RedisOperations::class.java), "players")
@@ -61,7 +61,7 @@ class JoinListenerLifecycleTest : FreeSpec({
 
         announcer.serverForUsername("Alex") shouldBe ""
         announcements.connected.single().permissions shouldBe
-            AnnouncementPermissions(first = true, join = false, leave = true)
+            AnnouncementPermissions(external = true)
     }
 })
 

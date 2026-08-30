@@ -70,7 +70,7 @@ class JoinMessageCatalogConfigTest : FreeSpec({
         val announcements = JoinAnnouncementConfig.load(directory)
 
         announcements.minecraftMessage(
-            PublishedAnnouncement("Alex", JoinAnnouncementKind.JOIN, null),
+            PublishedAnnouncement("Alex", JoinAnnouncementKind.JOIN, null, false),
         ) shouldContain "вошёл со старым текстом"
     }
 })

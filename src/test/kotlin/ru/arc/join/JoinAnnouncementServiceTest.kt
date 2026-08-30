@@ -14,21 +14,21 @@ class JoinAnnouncementServiceTest : FreeSpec({
         val fixture = fixture()
         val firstConnection = TestPlayer(UUID.randomUUID(), "Alex")
 
-        fixture.service.onPostLogin(firstConnection, AnnouncementPermissions(first = true, join = true, leave = false))
+        fixture.service.onPostLogin(firstConnection, AnnouncementPermissions(external = false))
         fixture.scheduler.tick(20)
 
         fixture.sink.published shouldContainExactly
-            listOf(PublishedAnnouncement("Alex", JoinAnnouncementKind.FIRST_TIME, null))
+            listOf(PublishedAnnouncement("Alex", JoinAnnouncementKind.FIRST_TIME, null, publishExternally = false))
 
         fixture.service.onDisconnect(firstConnection)
         val secondConnection = firstConnection.reconnected()
-        fixture.service.onPostLogin(secondConnection, AnnouncementPermissions(first = true, join = true, leave = false))
+        fixture.service.onPostLogin(secondConnection, AnnouncementPermissions(external = false))
         fixture.scheduler.tick(20)
 
         fixture.sink.published shouldContainExactly
             listOf(
-                PublishedAnnouncement("Alex", JoinAnnouncementKind.FIRST_TIME, null),
-                PublishedAnnouncement("Alex", JoinAnnouncementKind.JOIN, null),
+                PublishedAnnouncement("Alex", JoinAnnouncementKind.FIRST_TIME, null, publishExternally = false),
+                PublishedAnnouncement("Alex", JoinAnnouncementKind.JOIN, null, publishExternally = false),
             )
     }
 
@@ -38,7 +38,7 @@ class JoinAnnouncementServiceTest : FreeSpec({
         val pending = CompletableFuture<String?>()
         fixture.source.responses[JoinAnnouncementKind.JOIN] = pending
 
-        fixture.service.onPostLogin(connection, AnnouncementPermissions(first = true, join = true, leave = false))
+        fixture.service.onPostLogin(connection, AnnouncementPermissions(external = false))
         fixture.scheduler.tick(20)
         fixture.service.onDisconnect(connection)
         pending.complete("ушёл раньше объявления")
@@ -52,7 +52,7 @@ class JoinAnnouncementServiceTest : FreeSpec({
         fixture.source.responses[JoinAnnouncementKind.LEAVE] =
             CompletableFuture.completedFuture("Алексей закрыл калитку")
 
-        fixture.service.onPostLogin(connection, AnnouncementPermissions(first = true, join = false, leave = true))
+        fixture.service.onPostLogin(connection, AnnouncementPermissions(external = true))
         fixture.service.onDisconnect(connection)
         fixture.scheduler.tick(20)
 
@@ -62,6 +62,7 @@ class JoinAnnouncementServiceTest : FreeSpec({
                     "Alex",
                     JoinAnnouncementKind.LEAVE,
                     "Алексей закрыл калитку",
+                    publishExternally = true,
                 ),
             )
     }
@@ -72,12 +73,12 @@ class JoinAnnouncementServiceTest : FreeSpec({
         val pending = CompletableFuture<String?>()
         fixture.source.responses[JoinAnnouncementKind.LEAVE] = pending
 
-        fixture.service.onPostLogin(firstConnection, AnnouncementPermissions(first = true, join = false, leave = true))
+        fixture.service.onPostLogin(firstConnection, AnnouncementPermissions(external = false))
         fixture.service.onDisconnect(firstConnection)
         fixture.scheduler.tick(20)
         fixture.service.onPostLogin(
             firstConnection.reconnected(),
-            AnnouncementPermissions(first = true, join = false, leave = true),
+            AnnouncementPermissions(external = true),
         )
         pending.complete("вернулся до объявления")
 
@@ -91,6 +92,22 @@ class JoinAnnouncementServiceTest : FreeSpec({
         fixture.scheduler.executeAll()
 
         fixture.sink.published shouldBe emptyList()
+    }
+
+    "a regular player without external permission still emits join and leave announcements" {
+        val fixture = fixture(existingPlayer = "Alex")
+        val connection = TestPlayer(UUID.randomUUID(), "Alex")
+
+        fixture.service.onPostLogin(connection, AnnouncementPermissions(external = false))
+        fixture.scheduler.tick(20)
+        fixture.service.onDisconnect(connection)
+        fixture.scheduler.tick(20)
+
+        fixture.sink.published shouldContainExactly
+            listOf(
+                PublishedAnnouncement("Alex", JoinAnnouncementKind.JOIN, null, publishExternally = false),
+                PublishedAnnouncement("Alex", JoinAnnouncementKind.LEAVE, null, publishExternally = false),
+            )
     }
 })
 

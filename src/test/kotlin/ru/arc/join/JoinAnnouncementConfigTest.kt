@@ -23,9 +23,9 @@ class JoinAnnouncementConfigTest : FreeSpec({
             )
         val messages = JoinAnnouncementConfig(config)
 
-        messages.minecraftMessage(PublishedAnnouncement("Alex", JoinAnnouncementKind.JOIN, null)) shouldContain
+        messages.minecraftMessage(PublishedAnnouncement("Alex", JoinAnnouncementKind.JOIN, null, false)) shouldContain
             "присоединился"
-        messages.minecraftMessage(PublishedAnnouncement("Alex", JoinAnnouncementKind.LEAVE, null)) shouldContain
+        messages.minecraftMessage(PublishedAnnouncement("Alex", JoinAnnouncementKind.LEAVE, null, false)) shouldContain
             "вышел"
     }
 
@@ -40,7 +40,7 @@ class JoinAnnouncementConfigTest : FreeSpec({
 
         val rendered =
             JoinAnnouncementConfig(config).minecraftMessage(
-                PublishedAnnouncement("Alex", JoinAnnouncementKind.FIRST_TIME, null),
+                PublishedAnnouncement("Alex", JoinAnnouncementKind.FIRST_TIME, null, false),
             )
 
         rendered shouldContain "<blue>● <gray>Игрок <green>Alex"
@@ -57,7 +57,7 @@ class JoinAnnouncementConfigTest : FreeSpec({
             )
 
         JoinAnnouncementConfig(config).minecraftMessage(
-            PublishedAnnouncement("Alex", JoinAnnouncementKind.JOIN, "%player_name% открыл калитку"),
+            PublishedAnnouncement("Alex", JoinAnnouncementKind.JOIN, "%player_name% открыл калитку", false),
         ) shouldContain "<dark_green>● Alex открыл калитку"
     }
 
@@ -74,11 +74,11 @@ class JoinAnnouncementConfigTest : FreeSpec({
         bundled.exists("messages.leave") shouldBe true
         val messages = JoinAnnouncementConfig(bundled)
 
-        messages.minecraftMessage(PublishedAnnouncement("Alex", JoinAnnouncementKind.FIRST_TIME, null)) shouldContain
+        messages.minecraftMessage(PublishedAnnouncement("Alex", JoinAnnouncementKind.FIRST_TIME, null, false)) shouldContain
             "впервые"
-        messages.minecraftMessage(PublishedAnnouncement("Alex", JoinAnnouncementKind.JOIN, null)) shouldContain
+        messages.minecraftMessage(PublishedAnnouncement("Alex", JoinAnnouncementKind.JOIN, null, false)) shouldContain
             "присоединился"
-        messages.minecraftMessage(PublishedAnnouncement("Alex", JoinAnnouncementKind.LEAVE, null)) shouldContain
+        messages.minecraftMessage(PublishedAnnouncement("Alex", JoinAnnouncementKind.LEAVE, null, false)) shouldContain
             "вышел"
     }
 
@@ -97,9 +97,9 @@ class JoinAnnouncementConfigTest : FreeSpec({
 
         val messages = JoinAnnouncementConfig.load(directory)
 
-        messages.minecraftMessage(PublishedAnnouncement("Alex", JoinAnnouncementKind.FIRST_TIME, null)) shouldContain
+        messages.minecraftMessage(PublishedAnnouncement("Alex", JoinAnnouncementKind.FIRST_TIME, null, false)) shouldContain
             "впервые из старого файла"
-        messages.minecraftMessage(PublishedAnnouncement("Alex", JoinAnnouncementKind.JOIN, null)) shouldContain
+        messages.minecraftMessage(PublishedAnnouncement("Alex", JoinAnnouncementKind.JOIN, null, false)) shouldContain
             "вошёл из старого файла"
         Files.exists(directory.resolve("modules/join-messages.yml")) shouldBe true
     }
