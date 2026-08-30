@@ -17,6 +17,10 @@ class ProxyVotesSettingsTest : StringSpec({
         settings.http.port shouldBe 25826
         settings.sql shouldBe null
         settings.reward.enabled shouldBe false
+        settings.reward.pollIntervalSeconds shouldBe 5L
+        settings.reward.standard.amount.compareTo(java.math.BigDecimal("1000")) shouldBe 0
+        settings.reward.premium.amount.compareTo(java.math.BigDecimal("3")) shouldBe 0
+        settings.reward.premium.currencyId shouldBe "tokens"
         settings.enabledSources shouldBe emptySet()
     }
 })
