@@ -61,6 +61,8 @@ Telegram can bridge Minecraft and Discord chat topics, translate verified mentio
 
 The optional portal bridge mirrors both fixed chats, online presence, and the
 existing Discord/Telegram identity links to the website without creating a
-second link command. See [`docs/portal-bridge.md`](docs/portal-bridge.md).
+second link command. It also drains authenticated website messages from the
+portal outbox into Minecraft, Discord, and Telegram.
+See [`docs/portal-bridge.md`](docs/portal-bridge.md).
 
 Setup, permissions, configuration and request contracts are documented in [docs/telegram-channel-ops.md](docs/telegram-channel-ops.md).

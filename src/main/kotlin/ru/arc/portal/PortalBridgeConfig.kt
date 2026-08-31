@@ -24,6 +24,19 @@ open class PortalBridgeConfig(
     open val identityIntervalTicks: Long
         get() = config.durationTicks("identity-interval", 600L).coerceIn(200L, 12_000L)
 
+    open val outboundPollIntervalTicks: Long
+        get() = config.durationTicks("outbound.poll-interval", 40L).coerceIn(20L, 1_200L)
+
+    open val outboundMinecraftFormat: String
+        get() =
+            config.string(
+                "outbound.minecraft-format",
+                "<dark_aqua>Сайт</dark_aqua> <dark_gray>| <gray>%player_name% <dark_gray>» <white>%message%",
+            ).trim()
+
+    open val outboundExternalFormat: String
+        get() = config.string("outbound.external-format", "%player_name% » %message%").trim()
+
     open val connectTimeoutMillis: Long
         get() = config.durationMillis("connect-timeout", 5_000L).coerceIn(1_000L, 30_000L)
 
@@ -43,6 +56,7 @@ open class PortalBridgeConfig(
             "portal bridge base-url must not contain credentials, query or fragment"
         }
         require(bridgeToken.length >= 32) { "portal bridge token must contain at least 32 characters" }
+        PortalOutboundChatFormatter(outboundMinecraftFormat, outboundExternalFormat)
     }
 
     companion object {
@@ -56,6 +70,10 @@ internal class TestPortalBridgeConfig(
     override val bridgeToken: String = "test-bridge-token-that-is-long-enough",
     override val presenceIntervalTicks: Long = 1_200L,
     override val identityIntervalTicks: Long = 600L,
+    override val outboundPollIntervalTicks: Long = 40L,
+    override val outboundMinecraftFormat: String =
+        "<dark_aqua>Сайт</dark_aqua> <dark_gray>| <gray>%player_name% <dark_gray>» <white>%message%",
+    override val outboundExternalFormat: String = "%player_name% » %message%",
     override val connectTimeoutMillis: Long = 5_000L,
     override val requestTimeoutMillis: Long = 8_000L,
     override val maxInFlight: Int = 32,

@@ -73,12 +73,18 @@ sources:
       - command-hint
       - expiry
       - minute-many
+  portal-outbound:
+    path: src/main/resources/modules/portal-bridge.yml
+    root: outbound
+    include:
+      - minecraft-format
 
 placeholders:
   player_name: Alexey23
   code: ABCD-EFGH
   command: /verify ABCD-EFGH
   minutes: 10
+  message: Привет с сайта!
 
 surfaces:
   inventories:
@@ -224,6 +230,9 @@ surfaces:
         - {slot: 11, material: BAKED_POTATO, name: leave-catalog:leave-57.display-name, lore: leave-catalog:leave-57.message}
         - {slot: 12, material: APPLE, name: leave-catalog:leave-58.display-name, lore: leave-catalog:leave-58.message}
   chat-blocks:
+    - id: Сайт → Minecraft
+      text:
+        template: portal-outbound:minecraft-format
     - id: Discord — /verify
       text:
         template: discord-verification:layout

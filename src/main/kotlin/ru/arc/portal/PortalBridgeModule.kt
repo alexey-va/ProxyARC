@@ -20,6 +20,13 @@ object PortalBridgeModule : PluginModule {
         }
         try {
             val service = PortalBridgeService(config, Velocity.requireLogger())
+            val outboundDelivery =
+                PortalOutboundChatDelivery(
+                    PortalOutboundChatFormatter(
+                        config.outboundMinecraftFormat,
+                        config.outboundExternalFormat,
+                    ),
+                )
             val scope = LifecycleTaskScope()
             Velocity.portalBridge = service
             tasks = scope
@@ -67,10 +74,14 @@ object PortalBridgeModule : PluginModule {
                     )
                 }
             }
+            scope.runTimerAsync(0, config.outboundPollIntervalTicks) {
+                service.pollOutboundChat(outboundDelivery::deliver)
+            }
             log.info(
-                "Portal bridge ready presenceTicks={} identityTicks={}",
+                "Portal bridge ready presenceTicks={} identityTicks={} outboundPollTicks={}",
                 config.presenceIntervalTicks,
                 config.identityIntervalTicks,
+                config.outboundPollIntervalTicks,
             )
         } catch (error: Exception) {
             shutdown()

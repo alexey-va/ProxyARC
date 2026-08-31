@@ -100,10 +100,102 @@ class PortalBridgeServiceTest : FreeSpec({
         service.inFlightCount() shouldBe 0
     }
 
+    "outbound chat is validated delivered and acknowledged without overlapping polls" {
+        val posts = mutableListOf<RecordedRequest>()
+        val gets = mutableListOf<RecordedGet>()
+        val deliveries = mutableListOf<PortalOutboundChatMessage>()
+        val getTransport = PortalHttpGetTransport { endpoint, token, _ ->
+            gets += RecordedGet(endpoint, token)
+            CompletableFuture.completedFuture(
+                PortalHttpGetResponse(
+                    200,
+                    """{"messages":[{"id":7,"sourceEventId":"website:event-7","channel":"game","authorUuid":"01234567-89ab-cdef-0123-456789abcdef","authorName":"Explorer","content":"Сообщение с сайта","createdAt":1800000000000}]}""",
+                ),
+            )
+        }
+        val service =
+            PortalBridgeService(
+                config = TestPortalBridgeConfig(),
+                logger = mockk<Logger>(relaxed = true),
+                transport = PortalHttpTransport { endpoint, token, body, _ ->
+                    posts += RecordedRequest(endpoint, token, body)
+                    CompletableFuture.completedFuture(204)
+                },
+                getTransport = getTransport,
+            )
+
+        service.pollOutboundChat { message ->
+            deliveries += message
+            true
+        } shouldBe PortalOutboundPollStart.STARTED
+
+        gets.single().endpoint.path shouldBe "/api/v1/integrations/chat/outbox"
+        gets.single().token shouldBe "test-bridge-token-that-is-long-enough"
+        deliveries.single().authorName shouldBe "Explorer"
+        deliveries.single().content shouldBe "Сообщение с сайта"
+        posts.single().endpoint.path shouldBe "/api/v1/integrations/chat/outbox/7/ack"
+        posts.single().token shouldBe "test-bridge-token-that-is-long-enough"
+    }
+
+    "close prevents a pending outbound response from reaching chat sinks" {
+        val response = CompletableFuture<PortalHttpGetResponse>()
+        var deliveries = 0
+        val service =
+            PortalBridgeService(
+                config = TestPortalBridgeConfig(),
+                logger = mockk<Logger>(relaxed = true),
+                transport = PortalHttpTransport { _, _, _, _ -> CompletableFuture.completedFuture(204) },
+                getTransport = PortalHttpGetTransport { _, _, _ -> response },
+            )
+
+        service.pollOutboundChat { deliveries += 1; true } shouldBe PortalOutboundPollStart.STARTED
+        service.pollOutboundChat { true } shouldBe PortalOutboundPollStart.ALREADY_RUNNING
+        service.close()
+        response.complete(PortalHttpGetResponse(200, """{"messages":[]}"""))
+
+        deliveries shouldBe 0
+        service.pollOutboundChat { true } shouldBe PortalOutboundPollStart.CLOSED
+    }
+
+    "synchronous outbound transport failure is reported without locking future polls" {
+        val service =
+            PortalBridgeService(
+                config = TestPortalBridgeConfig(),
+                logger = mockk<Logger>(relaxed = true),
+                transport = PortalHttpTransport { _, _, _, _ -> CompletableFuture.completedFuture(204) },
+                getTransport = PortalHttpGetTransport { _, _, _ -> error("transport unavailable") },
+            )
+
+        service.pollOutboundChat { true } shouldBe PortalOutboundPollStart.FAILED_TO_START
+        service.pollOutboundChat { true } shouldBe PortalOutboundPollStart.FAILED_TO_START
+    }
+
+    "oversized outbound responses are rejected before delivery" {
+        var deliveries = 0
+        val service =
+            PortalBridgeService(
+                config = TestPortalBridgeConfig(),
+                logger = mockk<Logger>(relaxed = true),
+                transport = PortalHttpTransport { _, _, _, _ -> CompletableFuture.completedFuture(204) },
+                getTransport =
+                    PortalHttpGetTransport { _, _, _ ->
+                        CompletableFuture.completedFuture(PortalHttpGetResponse(200, "x".repeat(64 * 1024 + 1)))
+                    },
+            )
+
+        service.pollOutboundChat { deliveries += 1; true } shouldBe PortalOutboundPollStart.STARTED
+        deliveries shouldBe 0
+        service.pollOutboundChat { true } shouldBe PortalOutboundPollStart.STARTED
+    }
 })
 
 private data class RecordedRequest(
     val endpoint: URI,
     val token: String,
     val body: String,
+)
+
+private data class RecordedGet(
+    val endpoint: URI,
+    val token: String,
 )
