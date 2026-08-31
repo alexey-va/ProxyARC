@@ -60,6 +60,7 @@ import ru.arc.redis.RedisManager
 import ru.arc.rtp.ProxyRtpConfig
 import ru.arc.rtp.RtpCommand
 import ru.arc.rtp.RtpRequestManager
+import ru.ruscrafting.votes.command.NetworkVoteCommand
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -145,6 +146,14 @@ class Velocity @Inject constructor(
 
     private fun registerCommands() {
         val commandManager = checkNotNull(proxyServer).commandManager
+        val voteMetadata =
+            commandManager
+                .metaBuilder("vote")
+                .aliases("votes", "golos")
+                .plugin(this)
+                .build()
+        commandManager.register(voteMetadata, NetworkVoteCommand(server).command)
+
         val metadata =
             commandManager
                 .metaBuilder("proxyarc")
