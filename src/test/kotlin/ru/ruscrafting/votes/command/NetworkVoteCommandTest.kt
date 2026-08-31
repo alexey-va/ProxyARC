@@ -14,8 +14,6 @@ class NetworkVoteCommandTest : StringSpec({
     "admin inspection completes players from every proxy backend" {
         val sender = player("Operator")
         val proxy = mockk<ProxyServer>()
-        every { sender.hasPermission("arcvotes.admin.status") } returns true
-        every { sender.hasPermission("arcvotes.admin.inspect") } returns true
         every { proxy.allPlayers } returns listOf(sender, player("RemoteAlice"), player("RemoteBob"))
         val command = NetworkVoteCommand(proxy).command
 
@@ -24,14 +22,15 @@ class NetworkVoteCommandTest : StringSpec({
         suggestions(command, sender, "vote history Remote") shouldBe listOf("RemoteAlice", "RemoteBob")
     }
 
-    "ordinary players do not receive administrator suggestions" {
+    "proxy suggestions do not depend on proxy-local permission state" {
         val sender = player("Steve")
-        val proxy = mockk<ProxyServer>(relaxed = true)
+        val proxy = mockk<ProxyServer>()
         every { sender.hasPermission(any()) } returns false
+        every { proxy.allPlayers } returns listOf(sender, player("RemoteAlice"))
         val command = NetworkVoteCommand(proxy).command
 
-        suggestions(command, sender, "vote ") shouldBe emptyList()
-        suggestions(command, sender, "vote check ") shouldBe emptyList()
+        suggestions(command, sender, "vote ") shouldBe listOf("check", "history", "status")
+        suggestions(command, sender, "vote check ") shouldBe listOf("RemoteAlice", "Steve")
     }
 
     "vote execution is forwarded to ArcVotes on the current Paper backend" {

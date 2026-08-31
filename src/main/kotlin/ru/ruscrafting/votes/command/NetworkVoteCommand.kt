@@ -4,7 +4,6 @@ import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.suggestion.Suggestions
 import com.mojang.brigadier.suggestion.SuggestionsBuilder
 import com.velocitypowered.api.command.BrigadierCommand
-import com.velocitypowered.api.command.CommandSource
 import com.velocitypowered.api.proxy.Player
 import com.velocitypowered.api.proxy.ProxyServer
 import java.util.Locale
@@ -22,26 +21,19 @@ class NetworkVoteCommand(
                     "arguments",
                     StringArgumentType.greedyString(),
                 )
-                    .suggests { context, builder -> suggest(context.source, builder) }
+                    .suggests { _, builder -> suggest(builder) }
                     .executes { BrigadierCommand.FORWARD },
             ),
     )
 
-    private fun suggest(
-        source: CommandSource,
-        builder: SuggestionsBuilder,
-    ): CompletableFuture<Suggestions> {
+    private fun suggest(builder: SuggestionsBuilder): CompletableFuture<Suggestions> {
         val remaining = builder.remaining
         val lastSpace = remaining.lastIndexOf(' ')
         val prefix = remaining.substring(lastSpace + 1)
         val candidates = when {
-            lastSpace < 0 -> buildList {
-                if (source.hasPermission(STATUS_PERMISSION)) add("status")
-                if (source.hasPermission(INSPECT_PERMISSION)) addAll(INSPECTION_COMMANDS)
-            }
+            lastSpace < 0 -> ADMIN_COMMANDS
 
-            source.hasPermission(INSPECT_PERMISSION) &&
-                remaining.substring(0, lastSpace).trim().lowercase(Locale.ROOT) in INSPECTION_COMMANDS ->
+            remaining.substring(0, lastSpace).trim().lowercase(Locale.ROOT) in INSPECTION_COMMANDS ->
                 proxy.allPlayers
                     .map(Player::getUsername)
                     .distinctBy { it.lowercase(Locale.ROOT) }
@@ -57,8 +49,7 @@ class NetworkVoteCommand(
     }
 
     private companion object {
-        const val STATUS_PERMISSION = "arcvotes.admin.status"
-        const val INSPECT_PERMISSION = "arcvotes.admin.inspect"
         val INSPECTION_COMMANDS = listOf("check", "history")
+        val ADMIN_COMMANDS = INSPECTION_COMMANDS + "status"
     }
 }
