@@ -4,6 +4,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.matchers.shouldBe
 import ru.arc.config.ConfigManager
+import java.net.URI
 import java.nio.file.Files
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
@@ -24,6 +25,10 @@ class ProxyVotesSettingsTest : StringSpec({
         settings.reward.standard.amount.compareTo(java.math.BigDecimal("1000")) shouldBe 0
         settings.reward.premium.amount.compareTo(java.math.BigDecimal("3")) shouldBe 0
         settings.reward.premium.currencyId shouldBe "tokens"
+        settings.presentations.getValue(MonitoringSource.HOTMC).voteUrl shouldBe
+            URI("https://hotmc.ru/vote-242482")
+        settings.presentations.getValue(MonitoringSource.MONITORING_MINECRAFT).voteUrl shouldBe
+            URI("https://monitoringminecraft.com/vote/43/")
         settings.enabledSources shouldBe emptySet()
     }
 
