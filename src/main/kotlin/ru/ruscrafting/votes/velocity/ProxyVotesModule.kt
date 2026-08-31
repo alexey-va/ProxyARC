@@ -20,7 +20,9 @@ object ProxyVotesModule : PluginModule {
     private var ingress: VoteIngressService? = null
 
     override fun init() {
-        val settings = ArcVotesSettings.load(checkNotNull(Velocity.dataFolder) { "ProxyARC data folder is not initialized" })
+        val dataRoot = checkNotNull(Velocity.dataFolder) { "ProxyARC data folder is not initialized" }
+        ArcVotesSettings.mergeDefaults(dataRoot)
+        val settings = ArcVotesSettings.load(dataRoot)
         if (!settings.http.enabled) {
             checkNotNull(Velocity.logger).info("ProxyVotes callback ingress is disabled")
             return
