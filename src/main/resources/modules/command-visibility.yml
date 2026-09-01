@@ -1,0 +1,16 @@
+# Финальный сетевой фильтр command tree после объединения backend и proxy.
+enabled: true
+bypass-permission: "arc.command.hide.bypass"
+hide-namespaced-roots: true
+
+# Узкие корни плагинов, которые регистрируются без root-permission и поэтому
+# могут быть добавлены после backend PlayerCommandSendEvent.
+hidden-roots:
+  - "world"
+  - "worlds"
+  - "myworlds"
+  - "my_worlds"
+  - "mw"
+  - "mv"
+  - "litebans"
+  - "lbans"
