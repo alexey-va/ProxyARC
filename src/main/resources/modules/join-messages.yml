@@ -7,6 +7,10 @@ messages:
   join: "<gray>Игрок <green>%player_name% <gray>присоединился!"
   leave: "<gray>Игрок <red>%player_name% <gray>вышел!"
 
+# Event backends own their match chat and must not receive network join/leave noise.
+delivery:
+  minecraft-excluded-servers: [parkour]
+
 catalog:
   join:
     join-01:

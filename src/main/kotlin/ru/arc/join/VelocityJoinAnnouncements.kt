@@ -54,7 +54,12 @@ class VelocityJoinAnnouncementSink(
                 JoinAnnouncementDestination.MINECRAFT ->
                     deliver("Minecraft", announcement) {
                         val component = mm(config.minecraftMessage(announcement))
-                        proxyServer.allPlayers.forEach { player -> player.sendMessage(component) }
+                        proxyServer.allPlayers
+                            .filter { player ->
+                                val serverName = player.currentServer.map { it.serverInfo.name }.orElse(null)
+                                config.allowsMinecraftRecipient(serverName)
+                            }
+                            .forEach { player -> player.sendMessage(component) }
                     }
             }
         }

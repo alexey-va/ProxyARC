@@ -80,6 +80,18 @@ class JoinAnnouncementConfigTest : FreeSpec({
             "присоединился"
         messages.minecraftMessage(PublishedAnnouncement("Alex", JoinAnnouncementKind.LEAVE, null, false)) shouldContain
             "вышел"
+        messages.allowsMinecraftRecipient("spawn") shouldBe true
+        messages.allowsMinecraftRecipient("survival") shouldBe true
+        messages.allowsMinecraftRecipient("parkour") shouldBe false
+        messages.allowsMinecraftRecipient(null) shouldBe true
+    }
+
+    "minecraft recipient exclusions are configurable" {
+        val messages = JoinAnnouncementConfig(config("delivery:\n  minecraft-excluded-servers: [events, minigames]"))
+
+        messages.allowsMinecraftRecipient("events") shouldBe false
+        messages.allowsMinecraftRecipient("minigames") shouldBe false
+        messages.allowsMinecraftRecipient("spawn") shouldBe true
     }
 
     "legacy phrases migrate once into the separate join-messages module" {

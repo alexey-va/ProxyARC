@@ -8,6 +8,11 @@ import java.nio.file.Path
 class JoinAnnouncementConfig(
     private val config: Config,
 ) {
+    fun allowsMinecraftRecipient(serverName: String?): Boolean =
+        serverName == null || serverName.lowercase() !in config
+            .stringList("delivery.minecraft-excluded-servers", emptyList())
+            .map(String::lowercase)
+
     fun minecraftMessage(announcement: PublishedAnnouncement): String {
         val family = family(announcement.kind)
         val custom = announcement.customMessage?.takeIf(String::isNotBlank)
