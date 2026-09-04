@@ -1,7 +1,5 @@
 # Bug Survey Session Implementation Plan
 
-> **For agent:** REQUIRED SUB-SKILL: use superpowers executing-plans or subagent-driven-development to implement this plan task-by-task.
-
 **Goal:** Split bug info gathering into a dedicated survey agent with session store while the main router and chat agent keep running, with mutual awareness.
 
 **Architecture:** `BugSurveySessionStore` + second `Assistant` (`bug-survey`); router context hints; `BugIntentHandler` opens session and dispatches survey assistant; chat prompt layer warns about active survey; `completebugs urvey` tool closes session; heuristic routes continuations to `bug` when survey active.
