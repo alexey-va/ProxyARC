@@ -43,10 +43,14 @@ class JoinMessageCatalog(
     fun randomSelectedMessage(
         kind: JoinAnnouncementKind,
         selectedMessages: Set<String>,
+        customMessages: Set<String> = emptySet(),
     ): String? {
-        if (kind == JoinAnnouncementKind.FIRST_TIME || selectedMessages.isEmpty()) return null
+        if (kind == JoinAnnouncementKind.FIRST_TIME) return null
         val entries = if (kind == JoinAnnouncementKind.JOIN) join else leave
-        val allowed = entries.map(JoinMessageCatalogEntry::message).filter(selectedMessages::contains)
+        val allowed = (entries.map(JoinMessageCatalogEntry::message).filter(selectedMessages::contains) +
+            ru.arc.xserver.JoinMessages.validCustomMessages(customMessages)
+                .map(ru.arc.xserver.JoinMessages::customSelectionKey)
+                .filter(selectedMessages::contains)).distinct()
         if (allowed.isEmpty()) return null
         return allowed[ThreadLocalRandom.current().nextInt(allowed.size)]
     }

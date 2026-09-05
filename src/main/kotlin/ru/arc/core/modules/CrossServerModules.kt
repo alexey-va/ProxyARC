@@ -125,7 +125,13 @@ object JoinMessageCatalogModule : PluginModule {
                 JoinAnnouncementKind.JOIN -> messages?.joinMessages.orEmpty()
                 JoinAnnouncementKind.LEAVE -> messages?.leaveMessages.orEmpty()
             }
-        return catalog.randomSelectedMessage(kind, selected)
+        val custom =
+            when (kind) {
+                JoinAnnouncementKind.FIRST_TIME -> emptySet()
+                JoinAnnouncementKind.JOIN -> messages?.customJoinMessages.orEmpty()
+                JoinAnnouncementKind.LEAVE -> messages?.customLeaveMessages.orEmpty()
+            }
+        return catalog.randomSelectedMessage(kind, selected, custom)
     }
 
     @Synchronized
