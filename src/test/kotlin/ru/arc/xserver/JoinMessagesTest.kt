@@ -40,6 +40,19 @@ class JoinMessagesTest : FreeSpec({
         valid shouldContainExactly listOf("hello", "real", "item1", "item2", "item3", "item4", "item5", "item6", "item7", "item8")
     }
 
+    "full templates preserve markup and use a reset selection key" {
+        val template = "<gold>Добро пожаловать, <bold>%player_name%</bold>!"
+        JoinMessages.validCustomMessages(setOf(template)) shouldContainExactly listOf(template)
+        JoinMessages.customSelectionKey(template) shouldBe "<reset>$template"
+        JoinMessages.customSelectionKey("hello") shouldBe "%player_name% hello"
+    }
+
+    "full templates reject unsafe or unknown markup" {
+        JoinMessages.validCustomMessages(setOf("<click:run_command:'/op %player_name%'>x</click>")) shouldBe emptyList()
+        JoinMessages.validCustomMessages(setOf("<not-a-tag>%player_name%</not-a-tag>")) shouldBe emptyList()
+        JoinMessages.validCustomMessages(setOf("<red>%player_name% %player_name%</red>")) shouldBe emptyList()
+    }
+
     "typed selector ignores blank phrases and chooses only from the requested kind" {
         val messages = JoinMessages("Alex")
         messages.randomMessage(JoinAnnouncementKind.JOIN) shouldBe null

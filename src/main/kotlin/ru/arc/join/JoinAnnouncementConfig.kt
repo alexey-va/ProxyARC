@@ -18,7 +18,8 @@ class JoinAnnouncementConfig(
         val custom = announcement.customMessage?.takeIf(String::isNotBlank)
         val message =
             if (custom != null) {
-                prefix(family) + custom
+                if (custom.startsWith("<reset>")) custom
+                else prefix(family) + custom
             } else {
                 val configuredBody = configuredBody(family)
                 val body = configuredBody ?: family.defaultBody

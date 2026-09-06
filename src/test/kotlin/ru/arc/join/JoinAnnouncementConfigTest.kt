@@ -61,6 +61,14 @@ class JoinAnnouncementConfigTest : FreeSpec({
         ) shouldContain "<dark_green>● Alex открыл калитку"
     }
 
+    "full custom template bypasses the family prefix while legacy suffix keeps it" {
+        val messages = JoinAnnouncementConfig(config("messages:\n  join-prefix: '<dark_green>● '") )
+        messages.minecraftMessage(PublishedAnnouncement("Alex", JoinAnnouncementKind.JOIN, "<reset><gold>%player_name% вошёл", false)) shouldBe
+            "<reset><gold>Alex вошёл"
+        messages.minecraftMessage(PublishedAnnouncement("Alex", JoinAnnouncementKind.JOIN, "%player_name% вошёл", false)) shouldBe
+            "<dark_green>● Alex вошёл"
+    }
+
     "bundled join-messages module provides the three correctly routed defaults" {
         val directory = Files.createTempDirectory("proxyarc-bundled-join-messages-")
         Config.copyDefaultConfig(

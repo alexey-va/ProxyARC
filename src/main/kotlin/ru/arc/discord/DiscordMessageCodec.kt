@@ -121,7 +121,7 @@ internal class DiscordMessageCodec(
         private val LEGACY_COLOR = Regex("(?i)[§&][0-9A-FK-ORX]")
         private val MINI_MESSAGE_FORMATTING =
             Regex(
-                "(?i)</?(?:black|dark_blue|dark_green|dark_aqua|dark_red|dark_purple|gold|gray|dark_gray|blue|green|aqua|red|light_purple|yellow|white|bold|b|italic|i|underlined|u|strikethrough|st|obfuscated|reset|#[0-9a-f]{6}|gradient(?::[^>]*)?|rainbow(?::[^>]*)?)>",
+                "(?i)</?(?:black|dark_blue|dark_green|dark_aqua|dark_red|dark_purple|gold|gray|dark_gray|blue|green|aqua|red|light_purple|yellow|white|#[0-9a-f]{6}|reset|(?:bold|b|italic|em|i|underlined|u|strikethrough|st|obfuscated|obf)(?::(?:true|false))?)>|<!?(?:bold|b|italic|em|i|underlined|u|strikethrough|st|obfuscated|obf)>|</?(?:color|colour|c)(?::[^>]+)?>|</?gradient(?::[^>]*)?>|</?rainbow(?::[^>]*)?>|</?font(?::[^>]*)?>",
             )
         private val LINK_TOKEN =
             Regex("\\[([^]\\n]{1,80})]\\((https?://[^\\s)]+)\\)|(https?://[^\\s<>]+)")

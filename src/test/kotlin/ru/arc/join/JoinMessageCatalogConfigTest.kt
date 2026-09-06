@@ -10,6 +10,17 @@ import ru.arc.config.ConfigManager
 import java.nio.file.Files
 
 class JoinMessageCatalogConfigTest : FreeSpec({
+    "catalog selects a valid full custom template by its reset wire key" {
+        val template = "<gold><italic>%player_name%</italic> вошёл"
+        val catalog = JoinMessageCatalog(join = listOf(JoinMessageCatalogEntry(message = "<green>default")), leave = listOf(JoinMessageCatalogEntry(message = "<red>bye")))
+
+        catalog.randomSelectedMessage(
+            JoinAnnouncementKind.JOIN,
+            selectedMessages = setOf("<reset>$template"),
+            customMessages = setOf(template),
+        ) shouldBe "<reset>$template"
+    }
+
     "bundled catalog is complete, stable, and gives every phrase its own icon" {
         ConfigManager.clear()
         val directory = Files.createTempDirectory("proxyarc-join-catalog-")

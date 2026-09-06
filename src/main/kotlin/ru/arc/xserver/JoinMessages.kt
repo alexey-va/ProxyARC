@@ -58,25 +58,21 @@ class JoinMessages(
 
     companion object {
         const val CUSTOM_MESSAGE_PREFIX = "%player_name% "
+        const val CUSTOM_TEMPLATE_PREFIX = CustomJoinMessageTemplate.FULL_PREFIX
         const val MAX_CUSTOM_MESSAGES_PER_KIND = 10
         const val MAX_CUSTOM_MESSAGE_LENGTH = 120
+        const val MAX_CUSTOM_TEMPLATE_LENGTH = CustomJoinMessageTemplate.MAX_LENGTH
+        const val MAX_CUSTOM_VISIBLE_LENGTH = CustomJoinMessageTemplate.MAX_VISIBLE_LENGTH
 
         fun validCustomMessages(messages: Set<String>): List<String> =
             messages.asSequence()
-                .filter(::isValidCustomMessage)
+                .filter(CustomJoinMessageTemplate::valid)
                 .map(String::trim)
                 .distinct()
                 .take(MAX_CUSTOM_MESSAGES_PER_KIND)
                 .toList()
 
-        fun customSelectionKey(suffix: String): String = CUSTOM_MESSAGE_PREFIX + suffix.trim()
-
-        private fun isValidCustomMessage(value: String): Boolean =
-            value.none { char ->
-                    Character.isISOControl(char) ||
-                        Character.getType(char) == Character.FORMAT.toInt() ||
-                        char in setOf('<', '>', '&', '§', '%', '\\', '#')
-                } && value.trim().isNotBlank() && value.trim().length <= MAX_CUSTOM_MESSAGE_LENGTH
+        fun customSelectionKey(message: String): String = CustomJoinMessageTemplate.selectionKey(message.trim())
     }
 
     private fun randomFrom(messages: Set<String>): String? {

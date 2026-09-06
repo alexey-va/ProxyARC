@@ -41,7 +41,7 @@ class DiscordMessageCodecTest : FreeSpec({
 
     "strips Minecraft formatting while preserving web links" {
         DiscordMessageCodec.sanitizeMinecraftFormatting(
-            "<red>Сайт</red>: https://rus-crafting.ru §aготов",
+            "<red>Сайт</red>: <font:arc:icon><color:#ff00aa>https://rus-crafting.ru</color></font> <!italic><obf:false>§aготов",
         ) shouldBe "Сайт: https://rus-crafting.ru готов"
     }
 
