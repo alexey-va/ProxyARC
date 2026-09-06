@@ -58,10 +58,10 @@ class VerifyCommandTest : FreeSpec({
             "   Привязка Discord-аккаунта\n" +
             "\n" +
             "  Код для Discord: ABCD-EFGH\n" +
-            "  Нажмите строку — команда /verify скопируется.\n" +
+            "  Нажмите строку — код скопируется.\n" +
             "\n" +
             "  Открыть Discord RusCrafting\n" +
-            "  В Discord вставьте команду и выполните её.\n" +
+            "  В Discord выберите /verify и вставьте код в поле code.\n" +
             "\n" +
             "  Код действует 10 минут.\n"
         rendered shouldNotContain "\\n"
@@ -77,7 +77,7 @@ class VerifyCommandTest : FreeSpec({
                     it.clickEvent()?.action() == ClickEvent.Action.COPY_TO_CLIPBOARD
             }
         codeClickOwner.clickEvent()?.action() shouldBe ClickEvent.Action.COPY_TO_CLIPBOARD
-        codeClickOwner.clickEvent()?.value() shouldBe "/verify ABCD-EFGH"
+        codeClickOwner.clickEvent()?.value() shouldBe "ABCD-EFGH"
 
         val codeRow =
             message.descendants().first {
@@ -85,7 +85,7 @@ class VerifyCommandTest : FreeSpec({
                     it.clickEvent()?.action() == ClickEvent.Action.COPY_TO_CLIPBOARD
             }
         codeRow.clickEvent()?.action() shouldBe ClickEvent.Action.COPY_TO_CLIPBOARD
-        codeRow.clickEvent()?.value() shouldBe "/verify ABCD-EFGH"
+        codeRow.clickEvent()?.value() shouldBe "ABCD-EFGH"
 
         val invite = message.descendants().filterIsInstance<TextComponent>().single { it.content() == "Открыть Discord RusCrafting" }
         invite.hasDecoration(TextDecoration.BOLD) shouldBe true
@@ -106,10 +106,10 @@ class VerifyCommandTest : FreeSpec({
             "   Перенос привязки Discord\n" +
             "\n" +
             "  Код для Discord: ZXCV5678\n" +
-            "  Нажмите строку — команда /verify скопируется.\n" +
+            "  Нажмите строку — код скопируется.\n" +
             "\n" +
             "  Открыть Discord RusCrafting\n" +
-            "  В Discord вставьте команду и выполните её.\n" +
+            "  В Discord выберите /verify и вставьте код в поле code.\n" +
             "\n" +
             "  Код действует 1 минуту.\n"
     }

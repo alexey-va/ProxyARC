@@ -72,8 +72,7 @@ internal class DiscordVerificationMessages(
         }
         require(DiscordVerificationConfig.validInviteUrl(inviteUrl)) { "invalid Discord invite URL" }
 
-        val command = "/verify $code"
-        val copyEvent = ClickEvent.copyToClipboard(command)
+        val copyEvent = ClickEvent.copyToClipboard(code)
         val codeComponent =
             interactive(
                 parse(
