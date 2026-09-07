@@ -1,0 +1,11 @@
+config-version = "2.7"
+bind = "127.0.0.1:25577"
+motd = "ProxyARC disposable E2E"
+show-max-players = 4
+online-mode = false
+force-key-authentication = false
+player-info-forwarding-mode = "NONE"
+
+[servers]
+lobby = "127.0.0.1:25578"
+try = ["lobby"]

@@ -1,0 +1,23 @@
+server-id: velocity-e2e
+http:
+  enabled: true
+  bind-address: 127.0.0.1
+  port: 25876
+mysql:
+  enabled: true
+  host: 127.0.0.1
+  port: 33316
+  database: proxyarc_e2e
+  username: proxyarc_e2e
+  password-env: PROXYARC_E2E_MYSQL_PASSWORD
+  ssl-mode: DISABLED
+reward:
+  enabled: true
+monitorings:
+  minecraft-rating:
+    enabled: true
+    secret-env: PROXYARC_E2E_CALLBACK_SECRET
+  hotmc:
+    enabled: true
+    secret-env: PROXYARC_E2E_CALLBACK_SECRET
+    enforce-ip-allowlist: false
