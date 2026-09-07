@@ -5,7 +5,11 @@ show-max-players = 4
 online-mode = false
 force-key-authentication = false
 player-info-forwarding-mode = "NONE"
+forwarding-secret-file = "forwarding.secret"
 
 [servers]
 lobby = "127.0.0.1:25578"
 try = ["lobby"]
+
+[forced-hosts]
+"e2e.local" = ["lobby"]

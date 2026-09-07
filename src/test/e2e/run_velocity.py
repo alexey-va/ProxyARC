@@ -71,7 +71,7 @@ def running_velocity(directory, environment, phase):
         try:
             deadline = time.monotonic() + 120
             while time.monotonic() < deadline:
-                assert process.poll() is None, f"Velocity exited: {log_path}"
+                assert process.poll() is None, f"Velocity exited: {log_path}\n{log_path.read_text()[-12000:]}"
                 try:
                     if request("/callbacks/minecraft-rating") == (405, "method_not_allowed"):
                         break
@@ -79,7 +79,7 @@ def running_velocity(directory, environment, phase):
                     pass
                 time.sleep(0.2)
             else:
-                raise AssertionError(f"ProxyVotes did not become ready: {log_path}")
+                raise AssertionError(f"ProxyVotes did not become ready: {log_path}\n{log_path.read_text()[-12000:]}")
             yield
         finally:
             if process.poll() is None:

@@ -92,4 +92,10 @@ jobs:
           path: |
             build/velocity-e2e-*/*.log
             build/velocity-e2e-*/logs/
-            build/libs/ProxyARC.jar
+      - name: Retain tested ProxyARC plugin
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: proxyarc-velocity-tested-jar
+          retention-days: 7
+          path: build/libs/ProxyARC.jar
