@@ -13,6 +13,13 @@ mysql:
   ssl-mode: DISABLED
 reward:
   enabled: true
+  standard:
+    enabled: true
+    amount: 1000.00
+  premium:
+    enabled: true
+    amount: 3.00
+    currency-id: tokens
 monitorings:
   minecraft-rating:
     enabled: true
