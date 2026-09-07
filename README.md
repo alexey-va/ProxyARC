@@ -9,16 +9,19 @@ owned by the network filter plugin, outside ProxyARC.
 Requirements: Java 25 and the checked-in Gradle 9.2.1 wrapper.
 
 ```bash
-./gradlew clean test build
+./gradlew copyShadowJar
 ```
 
 The default build resolves immutable `arc-core 2.2.0` artifacts anonymously
 from the public RusCrafting Maven repository. A neighboring core checkout is
-not required. For coordinated local development, opt in explicitly:
+not required.
 
-```bash
-./gradlew test build -ParcCoreDir=/absolute/path/to/arc-core
-```
+For a focused change, run the relevant unit test explicitly, for example
+`./gradlew test --tests '*ChannelSyncServiceTest' copyShadowJar`. The copied
+`ztarget/ProxyARC.jar` is ready for `./scripts/mc proxyarc --no-build`. To build
+and deploy in one command, run `./scripts/mc proxyarc` from the ops repository. Full
+test/check is opt-in with `./gradlew build`. For coordinated local core work,
+use `./gradlew copyShadowJar -ParcCoreDir=/absolute/path/to/arc-core`.
 
 The production artifact is `ztarget/ProxyARC.jar`.
 

@@ -15,9 +15,12 @@
 
 ```bash
 export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-25.jdk/Contents/Home
-./gradlew build          # → ztarget/ProxyARC.jar
-cd ~/RusCrafting/ruscrafting-ops && ./scripts/mc proxyarc --fast
+./gradlew copyShadowJar  # incremental artifact in ztarget/ProxyARC.jar
+cd ~/RusCrafting/ruscrafting-ops && ./scripts/mc proxyarc --no-build
 ```
+
+Run a focused unit test with `./gradlew test --tests '<fully-qualified-test-pattern>' copyShadowJar`
+when the change needs it. The full test/check lane is opt-in: `./gradlew build`.
 
 ## Runtime configs
 
