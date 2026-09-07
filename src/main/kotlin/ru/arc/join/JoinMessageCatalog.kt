@@ -25,6 +25,8 @@ class JoinMessageCatalog(
     @JvmField var schemaVersion: Int = SCHEMA_VERSION,
     @JvmField var revision: String = "",
     @JvmField var updatedAt: Long = 0,
+    @JvmField var joinPrefix: String? = null,
+    @JvmField var leavePrefix: String? = null,
     @JvmField var join: List<JoinMessageCatalogEntry> = emptyList(),
     @JvmField var leave: List<JoinMessageCatalogEntry> = emptyList(),
 ) : Entity,
@@ -36,6 +38,8 @@ class JoinMessageCatalog(
         schemaVersion = other.schemaVersion
         revision = other.revision
         updatedAt = other.updatedAt
+        joinPrefix = other.joinPrefix
+        leavePrefix = other.leavePrefix
         join = other.join.map(JoinMessageCatalogEntry::copy)
         leave = other.leave.map(JoinMessageCatalogEntry::copy)
     }
@@ -67,6 +71,8 @@ class JoinMessageCatalogConfig(
     fun snapshot(updatedAt: Long = System.currentTimeMillis()): JoinMessageCatalog {
         val join = entries("catalog.join")
         val leave = entries("catalog.leave")
+        val joinPrefix = config.stringOrNull("messages.join-prefix") ?: DEFAULT_JOIN_PREFIX
+        val leavePrefix = config.stringOrNull("messages.leave-prefix") ?: DEFAULT_LEAVE_PREFIX
         require(join.isNotEmpty()) { "Join message catalog must contain at least one join phrase" }
         require(leave.isNotEmpty()) { "Join message catalog must contain at least one leave phrase" }
         require(join.size <= MAX_ENTRIES_PER_KIND && leave.size <= MAX_ENTRIES_PER_KIND) {
@@ -76,8 +82,10 @@ class JoinMessageCatalogConfig(
         require(duplicateIds.isEmpty()) { "Join message catalog contains duplicate ids: ${duplicateIds.sorted()}" }
 
         return JoinMessageCatalog(
-            revision = revision(join, leave),
+            revision = revision(join, leave, joinPrefix, leavePrefix),
             updatedAt = updatedAt,
+            joinPrefix = joinPrefix,
+            leavePrefix = leavePrefix,
             join = join,
             leave = leave,
         )
@@ -123,9 +131,13 @@ class JoinMessageCatalogConfig(
     private fun revision(
         join: List<JoinMessageCatalogEntry>,
         leave: List<JoinMessageCatalogEntry>,
+        joinPrefix: String,
+        leavePrefix: String,
     ): String {
         val canonical = buildString {
             append(JoinMessageCatalog.SCHEMA_VERSION).append('\n')
+            append("join-prefix").append('\u0000').append(joinPrefix).append('\n')
+            append("leave-prefix").append('\u0000').append(leavePrefix).append('\n')
             appendEntries("join", join)
             appendEntries("leave", leave)
         }
@@ -152,6 +164,8 @@ class JoinMessageCatalogConfig(
 
     companion object {
         private const val RESOURCE = "join-messages.yml"
+        private const val DEFAULT_JOIN_PREFIX = "<dark_green>● "
+        private const val DEFAULT_LEAVE_PREFIX = "<dark_red>● "
         private const val MAX_ENTRIES_PER_KIND = 100
         private const val MAX_MESSAGE_LENGTH = 512
         private val SAFE_ID = Regex("[a-z0-9][a-z0-9_-]{0,63}")

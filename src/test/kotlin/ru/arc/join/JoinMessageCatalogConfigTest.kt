@@ -4,6 +4,7 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldStartWith
 import ru.arc.config.ConfigManager
@@ -34,11 +35,53 @@ class JoinMessageCatalogConfigTest : FreeSpec({
         first.leave.map(JoinMessageCatalogEntry::id).distinct() shouldHaveSize first.leave.size
         first.join.map(JoinMessageCatalogEntry::material).distinct() shouldHaveSize first.join.size
         first.leave.map(JoinMessageCatalogEntry::material).distinct() shouldHaveSize first.leave.size
+        first.joinPrefix shouldBe "<dark_green>● "
+        first.leavePrefix shouldBe "<dark_red>● "
         first.join.forEach { it.displayName.shouldStartWith("<italic:false>") }
         first.leave.forEach { it.displayName.shouldStartWith("<italic:false>") }
         first.revision shouldBe second.revision
         first.updatedAt shouldBe 100
         second.updatedAt shouldBe 200
+    }
+
+    "prefix-only changes republish the catalog" {
+        val first = JoinMessageCatalogConfig(testCatalogConfig(
+            """
+            messages:
+              join-prefix: "<dark_green>● "
+              leave-prefix: "<dark_red>● "
+            catalog:
+              join:
+                join-phrase:
+                  message: "join"
+                  material: PAPER
+              leave:
+                leave-phrase:
+                  message: "leave"
+                  material: BARRIER
+            """.trimIndent(),
+        )).snapshot(updatedAt = 1)
+        val second = JoinMessageCatalogConfig(testCatalogConfig(
+            """
+            messages:
+              join-prefix: "<aqua>→ "
+              leave-prefix: "<dark_red>● "
+            catalog:
+              join:
+                join-phrase:
+                  message: "join"
+                  material: PAPER
+              leave:
+                leave-phrase:
+                  message: "leave"
+                  material: BARRIER
+            """.trimIndent(),
+        )).snapshot(updatedAt = 2)
+
+        first.join.map(JoinMessageCatalogEntry::message) shouldBe second.join.map(JoinMessageCatalogEntry::message)
+        first.joinPrefix shouldBe "<dark_green>● "
+        second.joinPrefix shouldBe "<aqua>→ "
+        first.revision shouldNotBe second.revision
     }
 
     "invalid catalog is rejected before it can replace the Redis snapshot" {
