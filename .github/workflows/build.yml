@@ -19,11 +19,6 @@ on:
       - 'src/test/e2e/**'
       - 'src/test/e2e-*/**'
   workflow_dispatch:
-    inputs:
-      heavy_tests:
-        description: Run expensive integration and Paper tests
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -47,7 +42,6 @@ jobs:
       - run: ./gradlew --build-cache test build
 
   mysql-integration:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.heavy_tests }}
     name: MySQL vote integration
     runs-on: ubuntu-latest
     timeout-minutes: 25
