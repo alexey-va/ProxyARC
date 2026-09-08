@@ -6,6 +6,7 @@ import io.kotest.matchers.shouldBe
 import ru.arc.redis.ChannelListener
 import ru.arc.redis.InMemoryRedis
 import ru.arc.redis.RedisOperations
+import ru.arc.social.SocialIdentityStatusWire
 import ru.arc.velocity.Velocity
 
 class NetworkRegistryLifecycleTest : FreeSpec({
@@ -24,11 +25,13 @@ class NetworkRegistryLifecycleTest : FreeSpec({
 
         redis.listenerCount("arc.auction_items") shouldBe 1
         redis.listenerCount("arc.auction_items_all") shouldBe 1
+        redis.listenerCount(SocialIdentityStatusWire.CHANNEL) shouldBe 1
 
         registry.close()
 
         redis.listenerCount("arc.auction_items") shouldBe 0
         redis.listenerCount("arc.auction_items_all") shouldBe 0
+        redis.listenerCount(SocialIdentityStatusWire.CHANNEL) shouldBe 0
     }
 
     "partial registration failure should roll back installed listener" {

@@ -12,6 +12,7 @@ import ru.arc.ai.tools.ToolRpcClient
 import ru.arc.auction.AuctionMessager
 import ru.arc.redis.RedisOperations
 import ru.arc.redis.resourcepack.ResourcePackPublication
+import ru.arc.social.SocialIdentityStatusBridge
 import ru.arc.velocity.Velocity
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -25,6 +26,7 @@ class NetworkRegistry(
     private var npcChatRpcServer: NpcChatRpcServer? = null
     private var npcChatExecutor: ExecutorService? = null
     private var resourcePackHashRefreshListener: ResourcePackHashRefreshListener? = null
+    private var socialIdentityStatusBridge: SocialIdentityStatusBridge? = null
 
     @Synchronized
     fun init() {
@@ -60,6 +62,11 @@ class NetworkRegistry(
                 )
             resourcePackHashRefreshListener = resourcePackListener
             redis.registerChannelUnique(ResourcePackPublication.CHANNEL, resourcePackListener)
+
+            SocialIdentityStatusBridge(redis).also { bridge ->
+                socialIdentityStatusBridge = bridge
+                bridge.start()
+            }
 
             val dataPath = Velocity.dataFolder ?: return
             // Keep the live-only API key in llm.yml while the tracked network route
@@ -123,6 +130,9 @@ class NetworkRegistry(
             redis.unregisterChannel(ResourcePackPublication.CHANNEL, listener)
         }
         resourcePackHashRefreshListener = null
+
+        socialIdentityStatusBridge?.close()
+        socialIdentityStatusBridge = null
 
         toolRpcClient?.let { rpc ->
             rpc.close()
