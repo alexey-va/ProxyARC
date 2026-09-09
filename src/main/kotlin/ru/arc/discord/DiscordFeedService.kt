@@ -9,6 +9,7 @@ import ru.arc.config.Config
 import ru.arc.velocity.Velocity
 import java.awt.Color
 import java.time.OffsetDateTime
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
@@ -31,15 +32,74 @@ internal class DiscordFeedService(
     private val retryGeneration = AtomicInteger(0)
     @Volatile
     private var retryFuture: ScheduledFuture<*>? = null
+    private val auctionPublishGate = DiscordStatusPublishGate<List<AuctionItemDto>>()
+    @Volatile
+    private var auctionMessage: Pair<String, String>? = null
 
     fun updateAuctionItems(items: List<AuctionItemDto>) {
-        val channel = session.snapshot()?.channels?.auction ?: return
+        if (session.snapshot()?.channels?.auction == null) return
+        val selected = auctionPublishGate.offer(items.toList()) ?: return
+        publishAuctionItems(selected)
+    }
+
+    private fun publishAuctionItems(items: List<AuctionItemDto>) {
+        val snapshot = session.snapshot()
+        val channel = snapshot?.channels?.auction
+        if (channel == null) {
+            auctionPublishGate.abandon()
+            return
+        }
+        runCatching {
+            val embed = buildAuctionEmbed(items)
+            val cached = auctionMessage?.takeIf { it.first == channel.id }?.second
+            val messageId = if (cached != null) CompletableFuture.completedFuture(cached)
+            else channel.history.retrievePast(100).submit().thenApply { messages ->
+                messages.filter { message ->
+                    message.author.id == snapshot.jda.selfUser.id &&
+                        message.embeds.any { auctionTitleMatches(it.title) }
+                }.minByOrNull { it.idLong }?.id
+            }
+            messageId.thenCompose { id ->
+                if (id == null) channel.sendMessageEmbeds(embed).submit()
+                else channel.editMessageEmbedsById(id, embed).submit()
+            }.whenComplete { message, error ->
+                if (error != null) auctionPublishFailed(error)
+                else {
+                    auctionMessage = channel.id to message.id
+                    val pending = auctionPublishGate.complete()
+                    if (pending != null) {
+                        runCatching { executor.execute { publishAuctionItems(pending) } }
+                            .onFailure(::auctionPublishFailed)
+                    }
+                }
+            }
+        }.onFailure(::auctionPublishFailed)
+    }
+
+    private fun auctionPublishFailed(error: Throwable) {
+        // Reconcile history on the next snapshot: a timed-out send may have succeeded.
+        auctionMessage = null
+        auctionPublishGate.abandon()
+        logAuctionFailure(error)
+    }
+
+    private fun auctionTitleMatches(title: String?): Boolean {
+        if (title == null) return false
+        val template = config.string("auction.title", "Предметы на аукционе")
+        val pattern = template.split("%amount%").joinToString("\\d+") { Regex.escape(it) }
+        return Regex(pattern).matches(title)
+    }
+
+    internal fun buildAuctionEmbed(items: List<AuctionItemDto>): MessageEmbed {
         val builder =
             EmbedBuilder()
                 .setTitle(
                     config.string("auction.title", "Предметы на аукционе")
                         .replace("%amount%", items.size.toString()),
                 ).setColor(Color.GREEN)
+        if (items.isEmpty()) {
+            builder.setDescription(config.string("auction.empty", "Сейчас на аукционе нет активных лотов."))
+        }
         var rowItems = 0
         items.forEachIndexed { index, item ->
             builder.addField(
@@ -53,16 +113,7 @@ internal class DiscordFeedService(
                 rowItems = 0
             }
         }
-        val embed = builder.setTimestamp(OffsetDateTime.now()).build()
-        val latestId = channel.latestMessageId
-        if (latestId == "0") {
-            channel.sendMessageEmbeds(embed).queue({}, ::logAuctionFailure)
-        } else {
-            channel.editMessageEmbedsById(latestId, embed).queue(
-                {},
-                { channel.sendMessageEmbeds(embed).queue({}, ::logAuctionFailure) },
-            )
-        }
+        return builder.setTimestamp(OffsetDateTime.now()).build()
     }
 
     fun refreshPlayerListFromProxy() {
@@ -278,6 +329,7 @@ internal class DiscordFeedService(
             ?: session.snapshot()?.channels?.playerList
 
     override fun close() {
+        auctionPublishGate.abandon()
         statusPublishGate.abandon()
         cancelPendingRetry()
     }

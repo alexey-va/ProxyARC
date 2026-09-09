@@ -26,6 +26,7 @@ player-list:
 
 auction:
   title: "Предметы на аукционе"
+  empty: "Сейчас на аукционе нет активных лотов."
 
 discord:
   join:
