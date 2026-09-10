@@ -42,6 +42,7 @@ import ru.arc.core.modules.PlayerActivityModule
 import ru.arc.core.modules.ProxyTasksModule
 import ru.arc.core.modules.RedisModule
 import ru.arc.core.modules.RtpModule
+import ru.arc.core.modules.DungeonPartyModule
 import ru.arc.discord.DiscordBot
 import ru.arc.discord.DiscordModule
 import ru.arc.discord.VerifyCommand
@@ -125,6 +126,7 @@ class Velocity @Inject constructor(
             // Persistence & cross-server (50-69)
             FirstJoinModule,
             RtpModule,
+            DungeonPartyModule,
             PlayerActivityModule,
             PlayerListModule,
             JoinMessageCatalogModule,
