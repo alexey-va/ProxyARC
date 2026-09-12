@@ -33,6 +33,7 @@ class ProxyOpsHttpServer(
     private val configProvider: () -> ProxyOpsHttpConfig = ProxyOpsHttpConfig::current,
     private val discordProvider: () -> DiscordOpsGateway? = { Velocity.discordBot },
     private val telegramProvider: () -> TelegramOpsGateway? = { Velocity.telegramBot },
+    private val onlineProvider: () -> ProxyOnlineSnapshot = { ProxyOnlineSnapshot.capture(Velocity.proxyServer) },
 ) {
     private val log = LoggerFactory.getLogger(ProxyOpsHttpServer::class.java)
     private val mapper = ObjectMapper()
@@ -106,6 +107,11 @@ class ProxyOpsHttpServer(
                 respond(exchange, 200, ProxyOpsJson.ok("routes" to routes(cfg)))
             path == "health" && method == "GET" ->
                 respond(exchange, 200, healthJson())
+            path == "online" && method == "GET" -> {
+                exchange.responseHeaders.set("Cache-Control", "no-store")
+                val snapshot = onlineProvider()
+                respond(exchange, if (snapshot.available) 200 else 503, snapshot.json())
+            }
             path == "assistant/status" && method == "GET" ->
                 respond(exchange, 200, statusJson())
             path == "assistant/simulate" && method == "POST" ->
@@ -1062,6 +1068,7 @@ class ProxyOpsHttpServer(
         buildList {
             add("GET /ops/")
             add("GET /ops/health")
+            add("GET /ops/online")
             add("GET /ops/assistant/status")
             if (cfg.simulateEnabled) add("POST /ops/assistant/simulate")
             if (cfg.simulateEnabled) add("POST /ops/assistant/preview")
