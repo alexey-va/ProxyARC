@@ -30,6 +30,6 @@ See [`~/RusCrafting/ruscrafting-ops/velocity/AGENTS.md`](https://github.com/alex
 
 ## Dependencies
 
-The public `ru.ruscrafting.arc:*:2.0.0` release is the default dependency path.
+The public `ru.ruscrafting.arc:*:2.7.9` release is the default dependency path.
 Use `-ParcCoreDir=/absolute/path/to/arc-core` only when a task intentionally
 tests coordinated local core changes through explicit composite substitution.
