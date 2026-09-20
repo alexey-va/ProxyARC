@@ -12,13 +12,19 @@ internal data class DiscordProxySettings(
     val host: String,
     val port: Int,
 ) {
-    fun applyTo(builder: JDABuilder) {
-        if (!enabled) return
+    fun applyTo(builder: JDABuilder, health: DiscordTransportHealth? = null) {
+        if (!enabled && health == null) return
+
+        val http = OkHttpClient.Builder()
+        health?.let { http.eventListener(it.httpListener) }
+        if (!enabled) {
+            builder.setHttpClientBuilder(http)
+            return
+        }
 
         val address = InetSocketAddress(host, port)
         builder.setHttpClientBuilder(
-            OkHttpClient.Builder()
-                .proxy(Proxy(Proxy.Type.HTTP, address)),
+            http.proxy(Proxy(Proxy.Type.HTTP, address)),
         )
 
         val webSocketFactory = WebSocketFactory()

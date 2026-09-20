@@ -11,11 +11,16 @@ object ProxyOpsHttpModule : PluginModule {
 
     private var server: ProxyOpsHttpServer? = null
     private var healthTask: ScheduledTask? = null
+    private var dependencyTask: ScheduledTask? = null
 
     override fun init() {
         ProxyOpsHttpConfig.reload()
         server = ProxyOpsHttpServer().also { it.start() }
         healthTask?.cancel()
+        dependencyTask?.cancel()
+        dependencyTask = Tasks.scheduler.runTimerAsync(20L, 600L) {
+            Velocity.discordBot?.sampleTransportHealth()
+        }
         healthTask =
             Tasks.scheduler.runTimerAsync(HEALTH_REPORT_TICKS, HEALTH_REPORT_TICKS) {
                 Velocity.requireLogger().info(ProxyRuntimeHealth.line())
@@ -25,6 +30,8 @@ object ProxyOpsHttpModule : PluginModule {
     override fun shutdown() {
         healthTask?.cancel()
         healthTask = null
+        dependencyTask?.cancel()
+        dependencyTask = null
         server?.stop()
         server = null
     }

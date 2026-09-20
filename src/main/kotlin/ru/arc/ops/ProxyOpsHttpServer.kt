@@ -1897,7 +1897,9 @@ internal object ProxyRuntimeHealth : RuntimeHealthProvider {
 
     private fun runtimeContribution(): RuntimeHealthContribution {
         val modules = moduleRuntimeHealth(ModuleRegistry.getRuntimeStatuses())
-        return modules.copy(
+        val dependencies = ProxyRedisHealthBinding.dependencies(Velocity.redisManager) +
+            (Velocity.discordBot?.healthDependencies() ?: mapOf("discord_initialized" to false))
+        return withDependencyHealth(modules, dependencies).copy(
             schemas =
                 modules.schemas +
                     mapOf(
@@ -1905,7 +1907,16 @@ internal object ProxyRuntimeHealth : RuntimeHealthProvider {
                         "discord_integration" to DiscordIntegrationStore.CURRENT_SCHEMA_VERSION,
                         "telegram_identity" to TelegramIdentityStore.CURRENT_SCHEMA_VERSION,
                     ),
-            dependencies = modules.dependencies + ("redis" to (Velocity.redisManager?.isConnected() == true)),
         )
     }
 }
+
+internal fun withDependencyHealth(
+    modules: RuntimeHealthContribution,
+    dependencies: Map<String, Boolean>,
+): RuntimeHealthContribution = modules.copy(
+    state = if (modules.state == ru.arc.observability.RuntimeHealthState.UP && dependencies.values.any { !it }) {
+        ru.arc.observability.RuntimeHealthState.DEGRADED
+    } else modules.state,
+    dependencies = modules.dependencies + dependencies,
+)

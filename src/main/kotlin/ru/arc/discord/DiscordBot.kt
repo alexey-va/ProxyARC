@@ -34,6 +34,8 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
     private val joinConfig: Config get() = ProxyConfigs.module("join_config.yml")
     private val executor: ScheduledExecutorService = Executors.newScheduledThreadPool(4)
     private val session = DiscordSession()
+    private val healthEnabled = config.bool("enabled", false)
+    private val healthProbeInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
     private val verificationTelemetry = DiscordVerificationTelemetry()
     private val verificationConfig =
         runCatching { DiscordVerificationConfig.load().also(DiscordVerificationConfig::validate) }
@@ -250,6 +252,32 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
     fun scheduler(): ScheduledExecutorService = executor
 
     override fun isReady(): Boolean = connection.isEnabled() && session.isReady()
+
+    internal fun healthDependencies(): Map<String, Boolean> = session.health.dependencies(
+        healthEnabled,
+        session.jda()?.status == net.dv8tion.jda.api.JDA.Status.CONNECTED,
+    )
+
+    /** Asynchronous read-only REST probe; never posts a message or blocks the health endpoint. */
+    internal fun sampleTransportHealth() {
+        val jda = session.jda() ?: return
+        if (!healthEnabled || !healthProbeInFlight.compareAndSet(false, true)) return
+        try {
+            jda.restPing.timeout(10, java.util.concurrent.TimeUnit.SECONDS).queue(
+                {
+                    // HttpRequestEvent owns successful evidence; a delayed callback must not heal a newer failure.
+                    healthProbeInFlight.set(false)
+                },
+                {
+                    if (session.jda() === jda) session.health.record(write = false, success = false)
+                    healthProbeInFlight.set(false)
+                },
+            )
+        } catch (_: RuntimeException) {
+            session.health.record(write = false, success = false)
+            healthProbeInFlight.set(false)
+        }
+    }
 
     fun sendChatMessage(
         message: String,

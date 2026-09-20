@@ -35,7 +35,8 @@ internal class DiscordConnectionService(
 
         val created =
             JDABuilder.createDefault(token)
-                .also { DiscordProxySettings.from(config).applyTo(it) }
+                .addEventListeners(session.health)
+                .also { DiscordProxySettings.from(config).applyTo(it, session.health) }
                 .disableCache(CacheFlag.VOICE_STATE, CacheFlag.MEMBER_OVERRIDES)
                 .enableIntents(GatewayIntent.MESSAGE_CONTENT)
                 .build()

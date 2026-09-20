@@ -19,6 +19,7 @@ internal data class DiscordSessionSnapshot(
 )
 
 internal class DiscordSession {
+    val health = DiscordTransportHealth()
     @Volatile
     private var snapshot: DiscordSessionSnapshot? = null
 

@@ -14,6 +14,7 @@ import ru.arc.metrics.ProxyProductConfig
 import ru.arc.metrics.ProxyProductTelemetry
 import ru.arc.metrics.ProxyProductTelemetryListener
 import ru.arc.velocity.Velocity
+import ru.arc.ops.ProxyRedisHealthBinding
 import kotlin.time.Duration.Companion.seconds
 
 /** Velocity lifecycle adapter around the shared cached Prometheus runtime. */
@@ -31,7 +32,10 @@ object MetricsModule : PluginModule {
     override fun init() {
         shutdown()
         val cfg = MetricsConfig(ProxyConfigs.module("metrics.yml"))
-        if (!cfg.enabled) return
+        if (!cfg.enabled) {
+            Velocity.redisManager?.let { ProxyRedisHealthBinding.install(it, null) }
+            return
+        }
 
         val proxy = Velocity.requireProxyServer()
         val plugin = Velocity.requirePlugin()
@@ -49,6 +53,7 @@ object MetricsModule : PluginModule {
             )
         val velocity = VelocityMetricsCollector(proxy, plugin, metrics.registry)
         val redisBinder = Velocity.redisManager?.let { RedisMetricsBinder(it, metrics.registry) }
+        Velocity.redisManager?.let { ProxyRedisHealthBinding.install(it, redisBinder) }
         val productConfig = ProxyProductConfig.from(ProxyConfigs.module("metrics.yml"))
         val product =
             if (productConfig.enabled) {
@@ -131,6 +136,8 @@ object MetricsModule : PluginModule {
         productTelemetry = null
         redisMetrics?.close()
         redisMetrics = null
+        Velocity.redisManager?.let { ProxyRedisHealthBinding.install(it, null) }
+            ?: ProxyRedisHealthBinding.clear()
         runtime?.close()
         runtime = null
     }
