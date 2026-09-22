@@ -35,7 +35,10 @@ object PlayerMessaging {
 
         val config = ProxyConfigs.module("assistant.yml")
         val formatted = AssistantChatFormat.privateMessage(config, text)
-        player.sendMessage(Utils.legacy(formatted))
+        if (!Velocity.sendMessageTo(player, Utils.legacy(formatted))) {
+            log.debug("PM suppressed for isolated player {}", name)
+            return mapOf("status" to "blocked", "player" to name)
+        }
         log.debug("PM sent to {}: {}", name, text.take(80))
         return mapOf("status" to "sent", "player" to name)
     }
@@ -53,8 +56,7 @@ object PlayerMessaging {
         val config = ProxyConfigs.module("assistant.yml")
         val formatted = AssistantChatFormat.inGameMessage(config, text)
         val component = Utils.legacy(formatted)
-        val players = proxy.allPlayers
-        players.forEach { it.sendMessage(component) }
-        return mapOf("status" to "sent", "recipients" to players.size)
+        val recipients = Velocity.sendMessageToPlayers(proxy.allPlayers, component)
+        return mapOf("status" to "sent", "recipients" to recipients)
     }
 }

@@ -3,6 +3,7 @@ package ru.arc.rtp
 import com.velocitypowered.api.command.SimpleCommand
 import com.velocitypowered.api.proxy.Player
 import ru.arc.Utils
+import ru.arc.velocity.Velocity
 import java.util.concurrent.CompletableFuture
 
 class RtpCommand(
@@ -13,12 +14,15 @@ class RtpCommand(
         val player =
             invocation.source() as? Player
                 ?: run {
-                    invocation.source().sendMessage(Utils.mm("<red>Эта команда доступна только игроку."))
+                    Velocity.sendMessageTo(invocation.source(), Utils.mm("<red>Эта команда доступна только игроку."))
                     return
                 }
         val args = invocation.arguments()
         if (args.size > 1) {
-            player.sendMessage(Utils.mm("<yellow>Использование: <white>/rtp [${config.allowedWorlds.joinToString("|")}]"))
+            Velocity.sendMessageTo(
+                player,
+                Utils.mm("<yellow>Использование: <white>/rtp [${config.allowedWorlds.joinToString("|")}]"),
+            )
             return
         }
         manager.request(player, args.firstOrNull())

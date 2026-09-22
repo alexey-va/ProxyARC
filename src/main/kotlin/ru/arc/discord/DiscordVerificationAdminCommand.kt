@@ -42,19 +42,19 @@ internal class DiscordVerificationAdminCommand(
     ) {
         val messages = messagesProvider()
         if (!source.hasPermission(PERMISSION)) {
-            source.sendMessage(messages.minecraft("admin-no-permission"))
+            Velocity.sendMessageTo(source, messages.minecraft("admin-no-permission"))
             return
         }
         val gateway = gatewayProvider()
         if (gateway == null) {
-            source.sendMessage(messages.minecraft("admin-unavailable"))
+            Velocity.sendMessageTo(source, messages.minecraft("admin-unavailable"))
             return
         }
         when (args.firstOrNull()?.lowercase()) {
             "status" -> status(source, gateway, messages, args)
             "sync" -> sync(source, gateway, messages, args)
             "unlink" -> unlink(source, gateway, messages, args)
-            else -> source.sendMessage(messages.minecraft("admin-usage"))
+            else -> Velocity.sendMessageTo(source, messages.minecraft("admin-usage"))
         }
     }
 
@@ -78,16 +78,16 @@ internal class DiscordVerificationAdminCommand(
         args: List<String>,
     ) {
         if (args.size != 2) {
-            source.sendMessage(messages.minecraft("admin-usage"))
+            Velocity.sendMessageTo(source, messages.minecraft("admin-usage"))
             return
         }
         when (val lookup = gateway.lookupIdentity(args[1])) {
-            is DiscordIdentityLookupResult.Linked -> source.sendMessage(messages.adminStatus(lookup))
-            DiscordIdentityLookupResult.Invalid -> source.sendMessage(messages.minecraft("admin-invalid-query"))
+            is DiscordIdentityLookupResult.Linked -> Velocity.sendMessageTo(source, messages.adminStatus(lookup))
+            DiscordIdentityLookupResult.Invalid -> Velocity.sendMessageTo(source, messages.minecraft("admin-invalid-query"))
             DiscordIdentityLookupResult.NotLinked ->
-                source.sendMessage(messages.minecraft("admin-not-linked", "query" to args[1]))
-            DiscordIdentityLookupResult.Ambiguous -> source.sendMessage(messages.minecraft("admin-ambiguous-query"))
-            DiscordIdentityLookupResult.Unavailable -> source.sendMessage(messages.minecraft("admin-unavailable"))
+                Velocity.sendMessageTo(source, messages.minecraft("admin-not-linked", "query" to args[1]))
+            DiscordIdentityLookupResult.Ambiguous -> Velocity.sendMessageTo(source, messages.minecraft("admin-ambiguous-query"))
+            DiscordIdentityLookupResult.Unavailable -> Velocity.sendMessageTo(source, messages.minecraft("admin-unavailable"))
         }
     }
 
@@ -98,7 +98,7 @@ internal class DiscordVerificationAdminCommand(
         args: List<String>,
     ) {
         if (args.size != 2) {
-            source.sendMessage(messages.minecraft("admin-usage"))
+            Velocity.sendMessageTo(source, messages.minecraft("admin-usage"))
             return
         }
         val lookup = gateway.lookupIdentity(args[1])
@@ -109,7 +109,8 @@ internal class DiscordVerificationAdminCommand(
         gateway.reconcileIdentity(lookup.link, DiscordRoleSyncTrigger.ADMIN).whenComplete { result, error ->
             when {
                 error != null || result == null ->
-                    source.sendMessage(
+                    Velocity.sendMessageTo(
+                        source,
                         messages.minecraft(
                             "admin-sync-failed",
                             "player_name" to lookup.link.playerName,
@@ -118,7 +119,8 @@ internal class DiscordVerificationAdminCommand(
                         ),
                     )
                 result.successful ->
-                    source.sendMessage(
+                    Velocity.sendMessageTo(
+                        source,
                         messages.minecraft(
                             "admin-sync-success",
                             "player_name" to lookup.link.playerName,
@@ -126,7 +128,8 @@ internal class DiscordVerificationAdminCommand(
                         ),
                     )
                 else ->
-                    source.sendMessage(
+                    Velocity.sendMessageTo(
+                        source,
                         messages.minecraft(
                             "admin-sync-failed",
                             "player_name" to lookup.link.playerName,
@@ -145,12 +148,12 @@ internal class DiscordVerificationAdminCommand(
         args: List<String>,
     ) {
         if (args.size < 2) {
-            source.sendMessage(messages.minecraft("admin-usage"))
+            Velocity.sendMessageTo(source, messages.minecraft("admin-usage"))
             return
         }
         if (args.size != 3 || !args[2].equals("confirm", true)) {
             val query = args[1].take(MAX_ECHO_LENGTH)
-            source.sendMessage(messages.minecraft("admin-unlink-confirm", "query" to query))
+            Velocity.sendMessageTo(source, messages.minecraft("admin-unlink-confirm", "query" to query))
             return
         }
         val lookup = gateway.lookupIdentity(args[1])
@@ -175,7 +178,7 @@ internal class DiscordVerificationAdminCommand(
                     result is DiscordVerificationWorkflowResult.Conflict -> messages.minecraft("admin-conflict")
                     else -> messages.minecraft("admin-unlink-failed")
                 }
-            source.sendMessage(message)
+            Velocity.sendMessageTo(source, message)
         }
     }
 
@@ -185,7 +188,8 @@ internal class DiscordVerificationAdminCommand(
         query: String,
         lookup: DiscordIdentityLookupResult,
     ) {
-        source.sendMessage(
+        Velocity.sendMessageTo(
+            source,
             when (lookup) {
                 DiscordIdentityLookupResult.Invalid -> messages.minecraft("admin-invalid-query")
                 DiscordIdentityLookupResult.NotLinked -> messages.minecraft("admin-not-linked", "query" to query)

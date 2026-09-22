@@ -67,7 +67,7 @@ internal class VerifyCommand(
                     VerificationPlatform.DISCORD -> messages().minecraft("only-player")
                     VerificationPlatform.TELEGRAM -> telegramMessages().minecraft("only-player")
                 }
-            invocation.source().sendMessage(response)
+            Velocity.sendMessageTo(invocation.source(), response)
             return
         }
         when (request.platform) {
@@ -83,12 +83,12 @@ internal class VerifyCommand(
     ) {
         val bot = Velocity.discordBot
         if (bot == null || !bot.isVerificationEnabled()) {
-            player.sendMessage(messages.minecraft("unavailable"))
+            Velocity.sendMessageTo(player, messages.minecraft("unavailable"))
             return
         }
         val backend = player.currentServer.map { it.serverInfo.name }.orElse(null)
         if (!player.isActive || backend == null || !bot.isVerificationBackendAllowed(backend)) {
-            player.sendMessage(messages.minecraft("backend-required"))
+            Velocity.sendMessageTo(player, messages.minecraft("backend-required"))
             return
         }
         when (arguments) {
@@ -96,7 +96,7 @@ internal class VerifyCommand(
             listOf("status") -> showStatus(player, messages)
             listOf("recover") -> issue(player, recovery = true, messages)
             listOf("unlink", "confirm") -> unlink(player, messages)
-            else -> player.sendMessage(messages.minecraft("usage"))
+            else -> Velocity.sendMessageTo(player, messages.minecraft("usage"))
         }
     }
 
@@ -107,19 +107,19 @@ internal class VerifyCommand(
         val messages = telegramMessages()
         val bot = Velocity.telegramBot
         if (bot == null || !bot.isIdentityEnabled()) {
-            player.sendMessage(messages.minecraft("unavailable"))
+            Velocity.sendMessageTo(player, messages.minecraft("unavailable"))
             return
         }
         val backend = player.currentServer.map { it.serverInfo.name }.orElse(null)
         if (!player.isActive || backend == null || !bot.isIdentityBackendAllowed(backend)) {
-            player.sendMessage(messages.minecraft("backend-required"))
+            Velocity.sendMessageTo(player, messages.minecraft("backend-required"))
             return
         }
         when (arguments) {
             emptyList<String>() -> issueTelegram(player, bot, messages)
             listOf("status") -> showTelegramStatus(player, bot, messages)
             listOf("unlink", "confirm") -> unlinkTelegram(player, bot, messages)
-            else -> player.sendMessage(messages.minecraft("usage"))
+            else -> Velocity.sendMessageTo(player, messages.minecraft("usage"))
         }
     }
 
@@ -142,7 +142,7 @@ internal class VerifyCommand(
                         )
                     TelegramChallengeIssueResult.Unavailable -> messages.minecraft("unavailable")
                 }
-            if (player.isActive) player.sendMessage(response)
+            if (player.isActive) Velocity.sendMessageTo(player, response)
         }
     }
 
@@ -163,7 +163,7 @@ internal class VerifyCommand(
                         "player_name" to link.playerName,
                     )
                 }
-            if (player.isActive) player.sendMessage(response)
+            if (player.isActive) Velocity.sendMessageTo(player, response)
         }
     }
 
@@ -179,7 +179,7 @@ internal class VerifyCommand(
                     TelegramUnlinkResult.NotLinked -> messages.minecraft("unlink-not-linked")
                     TelegramUnlinkResult.Unavailable -> messages.minecraft("unavailable")
                 }
-            if (player.isActive) player.sendMessage(response)
+            if (player.isActive) Velocity.sendMessageTo(player, response)
         }
     }
 
@@ -192,7 +192,9 @@ internal class VerifyCommand(
             val bot = Velocity.discordBot ?: return@runAsync
             val inviteUrl = bot.verificationInviteUrl()
             if (inviteUrl == null || !DiscordVerificationConfig.validInviteUrl(inviteUrl)) {
-                if (player.isActive) player.sendMessage(messages.minecraft("issue-failed-unchanged"))
+                if (player.isActive) {
+                    Velocity.sendMessageTo(player, messages.minecraft("issue-failed-unchanged"))
+                }
                 return@runAsync
             }
             val result =
@@ -204,7 +206,8 @@ internal class VerifyCommand(
             if (!player.isActive) return@runAsync
             when (result) {
                 is DiscordChallengeIssueResult.Issued ->
-                    player.sendMessage(
+                    Velocity.sendMessageTo(
+                        player,
                         messages.challenge(
                             code = result.code,
                             expiresInMinutes = retryMinutes(result.expiresAt),
@@ -212,23 +215,25 @@ internal class VerifyCommand(
                         ),
                     )
                 is DiscordChallengeIssueResult.AlreadyLinked ->
-                    player.sendMessage(
+                    Velocity.sendMessageTo(
+                        player,
                         messages.minecraft(
                             "already-linked",
                             "player_name" to bot.identityAccountLabel(result.link),
                         ),
                     )
                 DiscordChallengeIssueResult.NotLinked ->
-                    player.sendMessage(messages.minecraft("recovery-not-linked"))
+                    Velocity.sendMessageTo(player, messages.minecraft("recovery-not-linked"))
                 is DiscordChallengeIssueResult.RateLimited ->
-                    player.sendMessage(
+                    Velocity.sendMessageTo(
+                        player,
                         messages.minecraft(
                             "rate-limited",
                             "minutes" to retryMinutes(result.retryAt).toString(),
                         ),
                     )
                 DiscordChallengeIssueResult.Unavailable ->
-                    player.sendMessage(messages.minecraft("issue-failed-saved"))
+                    Velocity.sendMessageTo(player, messages.minecraft("issue-failed-saved"))
             }
         }
     }
@@ -241,7 +246,8 @@ internal class VerifyCommand(
             val bot = Velocity.discordBot
             val link = bot?.findIdentityByPlayer(player.uniqueId)
             if (!player.isActive) return@runAsync
-            player.sendMessage(
+            Velocity.sendMessageTo(
+                player,
                 if (link == null) {
                     messages.minecraft("status-not-linked")
                 } else {
@@ -267,7 +273,7 @@ internal class VerifyCommand(
                         result is DiscordVerificationWorkflowResult.RoleFailure -> messages.minecraft("unlink-role-failure")
                         else -> messages.minecraft("unlink-failed-saved")
                     }
-                player.sendMessage(response)
+                Velocity.sendMessageTo(player, response)
             }
         }
     }

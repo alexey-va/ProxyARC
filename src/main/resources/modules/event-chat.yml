@@ -1,0 +1,5 @@
+# Proxy-side audience isolation for ArcEvents participant chat.
+# The backend must be one of these registered Velocity server names.
+enabled: true
+allowed-servers:
+  - parkour

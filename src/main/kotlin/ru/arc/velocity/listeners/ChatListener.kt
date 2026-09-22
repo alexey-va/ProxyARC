@@ -34,6 +34,7 @@ class ChatListener(
             outcome.logicalPrefixAdded,
             event.result.message.isPresent,
         )
+        if (Velocity.eventsChatIsolation?.isIsolated(event.player) == true) return
         ChatIngress.onPlayerChat(event, outcome.effectiveMessage)
         chatProcess(event, outcome.globalBridgeMessage)
     }

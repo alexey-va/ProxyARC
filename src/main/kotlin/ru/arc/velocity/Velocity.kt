@@ -7,9 +7,11 @@ import com.velocitypowered.api.event.Subscribe
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent
 import com.velocitypowered.api.event.proxy.ProxyReloadEvent
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent
+import com.velocitypowered.api.command.CommandSource
 import com.velocitypowered.api.plugin.Plugin
 import com.velocitypowered.api.plugin.annotation.DataDirectory
 import com.velocitypowered.api.proxy.ProxyServer
+import com.velocitypowered.api.proxy.Player
 import net.kyori.adventure.text.Component
 import org.slf4j.Logger
 import ru.arc.activity.PlayerActivityTracker
@@ -214,7 +216,7 @@ class Velocity @Inject constructor(
     }
 
     override fun sendMessageToAll(component: Component) {
-        server.allPlayers.forEach { it.sendMessage(component) }
+        sendMessageToPlayers(server.allPlayers, component)
     }
 
     override fun onlinePlayerNames(): Collection<String> =
@@ -289,6 +291,9 @@ class Velocity @Inject constructor(
         var chatAssistant: Assistant? = null
 
         @JvmField
+        internal var eventsChatIsolation: ru.arc.events.ArcEventsChatIsolation? = null
+
+        @JvmField
         var bugSurveyAssistant: Assistant? = null
 
         @JvmField
@@ -308,6 +313,26 @@ class Velocity @Inject constructor(
 
         internal fun requireLogger(): Logger =
             checkNotNull(logger) { "ProxyARC logger is not initialized" }
+
+        /** Sends a proxy-wide message through the ArcEvents audience boundary. */
+        fun sendMessageToPlayers(
+            players: Iterable<Player>,
+            component: Component,
+        ): Int {
+            val recipients = eventsChatIsolation?.recipients(players) ?: players.toList()
+            recipients.forEach { it.sendMessage(component) }
+            return recipients.size
+        }
+
+        /** Delivers a player-directed message unless the player is in an isolated ArcEvents lease. */
+        fun sendMessageTo(
+            source: CommandSource,
+            component: Component,
+        ): Boolean {
+            if (source is Player && eventsChatIsolation?.isIsolated(source) == true) return false
+            source.sendMessage(component)
+            return true
+        }
 
         private fun stripMiniMessage(line: String): String = line.replace(Regex("</?[^>]+>"), "")
     }

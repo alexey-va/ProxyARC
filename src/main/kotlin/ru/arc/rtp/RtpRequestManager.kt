@@ -12,6 +12,7 @@ import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier
 import org.slf4j.LoggerFactory
 import ru.arc.Utils
 import ru.arc.core.Tasks
+import ru.arc.velocity.Velocity
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -35,12 +36,13 @@ class RtpRequestManager(
         mode: NetworkRtpMode = NetworkRtpMode.REGULAR,
     ) {
         if (!config.enabled) {
-            player.sendMessage(Utils.mm("<red>RTP временно отключён."))
+            Velocity.sendMessageTo(player, Utils.mm("<red>RTP временно отключён."))
             return
         }
         val explicitWorld = rawWorld?.let(::normalize)
         if (explicitWorld != null && explicitWorld !in config.allowedWorlds) {
-            player.sendMessage(
+            Velocity.sendMessageTo(
+                player,
                 Utils.mm(
                     "<red>Неизвестный мир. Доступно: <white>${config.allowedWorlds.joinToString(", ")}",
                 ),
@@ -50,14 +52,14 @@ class RtpRequestManager(
         val target =
             server.getServer(config.targetServer).orElse(null)
                 ?: run {
-                    player.sendMessage(Utils.mm("<red>Сервер RTP временно недоступен."))
+                    Velocity.sendMessageTo(player, Utils.mm("<red>Сервер RTP временно недоступен."))
                     log.error("RTP target server '{}' is not registered in Velocity", config.targetServer)
                     return
                 }
 
         val now = clockMillis()
         pending[player.uniqueId]?.takeIf { it.expiresAt > now }?.let {
-            player.sendMessage(Utils.mm("<yellow>Предыдущий запрос RTP ещё выполняется."))
+            Velocity.sendMessageTo(player, Utils.mm("<yellow>Предыдущий запрос RTP ещё выполняется."))
             return
         }
         pending.remove(player.uniqueId)
@@ -88,7 +90,7 @@ class RtpRequestManager(
 
         config.transferMessage
             .takeIf(String::isNotBlank)
-            ?.let { player.sendMessage(Utils.mm(it)) }
+            ?.let { Velocity.sendMessageTo(player, Utils.mm(it)) }
         player
             .createConnectionRequest(target)
             .connect()
@@ -226,7 +228,7 @@ class RtpRequestManager(
         failure: Throwable? = null,
     ) {
         if (!pending.remove(player.uniqueId, item)) return
-        player.sendMessage(Utils.mm("<red>Не удалось запустить RTP: <white>$reason"))
+        Velocity.sendMessageTo(player, Utils.mm("<red>Не удалось запустить RTP: <white>$reason"))
         if (failure == null) {
             log.warn("Network RTP request {} failed for {}: {}", item.request.requestId, player.username, reason)
         } else {

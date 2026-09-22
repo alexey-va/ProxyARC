@@ -15,11 +15,12 @@ class ProxyARCCommand : SimpleCommand {
         val commandSource = invocation.source()
         val args = invocation.arguments()
         if (!commandSource.hasPermission("arc.admin")) {
-            commandSource.sendMessage(Utils.mm("У вас нет разрешения на использование этой команды"))
+            Velocity.sendMessageTo(commandSource, Utils.mm("У вас нет разрешения на использование этой команды"))
             return
         }
         if (args.isEmpty()) {
-            commandSource.sendMessage(
+            Velocity.sendMessageTo(
+                commandSource,
                 Utils.mm(
                     "<green>ProxyARC\n" +
                         "<gray>/proxyarc reload — конфиги и безопасные модули\n" +
@@ -44,7 +45,8 @@ class ProxyARCCommand : SimpleCommand {
                         "<yellow>Перезагружены: $reloaded. Не удалось: $failed. " +
                             "Discord и Redis применятся после restart velocity."
                     }
-                commandSource.sendMessage(
+                Velocity.sendMessageTo(
+                    commandSource,
                     Utils.mm(message),
                 )
             }
@@ -52,7 +54,7 @@ class ProxyARCCommand : SimpleCommand {
             args[0].equals("discord", ignoreCase = true) -> discordAdmin.execute(commandSource, args.drop(1))
             args[0].equals("cleardiscord", ignoreCase = true) -> {
                 if (args.size != 3) {
-                    commandSource.sendMessage(Utils.mm("Usage: /proxyarc cleardiscord <channelId> start/stop"))
+                    Velocity.sendMessageTo(commandSource, Utils.mm("Usage: /proxyarc cleardiscord <channelId> start/stop"))
                     return
                 }
                 val channelId = args[1]
@@ -64,10 +66,10 @@ class ProxyARCCommand : SimpleCommand {
                     action.equals("stop", ignoreCase = true) ->
                         discordBot?.stopClearTask(channelId)
                     else ->
-                        commandSource.sendMessage(Utils.mm("Usage: /proxyarc cleardiscord <channelId> start/stop"))
+                        Velocity.sendMessageTo(commandSource, Utils.mm("Usage: /proxyarc cleardiscord <channelId> start/stop"))
                 }
             }
-            else -> commandSource.sendMessage(Utils.mm("Unknown command!"))
+            else -> Velocity.sendMessageTo(commandSource, Utils.mm("Unknown command!"))
         }
     }
 
@@ -77,36 +79,37 @@ class ProxyARCCommand : SimpleCommand {
     ) {
         val service = Velocity.proxyRestartService
         if (service == null) {
-            source.sendMessage(Utils.mm("<red>PROXYARC_RESTART unavailable"))
+            Velocity.sendMessageTo(source, Utils.mm("<red>PROXYARC_RESTART unavailable"))
             return
         }
 
         if (args.getOrNull(1).equals("cancel", ignoreCase = true)) {
             if (service.cancel("console")) {
-                source.sendMessage(Utils.mm("<yellow>PROXYARC_RESTART cancelled"))
+                Velocity.sendMessageTo(source, Utils.mm("<yellow>PROXYARC_RESTART cancelled"))
             } else {
-                source.sendMessage(Utils.mm("<gray>PROXYARC_RESTART nothing-pending"))
+                Velocity.sendMessageTo(source, Utils.mm("<gray>PROXYARC_RESTART nothing-pending"))
             }
             return
         }
 
         val delay = parseRestartDelay(args)
         if (delay == null) {
-            source.sendMessage(Utils.mm("<red>Usage: /proxyarc restart [-delay 30s] | cancel"))
+            Velocity.sendMessageTo(source, Utils.mm("<red>Usage: /proxyarc restart [-delay 30s] | cancel"))
             return
         }
 
         when (val result = service.schedule(delay, "console")) {
             is ProxyRestartScheduleResult.Scheduled -> {
                 val seconds = result.plan.delay.toSeconds()
-                source.sendMessage(
+                Velocity.sendMessageTo(
+                    source,
                     Utils.mm(
                         "<green>PROXYARC_RESTART scheduled delay=${seconds}s players=${result.plan.playersAtSchedule}",
                     ),
                 )
             }
             ProxyRestartScheduleResult.AlreadyPending ->
-                source.sendMessage(Utils.mm("<red>PROXYARC_RESTART already-pending"))
+                Velocity.sendMessageTo(source, Utils.mm("<red>PROXYARC_RESTART already-pending"))
         }
     }
 

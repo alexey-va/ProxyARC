@@ -50,7 +50,7 @@ object AssistantChatBridge {
             delayed(delayTicks) {
                 val inGameText = AssistantChatFormat.inGameMessage(assistantConfig, part)
                 val component = Utils.legacy(inGameText)
-                proxyServer.allPlayers.forEach { it.sendMessage(component) }
+                Velocity.sendMessageToPlayers(proxyServer.allPlayers, component)
 
                 assistant?.observeChat(
                     RoutingModule.formatBotObserveLine(part, botName),

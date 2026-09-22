@@ -37,6 +37,7 @@ object ProxyArcReload {
     fun reloadSupported(): ProxyArcReloadResult {
         ConfigManager.reloadAll()
         Velocity.config = ProxyConfigs.main()
+        Velocity.eventsChatIsolation?.reload()
         Velocity.dataFolder?.let { dataFolder ->
             Velocity.serverName = RedisModuleConfig.load(dataFolder).serverName
         }

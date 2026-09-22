@@ -10,6 +10,7 @@ import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier
 import org.slf4j.LoggerFactory
 import ru.arc.Utils
 import ru.arc.core.Tasks
+import ru.arc.velocity.Velocity
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
@@ -106,7 +107,7 @@ class DungeonPartyGatherManager(
 
     private fun fail(leader: Player, request: DungeonPartyGatherRequest, reason: String) {
         pending.remove(request.leaderId, request)
-        leader.sendMessage(Utils.mm("<red>Не удалось собрать группу: <white>$reason"))
+        Velocity.sendMessageTo(leader, Utils.mm("<red>Не удалось собрать группу: <white>$reason"))
         log.warn("Dungeon party request {} failed for {}: {}", request.operationId, leader.username, reason)
     }
 

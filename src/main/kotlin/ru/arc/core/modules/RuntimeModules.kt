@@ -4,6 +4,8 @@ import ru.arc.core.PluginModule
 import ru.arc.core.ScheduledTask
 import ru.arc.core.Tasks
 import ru.arc.core.repeating
+import ru.arc.events.ArcEventsChatConfig
+import ru.arc.events.ArcEventsChatIsolation
 import ru.arc.join.JoinAnnouncementConfig
 import ru.arc.join.JoinAnnouncementService
 import ru.arc.join.RedisJoinMessageSource
@@ -22,9 +24,16 @@ object ListenersModule : PluginModule {
     override val name = "Listeners"
     override val priority = 90
 
+    private var eventsChatIsolation: ArcEventsChatIsolation? = null
+
     override fun init() {
         val plugin = Velocity.requirePlugin()
         val server = Velocity.requireProxyServer()
+        val chatIsolation = ArcEventsChatIsolation(settings = ArcEventsChatConfig::load)
+        server.channelRegistrar.register(ArcEventsChatIsolation.CHANNEL)
+        server.eventManager.register(plugin, chatIsolation)
+        eventsChatIsolation = chatIsolation
+        Velocity.eventsChatIsolation = chatIsolation
         val announcementService =
             JoinAnnouncementService(
                 firstJoinData = checkNotNull(Velocity.firstJoinData) { "First-join data is not initialized" },
@@ -56,7 +65,16 @@ object ListenersModule : PluginModule {
         )
     }
 
-    override fun shutdown() {}
+    override fun shutdown() {
+        val server = Velocity.proxyServer
+        eventsChatIsolation?.let { isolation ->
+            isolation.clear()
+            server?.eventManager?.unregisterListener(Velocity.plugin, isolation)
+        }
+        server?.channelRegistrar?.unregister(ArcEventsChatIsolation.CHANNEL)
+        eventsChatIsolation = null
+        Velocity.eventsChatIsolation = null
+    }
 
     /** Avoid duplicate Velocity event handler registration on reload. */
     override fun reload() {}
