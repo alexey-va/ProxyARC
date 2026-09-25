@@ -18,12 +18,20 @@ class VelocityAnnouncementPlayer(
     override val playerName: String get() = player.username
     override val connectionIdentity: Any get() = player
     override val active: Boolean get() = player.isActive
+    override fun hasPermission(permission: String): Boolean = player.hasPermission(permission)
 }
 
 class RedisJoinMessageSource : JoinMessageSource {
-    override fun load(playerName: String, kind: JoinAnnouncementKind): CompletableFuture<String?> =
+    override fun requiredPermissions(kind: JoinAnnouncementKind): Set<String> =
+        JoinMessageCatalogModule.requiredPermissions(kind)
+
+    override fun load(
+        playerName: String,
+        kind: JoinAnnouncementKind,
+        effectivePermissions: Set<String>,
+    ): CompletableFuture<String?> =
         JoinMessagesModule.loadAsync(playerName).thenApply { messages ->
-            JoinMessageCatalogModule.selectedMessage(messages, kind)
+            JoinMessageCatalogModule.selectedMessage(messages, kind, effectivePermissions)
         }
 }
 

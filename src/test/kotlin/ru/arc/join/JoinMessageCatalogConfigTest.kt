@@ -8,6 +8,7 @@ import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldStartWith
 import ru.arc.config.ConfigManager
+import ru.arc.xserver.JoinMessages
 import java.nio.file.Files
 
 class JoinMessageCatalogConfigTest : FreeSpec({
@@ -19,7 +20,49 @@ class JoinMessageCatalogConfigTest : FreeSpec({
             JoinAnnouncementKind.JOIN,
             selectedMessages = setOf("<reset>$template"),
             customMessages = setOf(template),
+            effectivePermissions = setOf(JoinMessages.CUSTOM_MESSAGE_PERMISSION),
         ) shouldBe "<reset>$template"
+    }
+
+    "only resolves catalog and custom selections permitted for the current player" {
+        val joinLocked = JoinMessageCatalogEntry(id = "join-locked", message = "locked join", permission = "rank.join.locked")
+        val joinAllowed = JoinMessageCatalogEntry(id = "join-allowed", message = "allowed join", permission = "rank.join.allowed")
+        val leaveLocked = JoinMessageCatalogEntry(id = "leave-locked", message = "locked leave", permission = "rank.leave.locked")
+        val leaveAllowed = JoinMessageCatalogEntry(id = "leave-allowed", message = "allowed leave", permission = "rank.leave.allowed")
+        val template = "<gold><italic>%player_name%</italic> custom"
+        val customKey = JoinMessages.customSelectionKey(template)
+        val selected = setOf(joinLocked.message, joinAllowed.message, leaveLocked.message, leaveAllowed.message, customKey)
+        val catalog = JoinMessageCatalog(join = listOf(joinLocked, joinAllowed), leave = listOf(leaveLocked, leaveAllowed))
+
+        catalog.randomSelectedMessage(
+            JoinAnnouncementKind.JOIN,
+            selectedMessages = selected,
+            customMessages = setOf(template),
+            effectivePermissions = setOf("rank.join.allowed"),
+        ) shouldBe joinAllowed.message
+        catalog.randomSelectedMessage(
+            JoinAnnouncementKind.LEAVE,
+            selectedMessages = selected,
+            customMessages = setOf(template),
+            effectivePermissions = setOf("rank.leave.allowed"),
+        ) shouldBe leaveAllowed.message
+        catalog.randomSelectedMessage(
+            JoinAnnouncementKind.JOIN,
+            selectedMessages = setOf(joinLocked.message),
+            effectivePermissions = emptySet(),
+        ) shouldBe null
+        catalog.randomSelectedMessage(
+            JoinAnnouncementKind.JOIN,
+            selectedMessages = setOf(customKey),
+            customMessages = setOf(template),
+            effectivePermissions = emptySet(),
+        ) shouldBe null
+        catalog.randomSelectedMessage(
+            JoinAnnouncementKind.JOIN,
+            selectedMessages = setOf(customKey),
+            customMessages = setOf(template),
+            effectivePermissions = setOf(JoinMessages.CUSTOM_MESSAGE_PERMISSION),
+        ) shouldBe customKey
     }
 
     "bundled catalog is complete, stable, and gives every phrase its own icon" {

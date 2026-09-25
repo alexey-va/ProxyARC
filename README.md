@@ -57,6 +57,14 @@ receive the same announcement only when the player has
 `arc.join-message.external`; the permission is captured when the session starts
 so its matching leave event follows the same delivery policy.
 
+Selected phrases are filtered by their effective catalog permission and
+`arc.join.message.custom` for personal templates. These phrase permissions are
+captured separately from the actual login and disconnect player connections;
+leave selection never resolves an already disconnected player by name. If no
+permitted selection remains, the normal network default is used. Paper ARC owns
+persisted selection cleanup and keeps the personal library intact when access
+is lost; ProxyARC remains a read-only consumer of those preferences.
+
 ## Telegram channel
 
 Telegram can bridge Minecraft and Discord chat topics, translate verified mentions and formatting, link the same Minecraft identity to both platforms, and mirror Discord general messages into a public information channel. Channel metadata and posts are managed through deny-by-default ops endpoints with exact chat allowlists and mutation confirmations.

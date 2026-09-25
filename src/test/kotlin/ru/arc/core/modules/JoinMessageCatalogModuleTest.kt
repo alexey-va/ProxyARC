@@ -32,9 +32,17 @@ class JoinMessageCatalogModuleTest : FreeSpec({
         redis.listenerCount(JoinMessageCatalogModule.UPDATE_CHANNEL) shouldBe 1
 
         val selected = JoinMessages("Alex").apply { joinMessages = setOf(catalog.join.first().message) }
-        JoinMessageCatalogModule.selectedMessage(selected, JoinAnnouncementKind.JOIN) shouldBe catalog.join.first().message
+        JoinMessageCatalogModule.selectedMessage(
+            selected,
+            JoinAnnouncementKind.JOIN,
+            JoinMessageCatalogModule.requiredPermissions(JoinAnnouncementKind.JOIN),
+        ) shouldBe catalog.join.first().message
         selected.joinMessages = setOf("<red>not in catalog")
-        JoinMessageCatalogModule.selectedMessage(selected, JoinAnnouncementKind.JOIN) shouldBe null
+        JoinMessageCatalogModule.selectedMessage(
+            selected,
+            JoinAnnouncementKind.JOIN,
+            JoinMessageCatalogModule.requiredPermissions(JoinAnnouncementKind.JOIN),
+        ) shouldBe null
 
         JoinMessageCatalogModule.shutdown()
         redis.listenerCount(JoinMessageCatalogModule.UPDATE_CHANNEL) shouldBe 0
@@ -55,12 +63,14 @@ class JoinMessageCatalogModuleTest : FreeSpec({
             customJoinMessages = setOf("  welcome  ", "<red>bad")
             customLeaveMessages = setOf("bye")
         }
+        val joinPermissions = JoinMessageCatalogModule.requiredPermissions(JoinAnnouncementKind.JOIN)
+        val leavePermissions = JoinMessageCatalogModule.requiredPermissions(JoinAnnouncementKind.LEAVE)
         setOf("%player_name% welcome", catalog.join.first().message) shouldContain
-            JoinMessageCatalogModule.selectedMessage(selected, JoinAnnouncementKind.JOIN)!!
+            JoinMessageCatalogModule.selectedMessage(selected, JoinAnnouncementKind.JOIN, joinPermissions)!!
         selected.joinMessages = setOf("deleted")
-        JoinMessageCatalogModule.selectedMessage(selected, JoinAnnouncementKind.JOIN) shouldBe null
-        JoinMessageCatalogModule.selectedMessage(selected, JoinAnnouncementKind.LEAVE) shouldBe "%player_name% bye"
-        JoinMessageCatalogModule.selectedMessage(selected, JoinAnnouncementKind.FIRST_TIME) shouldBe null
+        JoinMessageCatalogModule.selectedMessage(selected, JoinAnnouncementKind.JOIN, joinPermissions) shouldBe null
+        JoinMessageCatalogModule.selectedMessage(selected, JoinAnnouncementKind.LEAVE, leavePermissions) shouldBe "%player_name% bye"
+        JoinMessageCatalogModule.selectedMessage(selected, JoinAnnouncementKind.FIRST_TIME, emptySet()) shouldBe null
     }
 
     "invalid startup config releases the Redis subscription" {

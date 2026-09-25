@@ -67,6 +67,25 @@ class JoinAnnouncementServiceTest : FreeSpec({
             )
     }
 
+    "snapshots join and leave message permissions from each event connection" {
+        val fixture = fixture(existingPlayer = "Alex")
+        val playerId = UUID.randomUUID()
+        val connectionIdentity = Any()
+        val customPermission = ru.arc.xserver.JoinMessages.CUSTOM_MESSAGE_PERMISSION
+        val loggedIn = TestPlayer(playerId, "Alex", connectionIdentity, setOf("test.join.allowed", customPermission))
+
+        fixture.service.onPostLogin(loggedIn, AnnouncementPermissions(external = false))
+        fixture.scheduler.tick(20)
+        fixture.source.effectivePermissionsByKind[JoinAnnouncementKind.JOIN] shouldBe
+            setOf("test.join.allowed", customPermission)
+
+        val disconnected = TestPlayer(playerId, "Alex", connectionIdentity, setOf("test.leave.allowed"))
+        fixture.service.onDisconnect(disconnected)
+        fixture.scheduler.tick(20)
+
+        fixture.source.effectivePermissionsByKind[JoinAnnouncementKind.LEAVE] shouldBe setOf("test.leave.allowed")
+    }
+
     "a delayed leave selection cannot publish after a reconnect" {
         val fixture = fixture(existingPlayer = "Alex")
         val firstConnection = TestPlayer(UUID.randomUUID(), "Alex")
@@ -142,8 +161,11 @@ private class TestPlayer(
     override val playerId: UUID,
     override val playerName: String,
     override val connectionIdentity: Any = Any(),
+    private val permissions: Set<String> = emptySet(),
 ) : AnnouncementPlayer {
     override var active: Boolean = true
+
+    override fun hasPermission(permission: String): Boolean = permission in permissions
 
     fun reconnected(): TestPlayer {
         active = false
@@ -153,9 +175,23 @@ private class TestPlayer(
 
 private class TestMessageSource : JoinMessageSource {
     val responses = mutableMapOf<JoinAnnouncementKind, CompletableFuture<String?>>()
+    val effectivePermissionsByKind = mutableMapOf<JoinAnnouncementKind, Set<String>>()
 
-    override fun load(playerName: String, kind: JoinAnnouncementKind): CompletableFuture<String?> =
-        responses[kind] ?: CompletableFuture.completedFuture(null)
+    override fun requiredPermissions(kind: JoinAnnouncementKind): Set<String> =
+        when (kind) {
+            JoinAnnouncementKind.FIRST_TIME -> emptySet()
+            JoinAnnouncementKind.JOIN -> setOf("test.join.allowed", "test.join.revoked", ru.arc.xserver.JoinMessages.CUSTOM_MESSAGE_PERMISSION)
+            JoinAnnouncementKind.LEAVE -> setOf("test.leave.allowed", "test.leave.revoked", ru.arc.xserver.JoinMessages.CUSTOM_MESSAGE_PERMISSION)
+        }
+
+    override fun load(
+        playerName: String,
+        kind: JoinAnnouncementKind,
+        effectivePermissions: Set<String>,
+    ): CompletableFuture<String?> {
+        effectivePermissionsByKind[kind] = effectivePermissions
+        return responses[kind] ?: CompletableFuture.completedFuture(null)
+    }
 }
 
 private class RecordingAnnouncementSink : JoinAnnouncementSink {

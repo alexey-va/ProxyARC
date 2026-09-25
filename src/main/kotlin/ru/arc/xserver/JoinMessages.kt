@@ -57,6 +57,7 @@ class JoinMessages(
     }
 
     companion object {
+        const val CUSTOM_MESSAGE_PERMISSION = "arc.join.message.custom"
         const val CUSTOM_MESSAGE_PREFIX = "%player_name% "
         const val CUSTOM_TEMPLATE_PREFIX = CustomJoinMessageTemplate.FULL_PREFIX
         const val MAX_CUSTOM_MESSAGES_PER_KIND = 10

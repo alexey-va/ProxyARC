@@ -30,10 +30,19 @@ interface AnnouncementPlayer {
     val playerName: String
     val connectionIdentity: Any
     val active: Boolean
+
+    fun hasPermission(permission: String): Boolean
 }
 
 interface JoinMessageSource {
-    fun load(playerName: String, kind: JoinAnnouncementKind): CompletableFuture<String?>
+    /** Permission nodes must be resolved against the catalog before querying the user connection. */
+    fun requiredPermissions(kind: JoinAnnouncementKind): Set<String>
+
+    fun load(
+        playerName: String,
+        kind: JoinAnnouncementKind,
+        effectivePermissions: Set<String>,
+    ): CompletableFuture<String?>
 }
 
 interface JoinAnnouncementSink {
@@ -78,13 +87,14 @@ class JoinAnnouncementService(
             } else {
                 JoinAnnouncementKind.JOIN
             }
+        val effectivePermissions = snapshotPermissions(player, kind)
 
         scheduler.runLater(20) {
             if (!isCurrent(session)) return@runLater
             if (kind == JoinAnnouncementKind.FIRST_TIME) {
                 sink.publish(PublishedAnnouncement(player.playerName, kind, null, permissions.external))
             } else {
-                messageSource.load(player.playerName, kind).whenComplete { customMessage, error ->
+                messageSource.load(player.playerName, kind, effectivePermissions).whenComplete { customMessage, error ->
                     if (!isCurrent(session)) return@whenComplete
                     if (error != null) {
                         log.warn("Could not load {} message for {}", kind, player.playerName, error)
@@ -99,9 +109,10 @@ class JoinAnnouncementService(
         val current = sessions[player.playerId] ?: return
         if (current.player.connectionIdentity === player.connectionIdentity) {
             if (!sessions.remove(player.playerId, current)) return
+            val effectivePermissions = snapshotPermissions(player, JoinAnnouncementKind.LEAVE)
             scheduler.runLater(20) {
                 if (!isLatestDisconnected(current)) return@runLater
-                messageSource.load(player.playerName, JoinAnnouncementKind.LEAVE).whenComplete { customMessage, error ->
+                messageSource.load(player.playerName, JoinAnnouncementKind.LEAVE, effectivePermissions).whenComplete { customMessage, error ->
                     if (!isLatestDisconnected(current)) return@whenComplete
                     if (error != null) {
                         log.warn("Could not load leave message for {}", player.playerName, error)
@@ -129,6 +140,13 @@ class JoinAnnouncementService(
         !lifecycle.shuttingDown &&
             sessions[session.player.playerId] == null &&
             latestGeneration[session.player.playerId] == session.generation
+
+    private fun snapshotPermissions(
+        player: AnnouncementPlayer,
+        kind: JoinAnnouncementKind,
+    ): Set<String> =
+        messageSource.requiredPermissions(kind)
+            .filterTo(mutableSetOf(), player::hasPermission)
 
     private data class ActiveSession(
         val player: AnnouncementPlayer,

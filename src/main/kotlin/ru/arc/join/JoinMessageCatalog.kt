@@ -1,5 +1,6 @@
 package ru.arc.join
 
+import ru.arc.xserver.JoinMessages
 import ru.arc.config.Config
 import ru.arc.config.ConfigManager
 import ru.arc.repository.Entity
@@ -47,14 +48,26 @@ class JoinMessageCatalog(
     fun randomSelectedMessage(
         kind: JoinAnnouncementKind,
         selectedMessages: Set<String>,
+        effectivePermissions: Set<String>,
         customMessages: Set<String> = emptySet(),
     ): String? {
         if (kind == JoinAnnouncementKind.FIRST_TIME) return null
         val entries = if (kind == JoinAnnouncementKind.JOIN) join else leave
-        val allowed = (entries.map(JoinMessageCatalogEntry::message).filter(selectedMessages::contains) +
-            ru.arc.xserver.JoinMessages.validCustomMessages(customMessages)
-                .map(ru.arc.xserver.JoinMessages::customSelectionKey)
-                .filter(selectedMessages::contains)).distinct()
+        val allowedCatalogMessages = entries.asSequence()
+            .filter { it.message in selectedMessages }
+            .filter { it.permission == null || it.permission in effectivePermissions }
+            .map(JoinMessageCatalogEntry::message)
+            .toList()
+        val selectedCustomMessages = JoinMessages.validCustomMessages(customMessages)
+            .filter { JoinMessages.customSelectionKey(it) in selectedMessages }
+        val allowedCustomMessages = if (
+            selectedCustomMessages.isNotEmpty() && JoinMessages.CUSTOM_MESSAGE_PERMISSION in effectivePermissions
+        ) {
+            selectedCustomMessages.map(JoinMessages::customSelectionKey)
+        } else {
+            emptyList()
+        }
+        val allowed = (allowedCatalogMessages + allowedCustomMessages).distinct()
         if (allowed.isEmpty()) return null
         return allowed[ThreadLocalRandom.current().nextInt(allowed.size)]
     }

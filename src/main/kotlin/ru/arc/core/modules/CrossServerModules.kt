@@ -12,6 +12,7 @@ import ru.arc.core.PluginModule
 import ru.arc.join.JoinAnnouncementKind
 import ru.arc.join.JoinMessageCatalog
 import ru.arc.join.JoinMessageCatalogConfig
+import ru.arc.join.JoinMessageCatalogEntry
 import ru.arc.join.JoinMessageCatalogPublication
 import ru.arc.redis.RedisOperations
 import ru.arc.repository.CachedRepository
@@ -117,6 +118,7 @@ object JoinMessageCatalogModule : PluginModule {
     internal fun selectedMessage(
         messages: JoinMessages?,
         kind: JoinAnnouncementKind,
+        effectivePermissions: Set<String>,
     ): String? {
         val catalog = repository?.getNow(JoinMessageCatalog.CATALOG_ID) ?: return null
         val selected =
@@ -131,7 +133,19 @@ object JoinMessageCatalogModule : PluginModule {
                 JoinAnnouncementKind.JOIN -> messages?.customJoinMessages.orEmpty()
                 JoinAnnouncementKind.LEAVE -> messages?.customLeaveMessages.orEmpty()
             }
-        return catalog.randomSelectedMessage(kind, selected, custom)
+        return catalog.randomSelectedMessage(
+            kind = kind,
+            selectedMessages = selected,
+            effectivePermissions = effectivePermissions,
+            customMessages = custom,
+        )
+    }
+
+    internal fun requiredPermissions(kind: JoinAnnouncementKind): Set<String> {
+        if (kind == JoinAnnouncementKind.FIRST_TIME) return emptySet()
+        val catalog = repository?.getNow(JoinMessageCatalog.CATALOG_ID) ?: return emptySet()
+        val entries = if (kind == JoinAnnouncementKind.JOIN) catalog.join else catalog.leave
+        return entries.mapNotNull(JoinMessageCatalogEntry::permission).toSet() + JoinMessages.CUSTOM_MESSAGE_PERMISSION
     }
 
     @Synchronized
