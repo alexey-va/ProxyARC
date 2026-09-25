@@ -30,13 +30,13 @@ repositories {
 }
 
 dependencies {
-    implementation("ru.ruscrafting.arc:arc-core:2.7.11")
-    implementation("ru.ruscrafting.arc:arc-core-logging:2.7.11")
-    implementation("ru.ruscrafting.arc:arc-core-metrics:2.7.11")
-    implementation("ru.ruscrafting.arc:arc-core-redis:2.7.11")
-    implementation("ru.ruscrafting.arc:arc-core-velocity:2.7.11")
-    implementation("ru.ruscrafting.arc:arc-core-ai:2.7.11")
-    implementation("ru.ruscrafting.arc:arc-core-sql:2.7.11")
+    implementation("ru.ruscrafting.arc:arc-core:2.7.13")
+    implementation("ru.ruscrafting.arc:arc-core-logging:2.7.13")
+    implementation("ru.ruscrafting.arc:arc-core-metrics:2.7.13")
+    implementation("ru.ruscrafting.arc:arc-core-redis:2.7.13")
+    implementation("ru.ruscrafting.arc:arc-core-velocity:2.7.13")
+    implementation("ru.ruscrafting.arc:arc-core-ai:2.7.13")
+    implementation("ru.ruscrafting.arc:arc-core-sql:2.7.13")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.10.2")
 
@@ -69,7 +69,7 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
     "integrationTestImplementation"(sourceSets.test.get().output)
-    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:2.7.11")
+    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:2.7.13")
     configurations["integrationTestImplementation"].extendsFrom(configurations["testImplementation"])
     configurations["integrationTestRuntimeOnly"].extendsFrom(configurations["testRuntimeOnly"])
 }
