@@ -1,0 +1,33 @@
+# Credentials stay in the secret store; this network uses the existing
+# authorized common.* SQL route.
+enabled: true
+retention-days: 90
+retention-batch-size: 1000
+shutdown-timeout-ms: 5000
+writer:
+  batch-size: 250
+  capture-queue-capacity: 20000
+  max-outbox-events: 250000
+  max-outbox-bytes: 536870912
+  max-record-bytes: 1048576
+  flush-interval-ms: 250
+  retry-interval-ms: 1000
+queries:
+  max-limit: 500
+  max-summary-groups: 5000
+
+mysql:
+  enabled: true
+  host: 10.0.0.2
+  port: 25000
+  database: common
+  username: classic
+  password-env: ARC_VOTES_MYSQL_PASSWORD
+  ssl-mode: DISABLED
+  minimum-idle: 1
+  maximum-pool-size: 2
+  connection-timeout-ms: 10000
+  socket-timeout-ms: 30000
+  validation-timeout-ms: 5000
+  max-lifetime-ms: 1700000
+  fail-fast: true

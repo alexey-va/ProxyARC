@@ -23,6 +23,7 @@ object ProxyArcReload {
             LoggingModule,
             NetworkModule,
             MetricsModule,
+            ru.arc.metrics.ProxyPlayerTelemetryModule,
             JoinMessageCatalogModule,
             TelegramModule,
             ChannelSyncModule,

@@ -115,7 +115,8 @@ object MetricsModule : PluginModule {
                     (redis?.getChannelCount() ?: 0).toDouble(),
                 ) +
                 (Velocity.discordBot?.verificationMetricsSnapshot() ?: emptyList()) +
-                (productTelemetry?.snapshot(redis?.isConnected() == true) ?: emptyList())
+                (productTelemetry?.snapshot(redis?.isConnected() == true) ?: emptyList()) +
+                ru.arc.metrics.ProxyPlayerTelemetryModule.metricSnapshot()
         }
     }
 

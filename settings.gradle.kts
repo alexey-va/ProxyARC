@@ -13,6 +13,7 @@ providers.gradleProperty("arcCoreDir").orNull?.let(::file)?.let { arcCoreDir ->
                 "arc-core-metrics",
                 "arc-core-redis",
                 "arc-core-sql",
+                "arc-core-telemetry",
                 "arc-core-velocity",
                 "arc-core-integration-testing",
             ).forEach { artifact ->

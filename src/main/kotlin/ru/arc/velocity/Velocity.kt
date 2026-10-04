@@ -123,6 +123,7 @@ class Velocity @Inject constructor(
             RedisModule,
             NetworkModule,
             MetricsModule,
+            ru.arc.metrics.ProxyPlayerTelemetryModule,
             // Hooks (30)
             HooksModule,
             // Persistence & cross-server (50-69)
