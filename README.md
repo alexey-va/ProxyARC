@@ -12,7 +12,7 @@ Requirements: Java 25 and the checked-in Gradle 9.2.1 wrapper.
 ./gradlew copyShadowJar
 ```
 
-The default build resolves immutable `arc-core 2.7.17` artifacts anonymously
+The default build resolves immutable `arc-core 2.7.18` artifacts anonymously
 from the public RusCrafting Maven repository. A neighboring core checkout is
 not required.
 
