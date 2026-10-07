@@ -3,6 +3,7 @@ package ru.arc.hooks
 import net.luckperms.api.LuckPermsProvider
 import net.luckperms.api.event.user.UserDataRecalculateEvent
 import net.luckperms.api.query.QueryOptions
+import ru.arc.chat.ExternalChatMeta
 import ru.arc.discord.DiscordRoleFacts
 import ru.arc.discord.DiscordRolePolicyRule
 import java.util.Locale
@@ -10,6 +11,12 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
 class LuckpermsHook {
+    fun getChatMeta(uuid: UUID): CompletableFuture<ExternalChatMeta> =
+        LuckPermsProvider.get().userManager.loadUser(uuid).thenApply { user ->
+            val meta = user.cachedData.metaData
+            ExternalChatMeta(meta.prefix.orEmpty())
+        }
+
     internal fun subscribeUserDataRecalculation(
         plugin: Any,
         handler: (UUID) -> Unit,

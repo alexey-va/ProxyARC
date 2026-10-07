@@ -136,6 +136,7 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
             DiscordChatIdentityResolver { discordUserId ->
                 identities?.findByDiscordUserId(discordUserId)?.playerName
             },
+            playerIdByDiscordUserId = { discordUserId -> identities?.findByDiscordUserId(discordUserId)?.playerUuid },
         )
     private val feeds =
         DiscordFeedService(

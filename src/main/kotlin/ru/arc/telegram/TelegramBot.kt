@@ -90,6 +90,7 @@ import ru.arc.ops.TelegramParseMode
 import ru.arc.ops.TelegramTopicMutation
 import ru.arc.ops.TelegramTopicMutationRequest
 import ru.arc.velocity.Velocity
+import ru.arc.chat.ExternalChatRenderer
 import java.io.ByteArrayInputStream
 import java.io.Serializable
 import java.util.Base64
@@ -107,6 +108,7 @@ open class TelegramBot(
     private val inboundRelay: TelegramInboundRelay = VelocityTelegramInboundRelay,
     private val identityService: TelegramIdentityService? = null,
     botOptions: DefaultBotOptions = DefaultBotOptions(),
+    private val minecraftRenderer: ExternalChatRenderer = ExternalChatRenderer(),
 ) : TelegramLongPollingBot(botOptions, token),
     TelegramOpsGateway,
     AutoCloseable {
@@ -172,7 +174,8 @@ open class TelegramBot(
             return
         }
         when {
-            config.chatDestination.matches(chatId, threadId) -> propagateChatMessage(syncMessage)
+            config.chatDestination.matches(chatId, threadId) ->
+                propagateChatMessage(syncMessage, author?.let { identityService?.findByTelegramUserId(it.id)?.playerUuid })
             config.generalDestination.matches(chatId, threadId) -> propagateGeneralMessage(syncMessage)
         }
     }
@@ -390,19 +393,27 @@ open class TelegramBot(
         scheduler.runAsync { identity.updatePlayerName(playerUuid, playerName) }
     }
 
-    private fun propagateChatMessage(message: TelegramSyncMessage) {
+    private fun propagateChatMessage(message: TelegramSyncMessage, playerId: UUID?) {
         val codec = ChannelSyncModule.textCodec()
         val translated = codec.telegramToDiscord(message)
-        inboundRelay.relayChat(
-            discordMessage =
-                formatPlain(
-                    config.discordFormat,
-                    codec.safeDiscordPlainText(message.sender),
-                    translated.text,
-                ),
-            minecraftMessage = formatMinecraft(config.chatFormat, message.sender, message.text),
-            allowedDiscordUserMentionIds = translated.allowedUserMentionIds,
-        )
+        minecraftRenderer.render(playerId, message.sender, Component.text(message.text)) { sender, body ->
+            formatMinecraft(config.chatFormat, sender, body)
+        }.thenAccept { component ->
+            if (closed.get()) return@thenAccept
+            inboundRelay.relayChat(
+                discordMessage =
+                    formatPlain(
+                        config.discordFormat,
+                        codec.safeDiscordPlainText(message.sender),
+                        translated.text,
+                    ),
+                minecraftMessage = component,
+                allowedDiscordUserMentionIds = translated.allowedUserMentionIds,
+            )
+        }.exceptionally { error ->
+            log.warn("Could not render Telegram chat for player={}", playerId, error)
+            null
+        }
     }
 
     private fun propagateGeneralMessage(message: TelegramSyncMessage) {
@@ -854,8 +865,8 @@ open class TelegramBot(
 
         private fun formatMinecraft(
             pattern: String,
-            sender: String,
-            message: String,
+            sender: Component,
+            message: Component,
         ): Component =
             MiniMessage.miniMessage().deserialize(
                 FORMAT_TOKEN.replace(pattern) { match ->
@@ -864,8 +875,8 @@ open class TelegramBot(
                         else -> "<telegram_message>"
                     }
                 },
-                Placeholder.unparsed("telegram_sender", sender),
-                Placeholder.unparsed("telegram_message", message),
+                Placeholder.component("telegram_sender", sender),
+                Placeholder.component("telegram_message", message),
             )
 
         private fun TelegramDestination?.matches(

@@ -33,12 +33,13 @@ internal class DiscordChatConfig(
     fun minecraftMessage(
         playerName: String,
         message: Component,
+        sender: Component = Component.text(playerName),
     ): Component =
         MiniMessage.miniMessage().deserialize(
             minecraftFormat
                 .replace(PLAYER_NAME_TOKEN, PLAYER_NAME_TAG)
                 .replace(MESSAGE_TOKEN, MESSAGE_TAG),
-            Placeholder.unparsed("player_name", playerName),
+            Placeholder.component("player_name", sender),
             Placeholder.component("message", message),
         )
 
@@ -47,6 +48,7 @@ internal class DiscordChatConfig(
         replyName: String,
         replyPreview: String,
         message: Component,
+        sender: Component = Component.text(playerName),
     ): Component =
         MiniMessage.miniMessage().deserialize(
             minecraftReplyFormat
@@ -54,7 +56,7 @@ internal class DiscordChatConfig(
                 .replace(REPLY_NAME_TOKEN, REPLY_NAME_TAG)
                 .replace(REPLY_PREVIEW_TOKEN, REPLY_PREVIEW_TAG)
                 .replace(MESSAGE_TOKEN, MESSAGE_TAG),
-            Placeholder.unparsed("player_name", playerName),
+            Placeholder.component("player_name", sender),
             Placeholder.unparsed("reply_name", replyName),
             Placeholder.unparsed("reply_preview", replyPreview),
             Placeholder.component("message", message),

@@ -23,6 +23,8 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMa
 import org.telegram.telegrambots.meta.api.objects.commands.scope.BotCommandScopeAllPrivateChats
 import org.telegram.telegrambots.meta.generics.BotSession
 import ru.arc.core.TestTaskScheduler
+import ru.arc.chat.ExternalChatMeta
+import ru.arc.chat.ExternalChatRenderer
 import ru.arc.ops.TelegramTopicMutation
 import ru.arc.ops.TelegramTopicMutationRequest
 import java.nio.file.Files
@@ -516,6 +518,10 @@ class TelegramBotTest : FreeSpec({
                 scheduler = scheduler,
                 inboundRelay = relay,
                 identityService = identity,
+                minecraftRenderer = ExternalChatRenderer(metaProvider = { uuid ->
+                    uuid shouldBe playerUuid
+                    CompletableFuture.completedFuture(ExternalChatMeta("<gold>[VIP]</gold>"))
+                }),
             )
 
         bot.onUpdateReceived(
@@ -529,8 +535,32 @@ class TelegramBotTest : FreeSpec({
         )
 
         relay.discordChat shouldBe "**PlayerOne** » hello"
+        PlainTextComponentSerializer.plainText().serialize(relay.minecraftChat) shouldBe
+            "󰼑 | [VIP] PlayerOne » hello"
         identity.findByTelegramUserId(777L)?.telegramUsername shouldBe "changed_username"
         bot.close()
+    }
+
+    "closing Telegram drops an in-flight styled message" {
+        val identity = testIdentityService()
+        val playerUuid = UUID.randomUUID()
+        val challenge = identity.issueChallenge(playerUuid, "PlayerOne") as TelegramChallengeIssueResult.Issued
+        identity.completeChallenge(challenge.code, 777L, "player_tg", "Telegram Name")
+        val pending = CompletableFuture<ExternalChatMeta>()
+        val relay = RecordingTelegramRelay()
+        val bot = TelegramBot(
+            config = TestTelegramConfig(chatDestination = TelegramDestination("-100100", 7), identityEnabled = true),
+            scheduler = TestTaskScheduler(),
+            inboundRelay = relay,
+            identityService = identity,
+            minecraftRenderer = ExternalChatRenderer(metaProvider = { pending }),
+        )
+
+        bot.onUpdateReceived(telegramUpdate(-100100, 7, "player_tg", "hello", userId = 777L))
+        relay.discordChat shouldBe null
+        bot.close()
+        pending.complete(ExternalChatMeta("[VIP]"))
+        relay.discordChat shouldBe null
     }
 
     "outbound messages are split at Telegram's limit" {

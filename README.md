@@ -69,6 +69,19 @@ is lost; ProxyARC remains a read-only consumer of those preferences.
 
 Telegram can bridge Minecraft and Discord chat topics, translate verified mentions and formatting, link the same Minecraft identity to both platforms, and mirror Discord general messages into a public information channel. Channel metadata and posts are managed through deny-by-default ops endpoints with exact chat allowlists and mutation confirmations.
 
+Discord and Telegram game messages share `chat/ExternalChatRenderer.kt`.
+It resolves LuckPerms prefixes asynchronously using only the verified linked
+Minecraft UUID, including offline players. Unlinked display names never grant
+a prefix. `modules/chat-style.yml` owns their global-chat nickname and body
+palette and the same nickname-derived hue variation as Paper ARC's
+`ChatMessageColorizer`; keep its amplitude aligned with Paper
+`modules/chat-mode.yml`. Existing service glyphs and Discord reply/link styling
+stay in the channel templates. User names and bodies remain literal text.
+Style settings are read on each message through the reloadable config cache.
+
+Regression checks: `./gradlew test --tests ru.arc.chat.ExternalChatRendererTest
+--tests ru.arc.discord.DiscordChatConfigTest --tests ru.arc.telegram.TelegramBotTest`.
+
 ## Website portal bridge
 
 The optional portal bridge mirrors both fixed chats, online presence, and the

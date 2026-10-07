@@ -9,11 +9,13 @@ import ru.arc.ai.routing.ingress.ChatIngress
 import ru.arc.channelsync.ChannelSyncModule
 import ru.arc.channelsync.DiscordSyncMessage
 import ru.arc.channelsync.telegramHtmlEscape
+import ru.arc.chat.ExternalChatRenderer
 import ru.arc.ops.TelegramParseMode
 import ru.arc.portal.PortalChatChannel
 import ru.arc.portal.PortalChatMessage
 import ru.arc.portal.PortalChatSource
 import ru.arc.velocity.Velocity
+import java.util.UUID
 
 internal class DiscordChatService(
     private val session: DiscordSession,
@@ -21,6 +23,8 @@ internal class DiscordChatService(
     private val codec: DiscordMessageCodec,
     private val cleaner: DiscordChatCleaner,
     private val identityResolver: DiscordChatIdentityResolver = DiscordChatIdentityResolver(),
+    private val playerIdByDiscordUserId: (String) -> UUID? = { null },
+    private val minecraftRenderer: ExternalChatRenderer = ExternalChatRenderer(),
 ) {
     fun onMessage(event: MessageReceivedEvent) {
         if (event.author.isBot || event.message.isWebhookMessage) return
@@ -122,15 +126,20 @@ internal class DiscordChatService(
 
     private fun relayChatInbound(event: MessageReceivedEvent) {
         val configured = config ?: return
+        val activeSession = session.snapshot() ?: return
         val author = inboundAuthor(event)
         val messageText = codec.discordToMinecraft(event.message)
         if (messageText.isBlank()) return
         log.info("Discord chat relay from user={} chars={}", event.author.id, messageText.length)
 
         val referenced = event.message.referencedMessage
-        val component =
+        minecraftRenderer.render(
+            playerIdByDiscordUserId(event.author.id),
+            author,
+            codec.minecraftBody(messageText),
+        ) { sender, body ->
             if (referenced == null) {
-                configured.minecraftMessage(author, codec.minecraftBody(messageText))
+                configured.minecraftMessage(author, body, sender)
             } else {
                 val replyAuthor =
                     identityResolver.resolve(
@@ -140,9 +149,14 @@ internal class DiscordChatService(
                 val preview =
                     DiscordTextSafety.plain(codec.discordToMinecraft(referenced), REPLY_PREVIEW_LENGTH)
                         .ifBlank { "вложение" }
-                configured.minecraftReplyMessage(author, replyAuthor, preview, codec.minecraftBody(messageText))
+                configured.minecraftReplyMessage(author, replyAuthor, preview, body, sender)
             }
-        Velocity.plugin?.sendMessageToAll(component)
+        }.thenAccept { component ->
+            if (session.snapshot() === activeSession) Velocity.plugin?.sendMessageToAll(component)
+        }.exceptionally { error ->
+            log.warn("Could not render Discord chat for user={}", event.author.id, error)
+            null
+        }
 
         Velocity.telegramBot?.sendChatMessage(
             configured.telegramMessage(

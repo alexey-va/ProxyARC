@@ -1,0 +1,7 @@
+# Discord/Telegram -> Minecraft use the global game-chat palette.
+# Keep variation aligned with ARC modules/chat-mode.yml on the Paper nodes.
+name-color: '#72B8E6'
+message-color: '#CFE7FF'
+message-color-variation:
+  enabled: true
+  hue-amplitude-degrees: 30.0
