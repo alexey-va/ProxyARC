@@ -10,6 +10,8 @@ import ru.arc.channelsync.ChannelSyncModule
 import ru.arc.channelsync.DiscordSyncMessage
 import ru.arc.channelsync.telegramHtmlEscape
 import ru.arc.chat.ExternalChatRenderer
+import ru.arc.chat.ProxyGlobalChat
+import ru.arc.chat.ProxyGlobalChatSource
 import ru.arc.ops.TelegramParseMode
 import ru.arc.portal.PortalChatChannel
 import ru.arc.portal.PortalChatMessage
@@ -36,14 +38,25 @@ internal class DiscordChatService(
                 snapshot.channels.general.id -> PortalChatChannel.COMMUNITY
                 else -> null
             }
+        val linkedPlayerUuid = Velocity.discordBot?.findIdentityByDiscordUser(event.author.id)?.playerUuid
+        val author = inboundAuthor(event)
+        if (portalChannel == PortalChatChannel.GAME && genericMessage.isNotBlank()) {
+            ProxyGlobalChat.service.record(
+                source = ProxyGlobalChatSource.DISCORD,
+                author = author,
+                playerUuid = linkedPlayerUuid,
+                content = codec.discordToMinecraft(event.message),
+                timestampMillis = event.message.timeCreated.toInstant().toEpochMilli(),
+            )
+        }
         if (portalChannel != null && genericMessage.isNotBlank()) {
             Velocity.portalBridge?.publishChat(
                 PortalChatMessage(
                     sourceEventId = "discord:${event.channel.id}:${event.messageId}",
                     source = PortalChatSource.DISCORD,
                     channel = portalChannel,
-                    authorUuid = Velocity.discordBot?.findIdentityByDiscordUser(event.author.id)?.playerUuid,
-                    authorName = inboundAuthor(event),
+                    authorUuid = linkedPlayerUuid,
+                    authorName = author,
                     content = genericMessage,
                     createdAt = event.message.timeCreated.toInstant().toEpochMilli(),
                 ),
@@ -102,6 +115,18 @@ internal class DiscordChatService(
             codec.minecraftToDiscord(message, snapshot.channels.chat.guild),
             allowedUserMentionIds,
         )
+    }
+
+    /** Sends fixed-authorship text literally, without running player/role mention rewriting. */
+    fun sendCodexChatMessage(message: String): Boolean {
+        val snapshot = session.snapshot() ?: return false
+        return try {
+            sendBounded(snapshot.channels.chat, message, emptySet())
+            true
+        } catch (error: Exception) {
+            log.warn("Failed to queue Codex global chat message: {}", error.javaClass.simpleName)
+            false
+        }
     }
 
     fun sendGeneralMessage(

@@ -611,6 +611,7 @@ private fun telegramUpdate(
         update.message =
             Message().also { message ->
                 message.messageId = 42
+                message.date = 1_700_000_000
                 message.messageThreadId = threadId
                 message.chat = Chat(chatId, chatType)
                 message.from =

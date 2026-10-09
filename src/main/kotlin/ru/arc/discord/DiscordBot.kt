@@ -288,6 +288,9 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
         notifications?.notifyMentions(message)
     }
 
+    fun sendCodexChatMessage(message: String): Boolean =
+        isReady() && chat.sendCodexChatMessage(message)
+
     fun sendGeneralMessage(
         message: String,
         allowedUserMentionIds: Set<String> = emptySet(),

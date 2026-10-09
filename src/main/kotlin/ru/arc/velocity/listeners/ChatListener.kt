@@ -6,6 +6,8 @@ import com.velocitypowered.api.event.player.PlayerChatEvent
 import com.velocitypowered.api.proxy.ProxyServer
 import ru.arc.ai.routing.ingress.ChatIngress
 import ru.arc.chat.ChatModeService
+import ru.arc.chat.ProxyGlobalChat
+import ru.arc.chat.ProxyGlobalChatSource
 import ru.arc.config.Config
 import ru.arc.config.ProxyConfigs
 import ru.arc.core.Tasks
@@ -51,6 +53,12 @@ class ChatListener(
 
         if (Velocity.liteBansHook?.isMuted(uuid, ip) == true) return
 
+        ProxyGlobalChat.service.record(
+            source = ProxyGlobalChatSource.MINECRAFT,
+            author = username,
+            playerUuid = uuid,
+            content = message,
+        )
         val player = event.player
         val firstJoinTime = Velocity.firstJoinData?.joinedAt(player.username)
         val minPlayerTime = mainConfig.integer("discord.min-play-time-sec", 600) * 1000L

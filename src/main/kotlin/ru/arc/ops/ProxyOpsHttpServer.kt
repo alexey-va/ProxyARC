@@ -5,6 +5,10 @@ import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import org.slf4j.LoggerFactory
 import ru.arc.ai.routing.survey.BugSurveySessionStore
+import ru.arc.chat.ProxyGlobalChat
+import ru.arc.chat.ProxyGlobalChatDelivery
+import ru.arc.chat.ProxyGlobalChatService
+import ru.arc.chat.ProxyGlobalChatSubmission
 import ru.arc.core.ModuleRegistry
 import ru.arc.core.moduleRuntimeHealth
 import ru.arc.discord.DiscordIdentityStore
@@ -34,6 +38,8 @@ class ProxyOpsHttpServer(
     private val discordProvider: () -> DiscordOpsGateway? = { Velocity.discordBot },
     private val telegramProvider: () -> TelegramOpsGateway? = { Velocity.telegramBot },
     private val onlineProvider: () -> ProxyOnlineSnapshot = { ProxyOnlineSnapshot.capture(Velocity.proxyServer) },
+    private val globalChatProvider: () -> ProxyGlobalChatService = { ProxyGlobalChat.service },
+    private val globalChatDeliveryProvider: () -> ProxyGlobalChatDelivery = { ProxyGlobalChat.delivery },
 ) {
     private val log = LoggerFactory.getLogger(ProxyOpsHttpServer::class.java)
     private val mapper = ObjectMapper()
@@ -112,6 +118,8 @@ class ProxyOpsHttpServer(
                 val snapshot = onlineProvider()
                 respond(exchange, if (snapshot.available) 200 else 503, snapshot.json())
             }
+            path == "chat" && method == "GET" -> globalChatHistory(exchange)
+            path == "chat" && method == "POST" -> globalChatSend(exchange)
             path == "assistant/status" && method == "GET" ->
                 respond(exchange, 200, statusJson())
             path == "assistant/simulate" && method == "POST" ->
@@ -177,6 +185,104 @@ class ProxyOpsHttpServer(
             else -> respond(exchange, 404, ProxyOpsJson.error("Not found: /ops/$path"))
         }
     }
+
+    private fun globalChatHistory(exchange: HttpExchange) {
+        exchange.responseHeaders.set("Cache-Control", "no-store")
+        val query =
+            try {
+                parseQuery(exchange.requestURI.rawQuery)
+            } catch (_: IllegalArgumentException) {
+                respond(exchange, 400, ProxyOpsJson.error("invalid chat query"))
+                return
+            }
+        val limit = query["limit"]?.toIntOrNull() ?: if ("limit" in query) null else ProxyGlobalChatService.DEFAULT_READ_LIMIT
+        if (limit == null || limit !in 1..ProxyGlobalChatService.MAX_READ_LIMIT) {
+            respond(exchange, 400, ProxyOpsJson.error("limit must be in 1..${ProxyGlobalChatService.MAX_READ_LIMIT}"))
+            return
+        }
+        val after = if ("after" in query) query.getValue("after") else null
+        val player = query["player"]?.takeIf(String::isNotBlank)
+        val page =
+            try {
+                globalChatProvider().read(limit, after, player)
+            } catch (error: IllegalArgumentException) {
+                respond(exchange, 400, ProxyOpsJson.error(error.message ?: "invalid chat query"))
+                return
+            }
+        val messages =
+            page.messages.map { message ->
+                linkedMapOf<String, Any?>(
+                    "cursor" to message.cursor,
+                    "timestamp" to message.timestamp,
+                    "source" to message.source,
+                    "author" to message.author,
+                    "playerUuid" to message.playerUuid,
+                    "content" to message.content,
+                    "contentTruncated" to message.contentTruncated,
+                )
+            }
+        respond(
+            exchange,
+            200,
+            ProxyOpsJson.ok(
+                "instanceId" to page.instanceId,
+                "messages" to messages,
+                "nextCursor" to page.nextCursor,
+                "historyGap" to page.historyGap,
+                "gapReason" to page.gapReason,
+            ),
+        )
+    }
+
+    private fun globalChatSend(exchange: HttpExchange) {
+        val map = readGlobalChatJsonMap(exchange) ?: return
+        val requestId = map["requestId"] as? String
+        val instanceId = map["instanceId"] as? String
+        val content = map["content"] as? String
+        if (requestId == null || instanceId == null || content == null) {
+            respond(exchange, 400, ProxyOpsJson.error("requestId, instanceId and content are required"))
+            return
+        }
+        val service = globalChatProvider()
+        service.validateOutgoingContent(content)?.let { error ->
+            respond(exchange, 400, ProxyOpsJson.error(error))
+            return
+        }
+        when (val submission = service.submit(requestId, instanceId, content, globalChatDeliveryProvider())) {
+            is ProxyGlobalChatSubmission.Rejected ->
+                respond(exchange, submission.httpStatus, ProxyOpsJson.error(submission.error))
+            is ProxyGlobalChatSubmission.Submitted -> {
+                try {
+                    val receipt = submission.receipt.get(CHAT_DELIVERY_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    respond(exchange, 200, successJson(receipt.toMap(submission.replayed)))
+                } catch (_: java.util.concurrent.TimeoutException) {
+                    respond(
+                        exchange,
+                        504,
+                        ProxyOpsJson.error(
+                            "delivery-outcome-pending; retry only with the same requestId and instanceId",
+                        ),
+                    )
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    respond(exchange, 503, ProxyOpsJson.error("delivery-wait-interrupted"))
+                } catch (_: Exception) {
+                    respond(exchange, 502, ProxyOpsJson.error("delivery-outcome-unknown"))
+                }
+            }
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun readGlobalChatJsonMap(exchange: HttpExchange): Map<String, Any?>? =
+        try {
+            val bytes = exchange.requestBody.readNBytes(MAX_CHAT_REQUEST_BODY_BYTES + 1)
+            require(bytes.size <= MAX_CHAT_REQUEST_BODY_BYTES) { "chat request body too large" }
+            mapper.readValue(String(bytes, StandardCharsets.UTF_8), Map::class.java) as Map<String, Any?>
+        } catch (_: Exception) {
+            respond(exchange, 400, ProxyOpsJson.error("invalid or oversized chat request body"))
+            null
+        }
 
     private fun telegramChats(
         exchange: HttpExchange,
@@ -1069,6 +1175,8 @@ class ProxyOpsHttpServer(
             add("GET /ops/")
             add("GET /ops/health")
             add("GET /ops/online")
+            add("GET /ops/chat?limit=&after=&player=")
+            add("POST /ops/chat")
             add("GET /ops/assistant/status")
             if (cfg.simulateEnabled) add("POST /ops/assistant/simulate")
             if (cfg.simulateEnabled) add("POST /ops/assistant/preview")
@@ -1854,6 +1962,8 @@ class ProxyOpsHttpServer(
     )
 
     companion object {
+        private const val CHAT_DELIVERY_TIMEOUT_SECONDS = 20L
+        private const val MAX_CHAT_REQUEST_BODY_BYTES = 16 * 1024
         private const val DISCORD_MESSAGE_MAX_LENGTH = 2_000
         private const val DISCORD_GUILD_NAME_MAX_LENGTH = 100
         private const val DISCORD_GUILD_DESCRIPTION_MAX_LENGTH = 1_200

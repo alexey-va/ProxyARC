@@ -91,6 +91,8 @@ import ru.arc.ops.TelegramTopicMutation
 import ru.arc.ops.TelegramTopicMutationRequest
 import ru.arc.velocity.Velocity
 import ru.arc.chat.ExternalChatRenderer
+import ru.arc.chat.ProxyGlobalChat
+import ru.arc.chat.ProxyGlobalChatSource
 import java.io.ByteArrayInputStream
 import java.io.Serializable
 import java.util.Base64
@@ -98,6 +100,12 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.TimeUnit
+
+data class TelegramCodexMessageReceipt(
+    val chatId: String,
+    val threadId: Int?,
+    val messageId: Int,
+)
 
 open class TelegramBot(
     private val config: TelegramConfig = TelegramConfig.load(),
@@ -147,13 +155,23 @@ open class TelegramBot(
                 config.generalDestination?.matches(chatId, threadId) == true -> PortalChatChannel.COMMUNITY
                 else -> null
             }
+        val linkedPlayerUuid = author?.let { identityService?.findByTelegramUserId(it.id)?.playerUuid }
+        if (portalChannel == PortalChatChannel.GAME) {
+            ProxyGlobalChat.service.record(
+                source = ProxyGlobalChatSource.TELEGRAM,
+                author = sender,
+                playerUuid = linkedPlayerUuid,
+                content = text,
+                timestampMillis = incoming.date.toLong() * 1_000L,
+            )
+        }
         if (portalChannel != null) {
             Velocity.portalBridge?.publishChat(
                 PortalChatMessage(
                     sourceEventId = "telegram:$chatId:${incoming.messageId}",
                     source = PortalChatSource.TELEGRAM,
                     channel = portalChannel,
-                    authorUuid = author?.let { identityService?.findByTelegramUserId(it.id)?.playerUuid },
+                    authorUuid = linkedPlayerUuid,
                     authorName = sender,
                     content = text,
                     createdAt = incoming.date.toLong() * 1_000,
@@ -175,7 +193,7 @@ open class TelegramBot(
         }
         when {
             config.chatDestination.matches(chatId, threadId) ->
-                propagateChatMessage(syncMessage, author?.let { identityService?.findByTelegramUserId(it.id)?.playerUuid })
+                propagateChatMessage(syncMessage, linkedPlayerUuid)
             config.generalDestination.matches(chatId, threadId) -> propagateGeneralMessage(syncMessage)
         }
     }
@@ -435,6 +453,30 @@ open class TelegramBot(
         parseMode: TelegramParseMode = TelegramParseMode.NONE,
     ) {
         config.chatDestination?.let { sendTo(it, message, parseMode) }
+    }
+
+    /** Sends a fixed Codex message to the configured game topic and returns Telegram's receipt. */
+    fun sendCodexChatMessage(message: String): CompletableFuture<TelegramCodexMessageReceipt?> {
+        val destination = config.chatDestination ?: return CompletableFuture.completedFuture(null)
+        if (!isReady()) return CompletableFuture.completedFuture(null)
+        return mutateMessage(
+            TelegramMessageMutationRequest(
+                operation = TelegramMessageMutation.SEND,
+                chatId = destination.chatId,
+                threadId = destination.threadId,
+                text = message,
+                parseMode = TelegramParseMode.NONE,
+            ),
+        ).thenApply { result ->
+            val messageId = (result["messageId"] as? Number)?.toInt()
+                ?: error("Telegram send did not return a message id")
+            require(messageId > 0) { "Telegram send returned an invalid message id" }
+            TelegramCodexMessageReceipt(
+                chatId = result["chatId"] as? String ?: destination.chatId,
+                threadId = (result["threadId"] as? Number)?.toInt() ?: destination.threadId,
+                messageId = messageId,
+            )
+        }
     }
 
     fun sendGeneralMessage(
