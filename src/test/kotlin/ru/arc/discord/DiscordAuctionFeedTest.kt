@@ -17,6 +17,8 @@ import java.net.SocketTimeoutException
 import java.nio.file.Files
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 
 class DiscordAuctionFeedTest : FreeSpec({
     val previousDataFolder = Velocity.dataFolder
@@ -93,12 +95,51 @@ class DiscordAuctionFeedTest : FreeSpec({
         verify(exactly = 1) { fixture.channel.sendMessageEmbeds(any<MessageEmbed>()) }
         verify(exactly = 1) { fixture.channel.editMessageEmbedsById("100", any<MessageEmbed>()) }
     }
+
+    "transient auction failure retries one snapshot after bounded delay and recovers by editing history" {
+        val fixture = AuctionFeedFixture()
+        fixture.history(emptyList())
+        val retryActions = mutableListOf<Runnable>()
+        val retryDelays = mutableListOf<Long>()
+        every {
+            fixture.executor.schedule(any<Runnable>(), any<Long>(), TimeUnit.MILLISECONDS)
+        } answers {
+            retryActions += firstArg<Runnable>()
+            retryDelays += secondArg<Long>()
+            mockk<ScheduledFuture<*>>(relaxed = true)
+        }
+        every { fixture.channel.sendMessageEmbeds(any<MessageEmbed>()).submit() } returns
+            CompletableFuture.failedFuture(SocketTimeoutException("response lost"))
+
+        fixture.feed.updateAuctionItems(emptyList())
+
+        retryActions.size shouldBe 1
+        retryDelays shouldBe listOf(2_000L)
+        discordRetryDelayMs(99) shouldBe 60_000L
+
+        fixture.feed.updateAuctionItems(listOf(AuctionItemDto(display = "Diamond", amount = 2)))
+        retryActions.size shouldBe 1
+        verify(exactly = 1) { fixture.channel.sendMessageEmbeds(any<MessageEmbed>()) }
+
+        val original = fixture.message("100")
+        fixture.history(listOf(original))
+        every { fixture.channel.editMessageEmbedsById("100", any<MessageEmbed>()).submit() } returns
+            CompletableFuture.completedFuture(original)
+        retryActions.single().run()
+
+        verify(exactly = 1) { fixture.channel.sendMessageEmbeds(any<MessageEmbed>()) }
+        verify(exactly = 1) {
+            fixture.channel.editMessageEmbedsById("100", match<MessageEmbed> {
+                it.fields.first().name!!.contains("Diamond")
+            })
+        }
+    }
 })
 
 private class AuctionFeedFixture {
     val channel = mockk<TextChannel>(relaxed = true)
     private val jda = mockk<JDA>(relaxed = true)
-    private val executor = mockk<ScheduledExecutorService>()
+    val executor = mockk<ScheduledExecutorService>()
     val feed: DiscordFeedService
 
     init {

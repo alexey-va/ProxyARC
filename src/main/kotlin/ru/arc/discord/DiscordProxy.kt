@@ -6,6 +6,7 @@ import okhttp3.OkHttpClient
 import ru.arc.config.Config
 import java.net.InetSocketAddress
 import java.net.Proxy
+import java.util.concurrent.TimeUnit
 
 internal data class DiscordProxySettings(
     val enabled: Boolean,
@@ -13,28 +14,27 @@ internal data class DiscordProxySettings(
     val port: Int,
 ) {
     fun applyTo(builder: JDABuilder, health: DiscordTransportHealth? = null) {
-        if (!enabled && health == null) return
-
         val http = OkHttpClient.Builder()
+            .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .callTimeout(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .readTimeout(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .writeTimeout(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         health?.let { http.eventListener(it.httpListener) }
-        if (!enabled) {
-            builder.setHttpClientBuilder(http)
-            return
+        val webSocketFactory = WebSocketFactory().setConnectionTimeout(CONNECT_TIMEOUT_MS)
+        if (enabled) {
+            val address = InetSocketAddress(host, port)
+            http.proxy(Proxy(Proxy.Type.HTTP, address))
+            webSocketFactory.proxySettings.setHost(host).setPort(port)
         }
-
-        val address = InetSocketAddress(host, port)
-        builder.setHttpClientBuilder(
-            http.proxy(Proxy(Proxy.Type.HTTP, address)),
-        )
-
-        val webSocketFactory = WebSocketFactory()
-        webSocketFactory.proxySettings
-            .setHost(host)
-            .setPort(port)
+        builder.setHttpClientBuilder(http)
         builder.setWebsocketFactory(webSocketFactory)
     }
 
     companion object {
+        private const val CONNECT_TIMEOUT_SECONDS = 8L
+        private const val REQUEST_TIMEOUT_SECONDS = 15L
+        private const val CONNECT_TIMEOUT_MS = (CONNECT_TIMEOUT_SECONDS * 1_000).toInt()
+
         fun from(config: Config): DiscordProxySettings {
             val enabled = config.bool("http-proxy.enabled", false)
             val host = config.string("http-proxy.host", "").trim()

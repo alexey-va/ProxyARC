@@ -63,6 +63,7 @@ import org.telegram.telegrambots.meta.api.objects.chatmember.ChatMemberAdministr
 import org.telegram.telegrambots.meta.api.objects.chatmember.ChatMemberRestricted
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton
+import org.telegram.telegrambots.meta.exceptions.TelegramApiRequestException
 import org.telegram.telegrambots.meta.exceptions.TelegramApiValidationException
 import ru.arc.Utils.plain
 import ru.arc.channelsync.ChannelSyncModule
@@ -73,6 +74,8 @@ import ru.arc.channelsync.TelegramSyncMessage
 import ru.arc.channelsync.TelegramSyncEntity
 import ru.arc.core.TaskScheduler
 import ru.arc.core.Tasks
+import ru.arc.core.modules.LoggingModule
+import ru.arc.core.modules.TransportFailureLogFilter
 import ru.arc.discord.DiscordBot
 import ru.arc.ops.TelegramAttachmentSpec
 import ru.arc.ops.TelegramAttachmentType
@@ -90,6 +93,7 @@ import ru.arc.ops.TelegramParseMode
 import ru.arc.ops.TelegramTopicMutation
 import ru.arc.ops.TelegramTopicMutationRequest
 import ru.arc.velocity.Velocity
+import ru.arc.transport.TransportOutageState
 import ru.arc.chat.ExternalChatRenderer
 import ru.arc.chat.ProxyGlobalChat
 import ru.arc.chat.ProxyGlobalChatSource
@@ -122,10 +126,13 @@ open class TelegramBot(
     AutoCloseable {
     private val closed = AtomicBoolean(false)
     private val connected = AtomicBoolean(false)
+    private val readyOnce = AtomicBoolean(false)
+    private val transportOutage = TransportOutageState()
     private val requestExecutor: (SendMessage) -> Unit = requestExecutor ?: { execute(it) }
     private val minecraftIdentityMessages by lazy { TelegramVerificationMessages(config) }
 
     override fun onUpdateReceived(update: Update) {
+        transportRecovered()
         val edited = update.editedMessage ?: update.editedChannelPost
         if (edited != null) {
             relayGenericEdit(edited)
@@ -518,8 +525,13 @@ open class TelegramBot(
             if (closed.get()) return@runAsync
             try {
                 requestExecutor(message)
+                transportRecovered()
             } catch (e: Exception) {
-                log.error("Failed to send message to Telegram", e)
+                if (isTelegramTransportFailure(e)) {
+                    recordTransportFailure(e)
+                } else {
+                    log.error("Failed to send message to Telegram", e)
+                }
             }
         }
     }
@@ -529,9 +541,56 @@ open class TelegramBot(
             require(botUser.id > 0L) { "Telegram getMe returned an invalid bot identity" }
             executeWhenOpen(privateCommandMenu()).thenApply { registered ->
                 require(registered) { "Telegram rejected the private command menu" }
-                connected.set(true)
+                markProbeSucceeded()
             }
         }
+
+    internal fun markProbeSucceeded() {
+        readyOnce.set(true)
+        connected.set(true)
+        transportRecovered()
+    }
+
+    internal fun recordTransportFailure(
+        error: Throwable,
+        retryDelayMs: Long? = null,
+    ) {
+        if (!isTelegramTransportFailure(error)) return
+        connected.set(false)
+        if (!transportOutage.failed()) return
+        val libraryAlreadyLogged =
+            LoggingModule.transportFailureWasLogged(TransportFailureLogFilter.TELEGRAM_LOGGER_NAME)
+        if (!libraryAlreadyLogged) {
+            if (retryDelayMs != null) {
+                log.warn(
+                    "Telegram transport unavailable; retrying in {}s (cause={})",
+                    TimeUnit.MILLISECONDS.toSeconds(retryDelayMs),
+                    telegramFailureTypes(error),
+                )
+            } else {
+                log.warn(
+                    "Telegram transport unavailable; failed message was not replayed (cause={})",
+                    telegramFailureTypes(error),
+                )
+            }
+        }
+    }
+
+    private fun transportRecovered() {
+        if (readyOnce.get()) connected.set(true)
+        val ownRepeats = transportOutage.recovered()
+        val libraryAlreadyLogged =
+            LoggingModule.transportFailureWasLogged(TransportFailureLogFilter.TELEGRAM_LOGGER_NAME)
+        val libraryRepeats = LoggingModule.transportRecovered(TransportFailureLogFilter.TELEGRAM_LOGGER_NAME)
+        if (ownRepeats != null || libraryAlreadyLogged) {
+            log.info(
+                "Telegram transport recovered; repeated failures coalesced={} (plugin={}, library={})",
+                (ownRepeats ?: 0) + libraryRepeats,
+                ownRepeats ?: 0,
+                libraryRepeats,
+            )
+        }
+    }
 
     override fun isReady(): Boolean = connected.get() && !closed.get()
 
@@ -834,16 +893,30 @@ open class TelegramBot(
     @Suppress("UNCHECKED_CAST")
     private fun <T : Serializable> executeWhenOpen(method: BotApiMethod<T>): CompletableFuture<T> {
         if (closed.get()) return CompletableFuture.failedFuture(IllegalStateException("telegram bot is closed"))
-        return try {
+        val future = try {
             apiExecutor?.invoke(method) as? CompletableFuture<T> ?: executeAsync(method)
         } catch (error: Exception) {
             CompletableFuture.failedFuture(error)
+        }
+        return future.whenComplete { _, error ->
+            if (error == null) {
+                transportRecovered()
+            } else if (isTelegramTransportFailure(error)) {
+                recordTransportFailure(error)
+            } else if (generateSequence(error) { it.cause }
+                    .filterIsInstance<TelegramApiRequestException>()
+                    .any { it.errorCode == 401 }
+            ) {
+                connected.set(false)
+            }
         }
     }
 
     override fun close() {
         closed.set(true)
         connected.set(false)
+        readyOnce.set(false)
+        transportOutage.reset()
     }
 
     companion object {

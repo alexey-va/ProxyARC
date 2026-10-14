@@ -3,10 +3,13 @@ package ru.arc.discord
 import net.dv8tion.jda.api.EmbedBuilder
 import net.dv8tion.jda.api.entities.MessageEmbed
 import org.slf4j.LoggerFactory
+import ru.arc.core.modules.LoggingModule
+import ru.arc.core.modules.TransportFailureLogFilter
 import ru.arc.Utils
 import ru.arc.auction.AuctionItemDto
 import ru.arc.config.Config
 import ru.arc.velocity.Velocity
+import ru.arc.transport.TransportOutageState
 import java.awt.Color
 import java.time.OffsetDateTime
 import java.util.concurrent.CompletableFuture
@@ -33,12 +36,28 @@ internal class DiscordFeedService(
     @Volatile
     private var retryFuture: ScheduledFuture<*>? = null
     private val auctionPublishGate = DiscordStatusPublishGate<List<AuctionItemDto>>()
+    private val auctionTransportOutage = TransportOutageState()
+    private val auctionPermanentFailure = TransportOutageState()
+    private val auctionRetryLock = Any()
+    @Volatile
+    private var auctionRetryFuture: ScheduledFuture<*>? = null
+    private var auctionRetryAttempt = 0
+    private var latestAuctionItems: List<AuctionItemDto>? = null
+    @Volatile
+    private var closed = false
     @Volatile
     private var auctionMessage: Pair<String, String>? = null
 
     fun updateAuctionItems(items: List<AuctionItemDto>) {
-        if (session.snapshot()?.channels?.auction == null) return
-        val selected = auctionPublishGate.offer(items.toList()) ?: return
+        if (closed || session.snapshot()?.channels?.auction == null) return
+        val snapshot = items.toList()
+        val retryPending = synchronized(auctionRetryLock) {
+            if (closed) return
+            latestAuctionItems = snapshot
+            auctionRetryFuture != null
+        }
+        if (retryPending) return
+        val selected = auctionPublishGate.offer(snapshot) ?: return
         publishAuctionItems(selected)
     }
 
@@ -66,6 +85,7 @@ internal class DiscordFeedService(
                 if (error != null) auctionPublishFailed(error)
                 else {
                     auctionMessage = channel.id to message.id
+                    auctionPublishRecovered()
                     val pending = auctionPublishGate.complete()
                     if (pending != null) {
                         runCatching { executor.execute { publishAuctionItems(pending) } }
@@ -80,7 +100,9 @@ internal class DiscordFeedService(
         // Reconcile history on the next snapshot: a timed-out send may have succeeded.
         auctionMessage = null
         auctionPublishGate.abandon()
-        logAuctionFailure(error)
+        val transient = isDiscordTransportFailure(error)
+        logAuctionFailure(error, transient)
+        if (transient) scheduleAuctionRetry()
     }
 
     private fun auctionTitleMatches(title: String?): Boolean {
@@ -320,8 +342,68 @@ internal class DiscordFeedService(
             ?.times(1_000L)?.coerceAtLeast(1_000L)
     }
 
-    private fun logAuctionFailure(error: Throwable) {
-        log.warn("Failed to publish auction list", error)
+    private fun scheduleAuctionRetry() {
+        synchronized(auctionRetryLock) {
+            if (closed || latestAuctionItems == null || auctionRetryFuture != null) return
+            auctionRetryAttempt++
+            val delay = discordRetryDelayMs(auctionRetryAttempt)
+            auctionRetryFuture =
+                runCatching {
+                    executor.schedule(
+                        {
+                            val latest =
+                                synchronized(auctionRetryLock) {
+                                    auctionRetryFuture = null
+                                    if (closed) null else latestAuctionItems
+                                } ?: return@schedule
+                            val selected = auctionPublishGate.offer(latest) ?: return@schedule
+                            publishAuctionItems(selected)
+                        },
+                        delay,
+                        TimeUnit.MILLISECONDS,
+                    )
+                }.onFailure { error ->
+                    log.error("Could not schedule Discord auction-list retry", error)
+                }.getOrNull()
+        }
+    }
+
+    private fun logAuctionFailure(
+        error: Throwable,
+        willRetry: Boolean,
+    ) {
+        if (willRetry) {
+            if (!auctionTransportOutage.failed()) return
+            if (LoggingModule.transportFailureWasLogged(TransportFailureLogFilter.JDA_LOGGER_NAME)) return
+            log.warn("Failed to publish auction list; latest snapshot will be retried with history reconciliation", error)
+        } else {
+            // A permanent API/configuration failure remains actionable even if the feed
+            // was already coalescing a separate transient transport outage.
+            if (!auctionPermanentFailure.failed()) return
+            log.warn("Failed to publish auction list; failure is not a transient transport error", error)
+        }
+    }
+
+    private fun auctionPublishRecovered() {
+        synchronized(auctionRetryLock) {
+            auctionRetryFuture?.cancel(false)
+            auctionRetryFuture = null
+            auctionRetryAttempt = 0
+        }
+        val ownRepeats = auctionTransportOutage.recovered()
+        val permanentRepeats = auctionPermanentFailure.recovered()
+        val libraryAlreadyLogged =
+            LoggingModule.transportFailureWasLogged(TransportFailureLogFilter.JDA_LOGGER_NAME)
+        val libraryRepeats = LoggingModule.transportRecovered(TransportFailureLogFilter.JDA_LOGGER_NAME)
+        if (ownRepeats != null || libraryAlreadyLogged || permanentRepeats != null) {
+            log.info(
+                "Discord auction list recovered; repeated failures coalesced={} (feed={}, permanent={}, JDA={})",
+                (ownRepeats ?: 0) + (permanentRepeats ?: 0) + libraryRepeats,
+                ownRepeats ?: 0,
+                permanentRepeats ?: 0,
+                libraryRepeats,
+            )
+        }
     }
 
     private fun playerListChannel() =
@@ -329,6 +411,15 @@ internal class DiscordFeedService(
             ?: session.snapshot()?.channels?.playerList
 
     override fun close() {
+        closed = true
+        synchronized(auctionRetryLock) {
+            auctionRetryFuture?.cancel(false)
+            auctionRetryFuture = null
+            latestAuctionItems = null
+            auctionRetryAttempt = 0
+        }
+        auctionTransportOutage.reset()
+        auctionPermanentFailure.reset()
         auctionPublishGate.abandon()
         statusPublishGate.abandon()
         cancelPendingRetry()

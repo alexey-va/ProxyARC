@@ -2,13 +2,19 @@ package ru.arc.discord
 
 import net.dv8tion.jda.api.events.GenericEvent
 import net.dv8tion.jda.api.events.http.HttpRequestEvent
+import net.dv8tion.jda.api.events.session.ReadyEvent
+import net.dv8tion.jda.api.events.session.SessionResumeEvent
 import net.dv8tion.jda.api.hooks.EventListener
 import net.dv8tion.jda.api.requests.Method
+import org.slf4j.LoggerFactory
+import ru.arc.core.modules.LoggingModule
+import ru.arc.core.modules.TransportFailureLogFilter
 import okhttp3.Call
 import java.io.IOException
 
 /** Per-JDA cached REST evidence. A read-only probe never clears a failed mutation. */
 internal class DiscordTransportHealth(private val clock: () -> Long = System::nanoTime) : EventListener {
+    private val log = LoggerFactory.getLogger(DiscordTransportHealth::class.java)
     private var lastSuccess: Long? = null
     private var readFailed = false
     private var writeFailed = false
@@ -22,12 +28,25 @@ internal class DiscordTransportHealth(private val clock: () -> Long = System::na
     }
 
     override fun onEvent(event: GenericEvent) {
+        if (event is ReadyEvent || event is SessionResumeEvent) {
+            reportTransportRecovery()
+        }
         if (event is HttpRequestEvent) {
             val response = event.response
             // Invalid user input and handled rate limits are not a dependency outage.
             if (response == null || response.isOk || response.isError || response.code >= 500 || response.code in setOf(401, 403)) {
                 record(event.route.method !in setOf(Method.GET, Method.HEAD), response?.isOk == true)
             }
+            if (response?.isOk == true) reportTransportRecovery()
+        }
+    }
+
+    private fun reportTransportRecovery() {
+        val loggerName = TransportFailureLogFilter.JDA_LOGGER_NAME
+        val libraryHadOutage = LoggingModule.transportFailureWasLogged(loggerName)
+        val suppressed = LoggingModule.transportRecovered(loggerName)
+        if (libraryHadOutage) {
+            log.info("Discord REST transport recovered; repeated JDA failures coalesced={}", suppressed)
         }
     }
 

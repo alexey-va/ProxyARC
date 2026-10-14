@@ -14,6 +14,7 @@ import org.telegram.telegrambots.meta.api.methods.BotApiMethod
 import org.telegram.telegrambots.meta.api.methods.GetMe
 import org.telegram.telegrambots.meta.api.methods.commands.SetMyCommands
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage
+import org.telegram.telegrambots.meta.exceptions.TelegramApiRequestException
 import org.telegram.telegrambots.meta.api.objects.Chat
 import org.telegram.telegrambots.meta.api.objects.Message
 import org.telegram.telegrambots.meta.api.objects.MessageEntity
@@ -27,6 +28,8 @@ import ru.arc.chat.ExternalChatMeta
 import ru.arc.chat.ExternalChatRenderer
 import ru.arc.ops.TelegramTopicMutation
 import ru.arc.ops.TelegramTopicMutationRequest
+import ru.arc.transport.TransportOutageState
+import java.io.IOException
 import java.nio.file.Files
 import java.util.concurrent.CompletableFuture
 import java.util.UUID
@@ -61,6 +64,27 @@ class TelegramBotTest : FreeSpec({
         bot.close()
         scheduler.executeImmediate()
         executions.get() shouldBe 1
+    }
+
+    "transient outbound failures are not blindly replayed" {
+        val scheduler = TestTaskScheduler()
+        val attempts = AtomicInteger()
+        val bot =
+            TelegramBot(
+                config = TestTelegramConfig(),
+                scheduler = scheduler,
+                requestExecutor = {
+                    attempts.incrementAndGet()
+                    throw IOException("connect timed out")
+                },
+            )
+
+        bot.enqueue(SendMessage())
+        scheduler.executeImmediate()
+
+        attempts.get() shouldBe 1
+        scheduler.pendingCount() shouldBe 0
+        bot.close()
     }
 
     "connectivity probe registers the private player command menu before becoming ready" {
@@ -125,9 +149,15 @@ class TelegramBotTest : FreeSpec({
                 scheduler = scheduler,
                 requestExecutor = { executions.incrementAndGet() },
             )
-        val runtime = TelegramRuntime { session }
+        val runtime =
+            TelegramRuntime(
+                register = { session },
+                scheduler = { scheduler },
+                probe = { CompletableFuture.completedFuture(Unit) },
+            )
 
         runtime.start(bot)
+        scheduler.executeImmediate()
         runtime.close()
         runtime.close()
         bot.enqueue(SendMessage())
@@ -147,11 +177,16 @@ class TelegramBotTest : FreeSpec({
                 requestExecutor = { executions.incrementAndGet() },
             )
         val runtime =
-            TelegramRuntime {
+            TelegramRuntime(
+                register = {
                 throw IllegalStateException("registration failed")
-            }
+                },
+                scheduler = { scheduler },
+                probe = { CompletableFuture.completedFuture(Unit) },
+            )
 
-        runCatching { runtime.start(bot) }.isFailure shouldBe true
+        runtime.start(bot)
+        scheduler.executeImmediate()
 
         bot.enqueue(SendMessage())
         scheduler.executeImmediate()
@@ -159,21 +194,145 @@ class TelegramBotTest : FreeSpec({
     }
 
     "starting a replacement stops the previous session" {
+        val scheduler = TestTaskScheduler()
         val firstSession =
             mockk<BotSession>(relaxed = true) {
                 every { isRunning } returns true
             }
         val secondSession = mockk<BotSession>(relaxed = true)
         val sessions = ArrayDeque(listOf(firstSession, secondSession))
-        val runtime = TelegramRuntime { sessions.removeFirst() }
-        val firstBot = TelegramBot(config = TestTelegramConfig(token = "first"), scheduler = TestTaskScheduler())
-        val secondBot = TelegramBot(config = TestTelegramConfig(token = "second"), scheduler = TestTaskScheduler())
+        val runtime =
+            TelegramRuntime(
+                register = { sessions.removeFirst() },
+                scheduler = { scheduler },
+                probe = { CompletableFuture.completedFuture(Unit) },
+            )
+        val firstBot = TelegramBot(config = TestTelegramConfig(token = "first"), scheduler = scheduler)
+        val secondBot = TelegramBot(config = TestTelegramConfig(token = "second"), scheduler = scheduler)
 
         runtime.start(firstBot)
+        scheduler.executeImmediate()
         runtime.start(secondBot)
+        scheduler.executeImmediate()
 
         verify(exactly = 1) { firstSession.stop() }
         runtime.close()
+    }
+
+    "runtime retries transient registration failures off-thread and recovers with capped backoff" {
+        val scheduler = TestTaskScheduler()
+        val registerCalls = AtomicInteger()
+        val session =
+            mockk<BotSession>(relaxed = true) {
+                every { isRunning } returns true
+            }
+        val bot =
+            TelegramBot(
+                config = TestTelegramConfig(),
+                scheduler = scheduler,
+                apiExecutor = { method ->
+                    when (method) {
+                        is GetMe -> CompletableFuture.completedFuture<Any>(User(123L, "bot", true))
+                        is SetMyCommands -> CompletableFuture.completedFuture<Any>(true)
+                        else -> CompletableFuture.failedFuture<Any>(IllegalArgumentException("unexpected method"))
+                    }
+                },
+            )
+        val runtime =
+            TelegramRuntime(
+                register = {
+                    if (registerCalls.incrementAndGet() < 3) {
+                        throw TelegramApiRequestException("registration failed", IOException("connect timed out"))
+                    }
+                    session
+                },
+                scheduler = { scheduler },
+            )
+
+        runtime.start(bot)
+        registerCalls.get() shouldBe 0
+        scheduler.executeImmediate()
+        bot.isReady() shouldBe false
+        scheduler.pendingCount() shouldBe 1
+
+        scheduler.advanceMs(2_000)
+        bot.isReady() shouldBe false
+        scheduler.pendingCount() shouldBe 1
+        scheduler.advanceMs(4_000)
+
+        registerCalls.get() shouldBe 3
+        bot.isReady() shouldBe true
+        scheduler.pendingCount() shouldBe 1
+
+        runtime.close()
+        scheduler.executeAll()
+        verify(exactly = 1) { session.stop() }
+        registerCalls.get() shouldBe 3
+    }
+
+    "wrapped API status codes keep permanent failures distinct from transient ones" {
+        fun wrappedApiFailure(code: Int) =
+            TelegramApiRequestException(
+                "registration wrapper",
+                mockk<TelegramApiRequestException>(relaxed = true) {
+                    every { errorCode } returns code
+                },
+            )
+
+        isTelegramTransportFailure(wrappedApiFailure(429)) shouldBe true
+        isTelegramTransportFailure(wrappedApiFailure(500)) shouldBe true
+        isTelegramTransportFailure(wrappedApiFailure(503)) shouldBe true
+        isTelegramTransportFailure(wrappedApiFailure(401)) shouldBe false
+    }
+
+    "wrapped unauthorized registration stops the runtime without retrying" {
+        val scheduler = TestTaskScheduler()
+        val executions = AtomicInteger()
+        val registrationCalls = AtomicInteger()
+        val permanentFailures = AtomicInteger()
+        val unauthorized =
+            TelegramApiRequestException(
+                "registration wrapper",
+                mockk<TelegramApiRequestException>(relaxed = true) {
+                    every { errorCode } returns 401
+                },
+            )
+        val bot =
+            TelegramBot(
+                config = TestTelegramConfig(),
+                scheduler = scheduler,
+                requestExecutor = { executions.incrementAndGet() },
+            )
+        val runtime =
+            TelegramRuntime(
+                register = {
+                    registrationCalls.incrementAndGet()
+                    throw unauthorized
+                },
+                scheduler = { scheduler },
+                onPermanentFailure = { permanentFailures.incrementAndGet() },
+            )
+
+        runtime.start(bot)
+        scheduler.executeImmediate()
+        bot.enqueue(SendMessage())
+        scheduler.executeImmediate()
+
+        registrationCalls.get() shouldBe 1
+        permanentFailures.get() shouldBe 1
+        scheduler.pendingCount() shouldBe 0
+        executions.get() shouldBe 0
+        runtime.close()
+    }
+
+    "transport outage logging emits one transition and summarizes repeats on recovery" {
+        val outage = TransportOutageState()
+
+        outage.failed() shouldBe true
+        repeat(40) { outage.failed() shouldBe false }
+        outage.recovered() shouldBe 40
+        outage.recovered() shouldBe null
+        outage.failed() shouldBe true
     }
 
     "general messages are mirrored to the discussion topic and information channel" {
