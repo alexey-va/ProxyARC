@@ -107,7 +107,7 @@ class DungeonPartyGatherManager(
 
     private fun fail(leader: Player, request: DungeonPartyGatherRequest, reason: String) {
         pending.remove(request.leaderId, request)
-        Velocity.sendMessageTo(leader, Utils.mm("<red>Не удалось собрать группу: <white>$reason"))
+        Velocity.sendMessageTo(leader, Utils.mm("<white></white> <red>Не удалось собрать группу: <white>$reason"))
         log.warn("Dungeon party request {} failed for {}: {}", request.operationId, leader.username, reason)
     }
 

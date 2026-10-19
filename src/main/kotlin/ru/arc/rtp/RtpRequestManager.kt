@@ -36,7 +36,7 @@ class RtpRequestManager(
         mode: NetworkRtpMode = NetworkRtpMode.REGULAR,
     ) {
         if (!config.enabled) {
-            Velocity.sendMessageTo(player, Utils.mm("<red>RTP временно отключён."))
+            Velocity.sendMessageTo(player, Utils.mm("<white></white> <red>RTP временно отключён."))
             return
         }
         val explicitWorld = rawWorld?.let(::normalize)
@@ -44,7 +44,7 @@ class RtpRequestManager(
             Velocity.sendMessageTo(
                 player,
                 Utils.mm(
-                    "<red>Неизвестный мир. Доступно: <white>${config.allowedWorlds.joinToString(", ")}",
+                    "<white></white> <red>Неизвестный мир. Доступно: <white>${config.allowedWorlds.joinToString(", ")}",
                 ),
             )
             return
@@ -52,14 +52,14 @@ class RtpRequestManager(
         val target =
             server.getServer(config.targetServer).orElse(null)
                 ?: run {
-                    Velocity.sendMessageTo(player, Utils.mm("<red>Сервер RTP временно недоступен."))
+                    Velocity.sendMessageTo(player, Utils.mm("<white></white> <red>Сервер RTP временно недоступен."))
                     log.error("RTP target server '{}' is not registered in Velocity", config.targetServer)
                     return
                 }
 
         val now = clockMillis()
         pending[player.uniqueId]?.takeIf { it.expiresAt > now }?.let {
-            Velocity.sendMessageTo(player, Utils.mm("<yellow>Предыдущий запрос RTP ещё выполняется."))
+            Velocity.sendMessageTo(player, Utils.mm("<white></white> <yellow>Предыдущий запрос RTP ещё выполняется."))
             return
         }
         pending.remove(player.uniqueId)
@@ -228,7 +228,7 @@ class RtpRequestManager(
         failure: Throwable? = null,
     ) {
         if (!pending.remove(player.uniqueId, item)) return
-        Velocity.sendMessageTo(player, Utils.mm("<red>Не удалось запустить RTP: <white>$reason"))
+        Velocity.sendMessageTo(player, Utils.mm("<white></white> <red>Не удалось запустить RTP: <white>$reason"))
         if (failure == null) {
             log.warn("Network RTP request {} failed for {}: {}", item.request.requestId, player.username, reason)
         } else {

@@ -21,7 +21,7 @@ class RtpCommand(
         if (args.size > 1) {
             Velocity.sendMessageTo(
                 player,
-                Utils.mm("<yellow>Использование: <white>/rtp [${config.allowedWorlds.joinToString("|")}]"),
+                Utils.mm("<white></white> <yellow>Использование: <white>/rtp [${config.allowedWorlds.joinToString("|")}]"),
             )
             return
         }
