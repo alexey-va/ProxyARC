@@ -142,6 +142,7 @@ open class TelegramBot(
         val author = incoming.from
         if (author?.isBot == true) return
         val commandText = incoming.text?.takeIf(String::isNotBlank)
+        if (commandText != null && handleStaffCommand(incoming, commandText)) return
         if (commandText != null && handleIdentityCommand(incoming, commandText)) return
         val text = commandText ?: incoming.caption?.takeIf(String::isNotBlank) ?: return
         val threadId = incoming.messageThreadId
@@ -206,6 +207,7 @@ open class TelegramBot(
     }
 
     private fun relayGenericEdit(incoming: Message) {
+        if (incoming.text?.substringBefore(' ')?.substringBefore('@') == "/mc") return
         if (incoming.from?.isBot == true) return
         val directText = incoming.text?.takeIf(String::isNotBlank)
         val text = directText ?: incoming.caption?.takeIf(String::isNotBlank) ?: return
@@ -220,6 +222,27 @@ open class TelegramBot(
                 entities = telegramEntities(incoming, caption = directText == null),
             ),
         )
+    }
+
+    private fun handleStaffCommand(incoming: Message, text: String): Boolean {
+        val verb = text.substringBefore(' ')
+        if (verb.substringBefore('@') != "/mc") return false
+        val runtime = ru.arc.staff.StaffBridgeModule.runtime ?: return true
+        if (!runtime.config.telegramCommandsEnabled || closed.get()) return true
+        val author = incoming.from ?: return true
+        if (!incoming.isUserMessage || incoming.chatId != author.id || incoming.senderChat != null ||
+            incoming.forwardDate != null || incoming.forwardOrigin != null) return true
+        if ('@' in verb && !verb.substringAfter('@').equals(botUsername, ignoreCase = true)) return true
+        runtime.commands.execute(ru.arc.staff.StaffRequest(
+            "telegram:${incoming.chatId}:${incoming.messageId}", "telegram", author.id.toString(),
+            incoming.date.toLong() * 1000, text.removePrefix(verb).trim(),
+        )).thenAccept { result ->
+            if (!closed.get()) executeWhenOpen(SendMessage(incoming.chatId.toString(), result.take(3500)).apply {
+                protectContent = true
+                disableWebPagePreview = true
+            })
+        }
+        return true
     }
 
     private fun telegramSender(message: Message): String =

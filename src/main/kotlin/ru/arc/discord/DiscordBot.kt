@@ -228,7 +228,8 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
     }
 
     private fun activateServices(snapshot: DiscordSessionSnapshot): Collection<Any> {
-        val listeners = mutableListOf<Any>(DiscordListener(chat))
+        val listeners = mutableListOf<Any>(DiscordListener(chat), ru.arc.staff.StaffDiscordListener())
+        ru.arc.staff.StaffBridgeModule.registerDiscordCommands(snapshot.jda)
         verificationListener?.let { listener ->
             listener.registerCommands(snapshot)
             listeners += listener
@@ -251,6 +252,8 @@ class DiscordBot : AutoCloseable, DiscordOpsGateway {
     }
 
     fun scheduler(): ScheduledExecutorService = executor
+
+    internal fun staffJda() = session.jda()
 
     override fun isReady(): Boolean = connection.isEnabled() && session.isReady()
 

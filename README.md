@@ -91,3 +91,6 @@ portal outbox into Minecraft, Discord, and Telegram.
 See [`docs/portal-bridge.md`](docs/portal-bridge.md).
 
 Setup, permissions, configuration and request contracts are documented in [docs/telegram-channel-ops.md](docs/telegram-channel-ops.md).
+
+Minecraft staff moderation, private Discord spy channels and Telegram direct-message
+commands are documented in [docs/staff-bridge.md](docs/staff-bridge.md).

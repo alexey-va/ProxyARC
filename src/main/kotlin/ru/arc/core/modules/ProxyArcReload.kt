@@ -27,6 +27,7 @@ object ProxyArcReload {
             JoinMessageCatalogModule,
             TelegramModule,
             ChannelSyncModule,
+            ru.arc.staff.StaffBridgeModule,
             AssistantModule,
             ProxyVotesModule,
             ProxyOpsHttpModule,

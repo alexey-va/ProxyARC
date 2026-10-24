@@ -29,6 +29,7 @@ internal class DiscordChatService(
     private val minecraftRenderer: ExternalChatRenderer = ExternalChatRenderer(),
 ) {
     fun onMessage(event: MessageReceivedEvent) {
+        if (ru.arc.staff.StaffDiscordListener.consumeMessage(event)) return
         if (event.author.isBot || event.message.isWebhookMessage) return
         val snapshot = session.snapshot() ?: return
         val (genericMessage, technical) = codec.discordToChannelSync(event.message)
@@ -83,6 +84,7 @@ internal class DiscordChatService(
     }
 
     fun onMessageUpdate(event: MessageUpdateEvent) {
+        if (ru.arc.staff.StaffBridgeModule.protectedDiscordChannel(event.channel.id) || event.message.contentRaw.startsWith("!mc")) return
         if (event.author.isBot || event.message.isWebhookMessage) return
         val (text, technical) = codec.discordToChannelSync(event.message)
         if (text.isBlank()) return

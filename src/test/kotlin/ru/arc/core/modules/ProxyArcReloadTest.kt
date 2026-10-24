@@ -14,6 +14,7 @@ class ProxyArcReloadTest : FreeSpec({
                 "JoinMessageCatalog",
                 "Telegram",
                 "ChannelSync",
+                "StaffBridge",
                 "Assistant",
                 "ProxyVotes",
                 "ProxyOpsHttp",

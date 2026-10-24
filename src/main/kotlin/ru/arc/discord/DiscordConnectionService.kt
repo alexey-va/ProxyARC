@@ -114,7 +114,9 @@ internal class DiscordConnectionService(
         JDABuilder.createDefault(token)
             .addEventListeners(session.health)
             .also { proxySettings.applyTo(it, session.health) }
-            .disableCache(CacheFlag.VOICE_STATE, CacheFlag.MEMBER_OVERRIDES)
+            .disableCache(CacheFlag.VOICE_STATE)
+            // Private staff delivery must see member-specific View Channel grants too.
+            .enableCache(CacheFlag.MEMBER_OVERRIDES)
             .enableIntents(GatewayIntent.MESSAGE_CONTENT)
             .build()
 

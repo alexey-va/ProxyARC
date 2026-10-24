@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonClassDescription
 import com.fasterxml.jackson.annotation.JsonPropertyDescription
 import com.google.inject.Inject
 import com.velocitypowered.api.event.Subscribe
+import com.velocitypowered.api.event.PostOrder
+import com.velocitypowered.api.event.command.CommandExecuteEvent
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent
 import com.velocitypowered.api.event.proxy.ProxyReloadEvent
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent
@@ -69,7 +71,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 @Plugin(
     id = "proxyarc",
     name = "ProxyARC",
-    version = "1.0.10",
+    version = "1.0.13",
 )
 class Velocity @Inject constructor(
     private val server: ProxyServer,
@@ -138,6 +140,7 @@ class Velocity @Inject constructor(
             DiscordModule,
             TelegramModule,
             ChannelSyncModule,
+            ru.arc.staff.StaffBridgeModule,
             AssistantModule,
             ProxyVotesModule,
             ProxyOpsHttpModule,
@@ -191,6 +194,12 @@ class Velocity @Inject constructor(
     @Subscribe
     fun onProxyReload(@Suppress("UNUSED_PARAMETER") event: ProxyReloadEvent) {
         ProxyArcReload.reloadSupported()
+    }
+
+    // Plugin-lifetime guard survives StaffBridge reload/disable while an old command event is queued.
+    @Subscribe(order = PostOrder.LAST)
+    fun onStaffCommand(event: CommandExecuteEvent) {
+        ru.arc.staff.StaffCommandSource.guard(event)
     }
 
     @Subscribe
