@@ -26,7 +26,7 @@ channels:
     chat-id: 0
     thread-id: 0
     mirror-general: true
-    # Public community URL shown after account-link actions.
+    # Public community URL shown alongside account-link actions.
     url: ""
 
 # U+F0F11 shifts the separator left by one pixel after the wider Telegram glyph.
@@ -111,6 +111,7 @@ identity:
         - "  <command_hint>"
         - ""
         - "  <expiry>"
+        - "  <community_link>"
         - ""
       title: "<#92bed8><bold>Привязка Telegram-аккаунта</bold>"
       code-format: "<#ffacd5><bold><underlined><code></underlined></bold>"
@@ -120,6 +121,7 @@ identity:
       copy-hint: "<#969696>Нажмите строку — команда /verify скопируется."
       bot-link-label: "<#92bed8><bold><underlined>Открыть Telegram-бот RusCrafting</underlined></bold>"
       bot-link-hover: "<#969696>Открыть личный чат с ботом"
+      community-link-label: "<#92bed8><underlined>Открыть Telegram-канал сервера</underlined>"
       command-format: "<#92bed8><command>"
       command-hover: "<#969696>Нажмите, чтобы скопировать команду"
       command-hint: "<#e6fff3>В личном чате отправьте <command><#e6fff3>."

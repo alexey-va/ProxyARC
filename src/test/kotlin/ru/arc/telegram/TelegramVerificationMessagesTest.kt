@@ -28,8 +28,14 @@ class TelegramVerificationMessagesTest : FreeSpec({
         plain.serialize(status) shouldNotContain "•"
     }
 
-    "Telegram challenge is one actionable block with a clickable bot link" {
+    "Telegram challenge offers the bot and public channel before account linking" {
         val root = Files.createTempDirectory("telegram-verification-challenge-")
+        ProxyConfigs.module(root, "telegram.yml").also { config ->
+            config.setString("username", "ruscrafting_bot")
+            config.setString("channels.information.url", "https://t.me/ruscrafting")
+            config.saveStrict()
+        }
+        ConfigManager.clear()
         val messages = TelegramVerificationMessages(TelegramConfig.load(root))
 
         val message = messages.challenge("ABCD-EFGH", expiresInMinutes = 10)
@@ -44,7 +50,8 @@ class TelegramVerificationMessagesTest : FreeSpec({
             "  Открыть Telegram-бот RusCrafting\n" +
             "  В личном чате отправьте /verify ABCD-EFGH.\n" +
             "\n" +
-            "  Код действует 10 минут.\n"
+            "  Код действует 10 минут.\n" +
+            "  Открыть Telegram-канал сервера\n"
 
         val code = message.descendants().filterIsInstance<TextComponent>().single { it.content() == "ABCD-EFGH" }
         code.hasDecoration(TextDecoration.UNDERLINED) shouldBe true
@@ -67,7 +74,29 @@ class TelegramVerificationMessagesTest : FreeSpec({
                 plain.serialize(it).contains("Открыть Telegram-бот RusCrafting") &&
                     it.clickEvent()?.action() == ClickEvent.Action.OPEN_URL
             }
-        botLink.clickEvent()?.value() shouldBe "https://t.me/RusCrafting"
+        botLink.clickEvent()?.value() shouldBe "https://t.me/ruscrafting_bot"
+        val communityLink =
+            message.descendants().first {
+                plain.serialize(it).contains("Открыть Telegram-канал сервера") &&
+                    it.clickEvent()?.action() == ClickEvent.Action.OPEN_URL
+            }
+        communityLink.clickEvent()?.value() shouldBe "https://t.me/ruscrafting"
+    }
+
+    "Telegram challenge omits the optional channel row when no public URL is configured" {
+        val root = Files.createTempDirectory("telegram-verification-no-channel-")
+        val messages = TelegramVerificationMessages(TelegramConfig.load(root))
+
+        val message = messages.challenge("ABCD-EFGH", expiresInMinutes = 10)
+        val rendered = plain.serialize(message)
+
+        rendered shouldContain "Открыть Telegram-бот RusCrafting"
+        rendered shouldNotContain "Открыть Telegram-канал сервера"
+        rendered shouldNotContain "<community_link>"
+        rendered shouldNotContain "  \n"
+        message.descendants()
+            .mapNotNull { it.clickEvent()?.takeIf { event -> event.action() == ClickEvent.Action.OPEN_URL }?.value() }
+            .toSet() shouldBe setOf("https://t.me/RusCrafting")
     }
 
     "already linked Telegram response opens the public community instead of the verification bot" {

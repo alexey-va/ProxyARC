@@ -89,6 +89,7 @@ internal class TelegramVerificationMessages(
                 "code_row" to codeRow,
                 "copy_hint" to parse(raw("challenge.copy-hint")),
                 "bot_link" to botLink("challenge.bot-link-label", "challenge.bot-link-hover"),
+                "community_link" to communityLink("challenge.community-link-label", "link-hover"),
                 "command_hint" to
                     parse(
                         raw("challenge.command-hint"),
@@ -104,7 +105,10 @@ internal class TelegramVerificationMessages(
                             ),
                     ),
             )
-        val lines = layout().map { parse(it, components = components) }
+        val lines =
+            layout()
+                .filterNot { config.informationUrl == null && "<community_link>" in it }
+                .map { parse(it, components = components) }
         return lines.drop(1).fold(lines.first()) { result, line ->
             result.append(Component.newline()).append(line)
         }
@@ -232,6 +236,7 @@ internal class TelegramVerificationMessages(
                 "copy-hint",
                 "bot-link-label",
                 "bot-link-hover",
+                "community-link-label",
                 "command-format",
                 "command-hover",
                 "command-hint",

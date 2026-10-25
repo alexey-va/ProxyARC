@@ -545,12 +545,16 @@ class TelegramBotTest : FreeSpec({
         bot.close()
     }
 
-    "private start tells an unlinked player how to obtain and submit one code" {
+    "private start offers the public channel alongside instructions to an unlinked player" {
         val scheduler = TestTaskScheduler()
         val requests = mutableListOf<SendMessage>()
         val bot =
             TelegramBot(
-                config = TestTelegramConfig(identityEnabled = true),
+                config =
+                    TestTelegramConfig(
+                        identityEnabled = true,
+                        informationUrl = "https://t.me/ruscrafting",
+                    ),
                 scheduler = scheduler,
                 requestExecutor = requests::add,
                 identityService = testIdentityService(),
@@ -569,9 +573,12 @@ class TelegramBotTest : FreeSpec({
         scheduler.executeImmediate()
         scheduler.executeImmediate()
 
-        val reply = requests.single().text
-        reply shouldContain "/verify telegram"
-        reply shouldContain "/verify КОД"
+        val reply = requests.single()
+        reply.text shouldContain "/verify telegram"
+        reply.text shouldContain "/verify КОД"
+        val button = (reply.replyMarkup as InlineKeyboardMarkup).keyboard.single().single()
+        button.text shouldBe "Перейти в Telegram RusCrafting"
+        button.url shouldBe "https://t.me/ruscrafting"
         bot.close()
     }
 
