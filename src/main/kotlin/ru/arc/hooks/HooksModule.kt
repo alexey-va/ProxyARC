@@ -13,16 +13,18 @@ object HooksModule : PluginModule {
     override val priority = 30
 
     override fun init() {
-        try {
-            Velocity.luckpermsHook = LuckpermsHook()
-        } catch (e: Exception) {
-            log.error("Error while initializing LuckpermsHook", e)
+        val plugins = Velocity.requireProxyServer().pluginManager
+        Velocity.luckpermsHook = null
+        Velocity.liteBansHook = null
+        if (plugins.getPlugin("luckperms").isPresent) {
+            try { Velocity.luckpermsHook = LuckpermsHook() }
+            catch (failure: Exception) { log.error("Error while initializing LuckpermsHook", failure) }
+            catch (failure: LinkageError) { log.error("LuckPerms API is unavailable; permission integration remains disabled", failure) }
         }
-
-        try {
-            Velocity.liteBansHook = LiteBansHook()
-        } catch (e: Exception) {
-            log.error("Error while initializing LiteBansHook", e)
+        if (plugins.getPlugin("litebans").isPresent) {
+            try { Velocity.liteBansHook = LiteBansHook() }
+            catch (failure: Exception) { log.error("Error while initializing LiteBansHook", failure) }
+            catch (failure: LinkageError) { log.error("LiteBans API is unavailable; moderation integration remains disabled", failure) }
         }
     }
 

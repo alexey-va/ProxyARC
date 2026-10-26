@@ -24,9 +24,20 @@ class VelocityRuntimeStateTest : FreeSpec({
         Velocity.logger = null
         Velocity.dataFolder = null
         Velocity.proxyRestartService = null
+        ru.arc.hooks.HooksModule.shutdown()
     }
     afterSpec {
         dataPath.toFile().deleteRecursively() shouldBe true
+    }
+
+    "optional provider adapters are absent when their plugins are not installed" {
+        val server = mockk<ProxyServer> {
+            every { pluginManager.getPlugin(any()) } returns java.util.Optional.empty()
+        }
+        Velocity.proxyServer = server
+        ru.arc.hooks.HooksModule.init()
+        Velocity.luckpermsHook shouldBe null
+        Velocity.liteBansHook shouldBe null
     }
 
     "constructor remains passive until the proxy initialization event" {
