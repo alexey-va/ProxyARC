@@ -4,12 +4,19 @@
 Discord observations. `modules/staff-bridge.yml` is disabled in bundled defaults.
 Runtime destinations and backend credentials belong in the operator configuration.
 
-Discord accepts native `/mc` subcommands in the dedicated command channel, or the
-same text grammar prefixed by `!mc`. Telegram accepts `/mc` only in a direct chat
-with the bot. Edited, forwarded and anonymous Telegram commands do not execute.
+Discord accepts standalone `/kick`, `/ban`, `/mute` and the existing native `/mc`
+subcommands in the dedicated command channel. The text aliases are `!kick`,
+`!ban`, `!mute` and `!mc`. Telegram accepts `/kick`, `/ban`, `/mute` and `/mc` only
+in a direct chat with the bot, including the `@bot_username` suffix. Edited,
+forwarded and anonymous Telegram commands do not execute. Staff commands are
+consumed before public chat relay even in the wrong channel or with the bridge disabled.
 Telegram group creation and group spy feeds are outside this feature.
 
 ```text
+/kick Player Нарушение правил
+/ban Player 7d Нарушение правил
+/mute Player 10m Повторный флуд
+/mc kick Player Нарушение правил
 /mc mute Player 10m Повторный флуд
 /mc ban Player 7d Нарушение правил
 /mc unmute Player
@@ -18,9 +25,15 @@ Telegram group creation and group spy feeds are outside this feature.
 /mc command spawn list
 ```
 
-For Discord's slash interface, select the named subcommand and fill its fields;
-the text examples describe the Telegram grammar. `permanent` is accepted in place
-of a duration. Native LiteBans permissions and restrictions still apply.
+For Discord's slash interface, select a command and fill its fields; the text
+examples describe the Telegram grammar. `kick` takes a player and a reason;
+`ban` and `mute` also require a duration, with `permanent` accepted instead.
+These moderation commands always execute on Velocity through the same linked-account,
+permission, replay and rate-limit checks as `/mc`; no server argument is needed.
+Native LiteBans permissions and restrictions still apply.
+Telegram's private command menu lists the shortcuts as moderation commands. When
+the staff runtime is enabled, private `/help` appends their syntax to the configured
+player help, including `/mc command proxy <команда>` for other Velocity commands.
 Backend names are the configured keys under `backends`; the operator may enable
 only Spawn and Survival while still observing Parkour.
 

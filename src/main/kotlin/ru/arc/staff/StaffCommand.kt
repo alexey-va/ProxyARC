@@ -17,6 +17,8 @@ internal data class StaffCommand(val server: String, val line: String, val permi
 
 /** Formal command grammar. User-controlled names/durations/reasons cannot become LiteBans switches. */
 internal object StaffCommands {
+    val SHORTCUTS = setOf("kick", "ban", "mute")
+
     fun parse(input: String): StaffCommand? {
         if (input.length !in 1..640 || input.any(::unsafeLineCharacter)) return null
         val text = input.trim()
@@ -24,11 +26,16 @@ internal object StaffCommands {
         return when (val action = tokens[0].lowercase(Locale.ROOT)) {
             "mute", "ban" -> {
                 if (tokens.size != 4 || !NAME.matches(tokens[1]) || !DURATION.matches(tokens[2]) ||
-                    tokens[3].isBlank() || tokens[3].length > 256 || tokens[3].split(' ').any { it.startsWith('-') }) return null
+                    !validReason(tokens[3])) return null
                 val permanent = tokens[2] == "permanent"
                 val command = if (permanent) action else "temp$action"
                 val line = if (permanent) "$action ${tokens[1]} ${tokens[3]}" else "$command ${tokens[1]} ${tokens[2]} ${tokens[3]}"
                 StaffCommand("proxy", line, "litebans.$command", action)
+            }
+            "kick" -> {
+                val parts = text.split(Regex(" +"), limit = 3)
+                if (parts.size != 3 || !NAME.matches(parts[1]) || !validReason(parts[2])) return null
+                StaffCommand("proxy", "kick ${parts[1]} ${parts[2]}", "litebans.kick", action)
             }
             "unmute", "unban" -> {
                 if (tokens.size != 2 || !NAME.matches(tokens[1])) return null
@@ -44,6 +51,9 @@ internal object StaffCommands {
             else -> null
         }
     }
+
+    private fun validReason(reason: String): Boolean =
+        reason.isNotBlank() && reason.length <= 256 && reason.split(' ').none { it.startsWith('-') }
 
     fun validLine(line: String): Boolean = line.length in 1..512 && line.none(::unsafeLineCharacter) && line.isNotBlank()
 

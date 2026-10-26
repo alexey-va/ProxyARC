@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "ru.arc"
-version = "1.0.15"
+version = "1.0.16"
 description = "ProxyARC Velocity plugin"
 
 val integrationTestSourceSet = sourceSets.create("integrationTest") {

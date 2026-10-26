@@ -7,6 +7,8 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
 import io.mockk.verify
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
@@ -29,6 +31,14 @@ import ru.arc.chat.ExternalChatRenderer
 import ru.arc.ops.TelegramTopicMutation
 import ru.arc.ops.TelegramTopicMutationRequest
 import ru.arc.transport.TransportOutageState
+import ru.arc.channelsync.ChannelSyncService
+import ru.arc.staff.StaffBridgeConfig
+import ru.arc.staff.StaffBridgeModule
+import ru.arc.staff.StaffBridgeRuntime
+import ru.arc.staff.StaffCommandService
+import ru.arc.staff.StaffCommands
+import ru.arc.staff.StaffRequest
+import ru.arc.velocity.Velocity
 import java.io.IOException
 import java.nio.file.Files
 import java.util.concurrent.CompletableFuture
@@ -113,6 +123,10 @@ class TelegramBotTest : FreeSpec({
             "status" to "Проверить привязку",
             "unlink" to "Отвязать Minecraft-аккаунт",
             "help" to "Показать доступные команды",
+            "kick" to "Отключить игрока (модерация)",
+            "ban" to "Заблокировать игрока (модерация)",
+            "mute" to "Ограничить чат игрока (модерация)",
+            "mc" to "Служебные команды Minecraft (модерация)",
         )
         bot.isReady() shouldBe true
         bot.close()
@@ -646,6 +660,111 @@ class TelegramBotTest : FreeSpec({
         bot.close()
     }
 
+    "private moderation shortcuts retain the shared command pipeline and authenticated event identity" {
+        val commands = mutableListOf<StaffRequest>()
+        val replies = mutableListOf<SendMessage>()
+        withTelegramStaffRuntime(commands) {
+            TelegramBot(
+                config = TestTelegramConfig(),
+                scheduler = TestTaskScheduler(),
+                apiExecutor = { method ->
+                    replies += method as SendMessage
+                    CompletableFuture.completedFuture<Any>(Message())
+                },
+            ).use { bot ->
+                listOf(
+                    "/kick Player Нарушение правил" to "kick Player Нарушение правил",
+                    "/ban Player 7d Нарушение правил" to "ban Player 7d Нарушение правил",
+                    "/mute Player permanent Повторный флуд" to "mute Player permanent Повторный флуд",
+                    "/kick@RusCraftingTest Player Причина" to "kick Player Причина",
+                    "/mc kick Player Причина" to "kick Player Причина",
+                    "/mc command proxy list" to "command proxy list",
+                ).forEach { (input, expected) ->
+                    bot.onUpdateReceived(telegramUpdate(777, null, "staff", input, userId = 777, chatType = "private"))
+                    commands.last() shouldBe StaffRequest("telegram:777:42", "telegram", "777", 1_700_000_000_000, expected)
+                    StaffCommands.parse(commands.last().input)?.server shouldBe "proxy"
+                }
+                replies.size shouldBe commands.size
+                replies.all { it.protectContent == true && it.disableWebPagePreview == true } shouldBe true
+            }
+        }
+    }
+
+    "moderation shortcuts never execute or enter public relay from groups forwarded edited anonymous or bot messages" {
+        val commands = mutableListOf<StaffRequest>()
+        val relay = RecordingTelegramRelay()
+        val sync = mockk<ChannelSyncService>(relaxed = true)
+        val previousSync = Velocity.channelSync
+        Velocity.channelSync = sync
+        try {
+            withTelegramStaffRuntime(commands) { runtime ->
+                TelegramBot(
+                    config = TestTelegramConfig(chatDestination = TelegramDestination("-100100", 7)),
+                    scheduler = TestTaskScheduler(),
+                    inboundRelay = relay,
+                ).use { bot ->
+                    listOf("/kick Player Причина", "/ban Player 7d Причина", "/mute Player 10m Причина", "/mc kick Player Причина").forEach { text ->
+                        bot.onUpdateReceived(telegramUpdate(-100100, 7, "staff", text, userId = 777))
+                        bot.onUpdateReceived(telegramUpdate(-100100, 7, "staff", text.replaceFirst(' ', '\n'), userId = 777))
+                        val edited = telegramUpdate(-100100, 7, "staff", text, userId = 777).message
+                        bot.onUpdateReceived(Update().also { it.editedMessage = edited })
+                        bot.onUpdateReceived(Update().also { it.editedChannelPost = edited })
+                    }
+                    fun privateAttempt(change: (Message) -> Unit) {
+                        val update = telegramUpdate(777, null, "staff", "/kick Player Причина", userId = 777, chatType = "private")
+                        change(update.message)
+                        bot.onUpdateReceived(update)
+                    }
+                    privateAttempt { it.forwardDate = 1 }
+                    privateAttempt { it.forwardOrigin = mockk() }
+                    privateAttempt { it.senderChat = Chat(-100100, "channel") }
+                    privateAttempt { it.from.isBot = true }
+                    privateAttempt { it.from = null }
+                    privateAttempt { it.chat = Chat(778, "private") }
+                    privateAttempt { it.text = "/kick@AnotherBot Player Причина" }
+                    every { runtime.config.telegramCommandsEnabled } returns false
+                    privateAttempt { }
+                    every { runtime.config.telegramCommandsEnabled } returns true
+                    every { StaffBridgeModule.runtime } returns null
+                    bot.onUpdateReceived(telegramUpdate(-100100, 7, "staff", "/kick Player Причина", userId = 777))
+                    every { StaffBridgeModule.runtime } returns runtime
+                    bot.close()
+                    privateAttempt { }
+                }
+            }
+            commands shouldBe emptyList()
+            relay.discordChat shouldBe null
+            verify(exactly = 0) { sync.relayTelegram(any()) }
+            verify(exactly = 0) { sync.editTelegram(any()) }
+        } finally {
+            Velocity.channelSync = previousSync
+        }
+    }
+
+    "private help preserves configured player text and appends moderation syntax only while enabled" {
+        val scheduler = TestTaskScheduler()
+        val replies = mutableListOf<SendMessage>()
+        withTelegramStaffRuntime(mutableListOf()) { runtime ->
+            TelegramBot(
+                config = TestTelegramConfig(identityEnabled = true, identityMessages = mapOf("help" to "Настроенная справка игрока")),
+                scheduler = scheduler,
+                requestExecutor = replies::add,
+                identityService = testIdentityService(),
+            ).use { bot ->
+                bot.onUpdateReceived(telegramUpdate(777, null, "staff", "/help", userId = 777, chatType = "private"))
+                scheduler.executeImmediate()
+                scheduler.executeImmediate()
+                replies.last().text shouldContain "Настроенная справка игрока"
+                listOf("/kick", "/ban", "/mute", "/mc command proxy").forEach { replies.last().text shouldContain it }
+                every { runtime.config.telegramCommandsEnabled } returns false
+                bot.onUpdateReceived(telegramUpdate(777, null, "staff", "/help", userId = 777, chatType = "private"))
+                scheduler.executeImmediate()
+                scheduler.executeImmediate()
+                replies.last().text shouldBe "Настроенная справка игрока"
+            }
+        }
+    }
+
     "unknown private slash command returns the command help" {
         val scheduler = TestTaskScheduler()
         val requests = mutableListOf<SendMessage>()
@@ -798,4 +917,24 @@ private fun testIdentityService(): TelegramIdentityService {
         codeGenerator = { "ABCDEFGH" },
         idGenerator = { "challenge-${++challengeId}" },
     )
+}
+
+private fun withTelegramStaffRuntime(requests: MutableList<StaffRequest>, block: (StaffBridgeRuntime) -> Unit) {
+    val service = mockk<StaffCommandService>()
+    val staffConfig = mockk<StaffBridgeConfig> {
+        every { telegramCommandsEnabled } returns true
+        every { message(any()) } answers { StaffBridgeConfig.DEFAULT_MESSAGES.getValue(firstArg()) }
+    }
+    val runtime = mockk<StaffBridgeRuntime> {
+        every { config } returns staffConfig
+        every { commands } returns service
+    }
+    every { service.execute(capture(requests)) } returns CompletableFuture.completedFuture("Команда передана.")
+    mockkObject(StaffBridgeModule)
+    every { StaffBridgeModule.runtime } returns runtime
+    try {
+        block(runtime)
+    } finally {
+        unmockkObject(StaffBridgeModule)
+    }
 }

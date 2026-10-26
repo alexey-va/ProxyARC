@@ -57,6 +57,18 @@ class StaffBridgeTest : FreeSpec({
         StaffCommands.parse("command spawn list")?.server shouldBe "spawn"
     }
 
+    "kick uses the bounded proxy moderation grammar without a duration" {
+        StaffCommands.parse("kick Player Повторный флуд") shouldBe
+            StaffCommand("proxy", "kick Player Повторный флуд", "litebans.kick", "kick")
+        StaffCommands.parse("KICK Player ${"x".repeat(256)}")?.line shouldBe "kick Player ${"x".repeat(256)}"
+        listOf("kick", "kick Player", "kick Player    ", "kick -s reason", "kick Player-name reason",
+            "kick ${"x".repeat(17)} reason", "kick Player -s reason", "kick Player reason -N",
+            "kick Player reason\nstop", "kick Player reason\t-s", "kick Player reason\u0000stop",
+            "kick Player reason\u2028stop", "kick Player reason\u2029stop", "kick Player ${"x".repeat(257)}").forEach {
+            StaffCommands.parse(it) shouldBe null
+        }
+    }
+
     "proxy credential and execution-wrapper floor includes the ARC mandatory corpus in namespaced and CMI forms" {
         val arcFloor = setOf(
             "l", "login", "register", "reg", "changepassword", "changepass", "password", "unregister", "2fa", "totp",
@@ -130,6 +142,44 @@ class StaffBridgeTest : FreeSpec({
         }
     }
 
+    "kick requires its native permission both before and after authorization refresh" {
+        val identity = StaffIdentity(UUID.randomUUID(), "Moderator")
+        val config = testConfig()
+        val permissions = ArrayList<String>()
+        val calls = AtomicInteger()
+        fun permittedActor(allowed: Boolean) = StaffActor(identity, false) { permission ->
+            permissions += permission
+            allowed && permission == "litebans.kick"
+        }
+        var actor = permittedActor(false)
+        var now = 10_000L
+        StaffCommandService(config, Files.createTempDirectory("staff-kick-permission"), { _, _ -> identity }, {
+            CompletableFuture.completedFuture(actor)
+        }, { _, _, command ->
+            command shouldBe StaffCommand("proxy", "kick Player reason", "litebans.kick", "kick")
+            calls.incrementAndGet()
+            CompletableFuture.completedFuture(StaffExecutionResult(true, emptyList()))
+        }, clock = { now }).use { service ->
+            fun execute(eventId: String) = service.execute(StaffRequest(eventId, "discord", "100", now, "kick Player reason"))
+                .get(5, TimeUnit.SECONDS)
+            execute("discord:100") shouldBe config.message("denied")
+            permissions shouldBe listOf("litebans.kick")
+            actor = StaffActor(identity, false, refresh = { permittedActor(false) }) { permission ->
+                permissions += permission
+                permission == "litebans.kick"
+            }
+            now += 3_000
+            execute("discord:101") shouldBe config.message("denied")
+            permissions shouldBe List(3) { "litebans.kick" }
+            calls.get() shouldBe 0
+            actor = permittedActor(true)
+            now += 3_000
+            execute("discord:102") shouldBe config.message("no-output")
+            permissions shouldBe List(5) { "litebans.kick" }
+            calls.get() shouldBe 1
+        }
+    }
+
     "revoked loaded staff authorization cannot reach dispatch after asynchronous work" {
         val identity = StaffIdentity(UUID.randomUUID(), "Admin")
         val config = testConfig()
@@ -194,15 +244,17 @@ class StaffBridgeTest : FreeSpec({
         val actor = StaffActor(StaffIdentity(id, "Moderator"), false) { true }
         every { proxy.commandManager } returns commands
         every { commands.hasCommand("tempmute") } returns true
+        every { commands.hasCommand("kick") } returns true
         every { proxy.getPlayer(id) } returns Optional.empty()
         every { commands.executeAsync(any<CommandSource>(), any()) } returns CompletableFuture.completedFuture(true)
         StaffCommandDispatcher(proxy, testConfig()).use { dispatcher ->
-            val cmd = StaffCommands.parse("mute Player 10m spam")!!
-            dispatcher.execute(UUID.randomUUID(), actor, cmd).join().dispatched shouldBe false
+            val moderation = listOf("mute Player 10m spam", "kick Player spam").map { StaffCommands.parse(it)!! }
+            moderation.forEach { cmd -> dispatcher.execute(UUID.randomUUID(), actor, cmd).join().dispatched shouldBe false }
             verify(exactly = 0) { commands.executeAsync(any<CommandSource>(), any()) }
             every { proxy.getPlayer(id) } returns Optional.of(player)
-            dispatcher.execute(UUID.randomUUID(), actor, cmd).join().dispatched shouldBe true
+            moderation.forEach { cmd -> dispatcher.execute(UUID.randomUUID(), actor, cmd).join().dispatched shouldBe true }
             verify(exactly = 1) { commands.executeAsync(player, "tempmute Player 10m spam") }
+            verify(exactly = 1) { commands.executeAsync(player, "kick Player spam") }
         }
     }
 

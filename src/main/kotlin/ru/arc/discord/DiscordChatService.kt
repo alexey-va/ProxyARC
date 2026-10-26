@@ -84,7 +84,8 @@ internal class DiscordChatService(
     }
 
     fun onMessageUpdate(event: MessageUpdateEvent) {
-        if (ru.arc.staff.StaffBridgeModule.protectedDiscordChannel(event.channel.id) || event.message.contentRaw.startsWith("!mc")) return
+        if (ru.arc.staff.StaffBridgeModule.protectedDiscordChannel(event.channel.id) ||
+            ru.arc.staff.StaffDiscordListener.isCommandMessage(event.message.contentRaw)) return
         if (event.author.isBot || event.message.isWebhookMessage) return
         val (text, technical) = codec.discordToChannelSync(event.message)
         if (text.isBlank()) return

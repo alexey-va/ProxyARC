@@ -97,6 +97,9 @@ import ru.arc.transport.TransportOutageState
 import ru.arc.chat.ExternalChatRenderer
 import ru.arc.chat.ProxyGlobalChat
 import ru.arc.chat.ProxyGlobalChatSource
+import ru.arc.staff.StaffBridgeModule
+import ru.arc.staff.StaffCommands
+import ru.arc.staff.StaffRequest
 import java.io.ByteArrayInputStream
 import java.io.Serializable
 import java.util.Base64
@@ -207,7 +210,7 @@ open class TelegramBot(
     }
 
     private fun relayGenericEdit(incoming: Message) {
-        if (incoming.text?.substringBefore(' ')?.substringBefore('@') == "/mc") return
+        if (incoming.text?.let(::staffCommandVerb) != null) return
         if (incoming.from?.isBot == true) return
         val directText = incoming.text?.takeIf(String::isNotBlank)
         val text = directText ?: incoming.caption?.takeIf(String::isNotBlank) ?: return
@@ -225,17 +228,18 @@ open class TelegramBot(
     }
 
     private fun handleStaffCommand(incoming: Message, text: String): Boolean {
-        val verb = text.substringBefore(' ')
-        if (verb.substringBefore('@') != "/mc") return false
-        val runtime = ru.arc.staff.StaffBridgeModule.runtime ?: return true
+        val verb = staffCommandVerb(text) ?: return false
+        val command = verb.substringBefore('@').removePrefix("/")
+        val runtime = StaffBridgeModule.runtime ?: return true
         if (!runtime.config.telegramCommandsEnabled || closed.get()) return true
         val author = incoming.from ?: return true
         if (!incoming.isUserMessage || incoming.chatId != author.id || incoming.senderChat != null ||
             incoming.forwardDate != null || incoming.forwardOrigin != null) return true
         if ('@' in verb && !verb.substringAfter('@').equals(botUsername, ignoreCase = true)) return true
-        runtime.commands.execute(ru.arc.staff.StaffRequest(
+        runtime.commands.execute(StaffRequest(
             "telegram:${incoming.chatId}:${incoming.messageId}", "telegram", author.id.toString(),
-            incoming.date.toLong() * 1000, text.removePrefix(verb).trim(),
+            incoming.date.toLong() * 1000,
+            if (command == "mc") text.removePrefix(verb).trim() else command + text.removePrefix(verb),
         )).thenAccept { result ->
             if (!closed.get()) executeWhenOpen(SendMessage(incoming.chatId.toString(), result.take(3500)).apply {
                 protectContent = true
@@ -287,7 +291,7 @@ open class TelegramBot(
         val command = parts.firstOrNull()?.substringBefore('@')?.lowercase() ?: return false
         if (command !in setOf("/start", "/status", "/verify", "/unlink", "/help")) {
             if (command.startsWith("/") && message.chat.type == "private") {
-                replyIdentity(message, config.identityMessage("help"))
+                replyIdentity(message, commandHelp(message))
                 return true
             }
             return false
@@ -311,7 +315,7 @@ open class TelegramBot(
                         identity.findByTelegramUserId(author.id)?.let { link ->
                             config.identityMessage("welcome-linked", mapOf("player_name" to link.playerName))
                         } ?: config.identityMessage("welcome-not-linked")
-                    "/help" -> config.identityMessage("help")
+                    "/help" -> commandHelp(message)
                     "/verify" ->
                         if (parts.size == 1) {
                             identity.findByTelegramUserId(author.id)?.let { link ->
@@ -370,6 +374,14 @@ open class TelegramBot(
             replyIdentity(message, response, showCommunity)
         }
         return true
+    }
+
+    private fun commandHelp(message: Message): String {
+        val help = config.identityMessage("help")
+        val runtime = StaffBridgeModule.runtime
+        return if (message.isUserMessage && runtime?.config?.telegramCommandsEnabled == true) {
+            "$help\n\n${runtime.config.message("help")}"
+        } else help
     }
 
     private fun replyIdentity(
@@ -947,6 +959,12 @@ open class TelegramBot(
         private val FORMAT_TOKEN = Regex("%(?:sender|message)%")
         private const val TELEGRAM_MESSAGE_LIMIT = 4_096
 
+        private fun staffCommandVerb(text: String): String? =
+            text.takeWhile { !it.isWhitespace() }.takeIf { verb ->
+                val command = verb.substringBefore('@')
+                command == "/mc" || (command.startsWith('/') && command.drop(1) in StaffCommands.SHORTCUTS)
+            }
+
         private fun telegramDisplayName(
             firstName: String?,
             lastName: String?,
@@ -966,6 +984,10 @@ open class TelegramBot(
                         BotCommand("status", "Проверить привязку"),
                         BotCommand("unlink", "Отвязать Minecraft-аккаунт"),
                         BotCommand("help", "Показать доступные команды"),
+                        BotCommand("kick", "Отключить игрока (модерация)"),
+                        BotCommand("ban", "Заблокировать игрока (модерация)"),
+                        BotCommand("mute", "Ограничить чат игрока (модерация)"),
+                        BotCommand("mc", "Служебные команды Minecraft (модерация)"),
                     )
             }
 
