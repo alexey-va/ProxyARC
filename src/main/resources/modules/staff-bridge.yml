@@ -13,7 +13,8 @@ discord:
   console-channels: {}
 telegram:
   commands-enabled: true
-  # Staff commands are accepted only in direct messages to the bot.
+  # Admins can send commands in private chats, groups and topics; replies are always private.
+  # Moderators retain access only in direct messages to the bot.
 spies:
   enabled: true
   allowed-origins: [spawn, survival, parkour]
@@ -23,13 +24,25 @@ backends: {}
 # Literal text; no MiniMessage/HTML parsing is applied to external replies.
 messages:
   denied: "Нет доступа. Нужна действующая привязка к игровому аккаунту администратора или модератора."
-  admin-required: "Консоль игровых серверов доступна только администраторам."
+  admin-required: "Эта команда доступна только администраторам."
   unavailable: "Служебный мост временно недоступен. Команда не отправлена."
   unknown-outcome: "Ответ не получен. Команда могла выполниться; проверьте состояние перед новой попыткой."
   duplicate: "Это событие уже обработано. Повторная команда не отправлена."
   stale: "Сообщение устарело. Отправьте новую команду."
   rate-limited: "Слишком часто. Подождите несколько секунд."
-  invalid: "Проверьте команду: mute/ban <ник> <10m|2h|7d|permanent> <причина>; unmute/unban <ник>; command <proxy|сервер> <команда>."
+  invalid: "Проверьте команду: /kick <ник> <причина>; /mute или /ban <ник> <10m|2h|7d|permanent> <причина>; /mc unmute/unban <ник>; /mc command <proxy|сервер> <команда>."
+  help: |-
+    Модерация Minecraft:
+    /kick <ник> <причина>
+    /ban <ник> <срок> <причина>
+    /mute <ник> <срок> <причина>
+    Срок: 10m, 2h, 7d или permanent.
+    /mc unban <ник> — снять бан
+    /mc unmute <ник> — снять мут
+    /mc command proxy <команда> — другая команда Velocity
+    Администраторы могут отправлять команды в любых чатах с ботом. Ответ приходит в личку.
+    В группах указывайте бота: /kick@%bot_username% <ник> <причина>. Сначала откройте личный чат с ботом и нажмите «Старт».
+    Модераторы могут писать команды в личку боту, находясь в Minecraft под связанным аккаунтом.
   accepted: "Команда передана. Ответ команды:"
   no-output: "Команда передана. Текстовый ответ пока не получен."
   not-dispatched: "Команда не выполнена: нет прав или команда не найдена."

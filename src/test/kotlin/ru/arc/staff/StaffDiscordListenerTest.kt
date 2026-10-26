@@ -6,19 +6,35 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
+import io.mockk.verify
 import net.dv8tion.jda.api.JDA
 import net.dv8tion.jda.api.entities.Guild
+import net.dv8tion.jda.api.entities.Message
+import net.dv8tion.jda.api.entities.channel.ChannelType
+import net.dv8tion.jda.api.entities.channel.concrete.PrivateChannel
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent
 import net.dv8tion.jda.api.interactions.InteractionHook
 import net.dv8tion.jda.api.interactions.commands.build.CommandData
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData
 import net.dv8tion.jda.api.requests.restaction.interactions.ReplyCallbackAction
+import net.dv8tion.jda.api.requests.restaction.CacheRestAction
+import net.dv8tion.jda.api.requests.restaction.MessageCreateAction
 import java.time.OffsetDateTime
 import java.util.concurrent.CompletableFuture
 import java.util.function.Consumer
 
 class StaffDiscordListenerTest : FreeSpec({
+    "literal command output stays within Discord's limit after escaping code fences" {
+        val formatted = StaffDiscordGateway.literal("`".repeat(1600))
+        formatted.length shouldBe 2000
+        formatted.startsWith("```\n") shouldBe true
+        formatted.endsWith("\n```") shouldBe true
+        val body = formatted.removePrefix("```\n").removeSuffix("\n```")
+        body.contains("`\u200b") shouldBe true
+        body.contains("```") shouldBe false
+    }
+
     "native shortcuts and mc subcommands share required argument definitions" {
         val commands = mutableListOf<CommandData>()
         val guild = mockk<Guild>()
@@ -47,7 +63,7 @@ class StaffDiscordListenerTest : FreeSpec({
         }
     }
 
-    "native moderation commands preserve the event identity and shared pipeline behind channel guild and ACL gates" {
+    "native commands require admin outside the confidential command channel and retain guild and sender guards" {
         val requests = mutableListOf<StaffRequest>()
         withDiscordStaffRuntime(requests) { runtime ->
             val listener = StaffDiscordListener()
@@ -78,25 +94,57 @@ class StaffDiscordListenerTest : FreeSpec({
                 requests.last().input shouldBe expected
             }
             requests.size shouldBe 6
+            requests.all { !it.adminOnly } shouldBe true
             every { event.name } returns "kick"
             every { event.guild!!.id } returns "other-guild"
             listener.onSlashCommandInteraction(event)
+            requests.size shouldBe 6
             every { event.guild!!.id } returns runtime.config.guildId
             every { event.channel.id } returns "other-channel"
             listener.onSlashCommandInteraction(event)
+            requests.last().adminOnly shouldBe true
             every { event.channel.id } returns runtime.config.commandChannelId
             every { runtime.discord.channel(any(), false) } returns null
             listener.onSlashCommandInteraction(event)
-            requests.size shouldBe 6
+            requests.last().adminOnly shouldBe true
+            every { event.channel.id } returns "thread-id"
+            every { event.channel.type } returns ChannelType.GUILD_PUBLIC_THREAD
+            listener.onSlashCommandInteraction(event)
+            requests.last().adminOnly shouldBe true
+            requests.size shouldBe 9
+            every { event.user.isBot } returns true
+            listener.onSlashCommandInteraction(event)
+            every { event.user.isBot } returns false
+            every { event.member } returns null
+            listener.onSlashCommandInteraction(event)
+            every { event.member } returns mockk()
+            every { event.guild } returns null
+            listener.onSlashCommandInteraction(event)
+            requests.size shouldBe 9
+            verify(exactly = 9) { event.deferReply(true) }
         }
     }
 
-    "text aliases are consumed before public chat even when denied or disabled" {
+    "text aliases from public channels and bot DMs require admin and reply only to the author" {
         val requests = mutableListOf<StaffRequest>()
         withDiscordStaffRuntime(requests) { runtime ->
             val event = mockk<MessageReceivedEvent>(relaxed = true)
+            val service = runtime.commands
+            val gateway = runtime.discord
+            val sourceChannel = event.channel
+            val privateChannel = mockk<PrivateChannel>()
+            val openPrivate = mockk<CacheRestAction<PrivateChannel>>()
+            val sendPrivate = mockk<MessageCreateAction>()
+            val result = "Результат только для автора"
+            every { service.execute(capture(requests)) } returns CompletableFuture.completedFuture(result)
+            every { event.author.openPrivateChannel() } returns openPrivate
+            every { openPrivate.submit() } returns CompletableFuture.completedFuture(privateChannel)
+            every { privateChannel.sendMessage(any<String>()) } returns sendPrivate
+            every { sendPrivate.setAllowedMentions(emptyList()) } returns sendPrivate
+            every { sendPrivate.submit() } returns CompletableFuture.completedFuture(mockk<Message>())
             every { event.isFromGuild } returns true
             every { event.guild.id } returns runtime.config.guildId
+            every { event.member } returns mockk()
             every { event.channel.id } returns runtime.config.commandChannelId
             every { event.author.isBot } returns false
             every { event.message.isWebhookMessage } returns false
@@ -107,13 +155,47 @@ class StaffDiscordListenerTest : FreeSpec({
                 every { event.message.contentRaw } returns text
                 StaffDiscordListener.consumeMessage(event) shouldBe true
                 requests.last().input shouldBe if (text.startsWith("!mc ")) text.removePrefix("!mc ") else text.drop(1)
+                requests.last().adminOnly shouldBe false
                 StaffDiscordListener.isCommandMessage(text.replaceFirst(' ', '\n')) shouldBe true
             }
             every { event.channel.id } returns "public-channel"
             StaffDiscordListener.consumeMessage(event) shouldBe true
+            requests.last().adminOnly shouldBe true
+            every { event.channel.id } returns runtime.config.commandChannelId
+            every { runtime.discord.channel(any(), false) } returns null
+            StaffDiscordListener.consumeMessage(event) shouldBe true
+            requests.last().adminOnly shouldBe true
+            every { event.isFromGuild } returns false
+            every { event.channel.id } returns "dm-channel"
+            every { event.channel.type } returns ChannelType.PRIVATE
+            StaffDiscordListener.consumeMessage(event) shouldBe true
+            requests.last().adminOnly shouldBe true
+            every { openPrivate.submit() } returns CompletableFuture.failedFuture(IllegalStateException("DM blocked"))
+            StaffDiscordListener.consumeMessage(event) shouldBe true
+            requests.size shouldBe 8
+            every { event.channel.type } returns ChannelType.GROUP
+            StaffDiscordListener.consumeMessage(event) shouldBe true
+            every { event.isFromGuild } returns true
+            every { event.guild.id } returns "other-guild"
+            StaffDiscordListener.consumeMessage(event) shouldBe true
+            every { event.guild.id } returns runtime.config.guildId
+            every { event.author.isBot } returns true
+            StaffDiscordListener.consumeMessage(event) shouldBe true
+            every { event.author.isBot } returns false
+            every { event.message.isWebhookMessage } returns true
+            StaffDiscordListener.consumeMessage(event) shouldBe true
+            every { event.message.isWebhookMessage } returns false
+            every { event.member } returns null
+            StaffDiscordListener.consumeMessage(event) shouldBe true
             every { StaffBridgeModule.runtime } returns null
             StaffDiscordListener.consumeMessage(event) shouldBe true
-            requests.size shouldBe 4
+            requests.size shouldBe 8
+            verify(exactly = 4) { gateway.reply("1563455633569751070", result) }
+            verify(exactly = 0) { gateway.reply("public-channel", any()) }
+            verify(exactly = 0) { gateway.reply("dm-channel", any()) }
+            verify(exactly = 3) { privateChannel.sendMessage(StaffDiscordGateway.literal(result)) }
+            verify(exactly = 3) { sendPrivate.setAllowedMentions(emptyList()) }
+            verify(exactly = 0) { sourceChannel.sendMessage(any<String>()) }
             StaffDiscordListener.isCommandMessage("!kickoff Player") shouldBe false
             StaffDiscordListener.isCommandMessage("ordinary chat") shouldBe false
         }

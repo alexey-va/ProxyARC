@@ -16,6 +16,7 @@ internal data class StaffRequest(
     val providerUserId: String,
     val createdAt: Long,
     val input: String,
+    val adminOnly: Boolean = false,
 )
 
 internal data class StaffExecutionResult(val dispatched: Boolean, val output: List<String>)
@@ -47,11 +48,11 @@ internal class StaffCommandService(
             }
             val now = clock()
             if (now - request.createdAt !in -5_000..120_000) return@submit rejected("stale")
-            val command = StaffCommands.parse(request.input) ?: return@submit rejected("invalid")
+            val command = StaffCommands.parse(request.input)?.copy(adminOnly = request.adminOnly) ?: return@submit rejected("invalid")
             val linked = identity(request.provider, request.providerUserId) ?: return@submit rejected("denied")
             val actor = authorize(linked).get(5, TimeUnit.SECONDS) ?: return@submit rejected("denied", linked.uuid)
             if (closed.get() || identity(request.provider, request.providerUserId) != linked) return@submit rejected("denied", linked.uuid)
-            if (command.server != "proxy" && !actor.admin) return@submit rejected("admin-required", linked.uuid)
+            if ((command.adminOnly || command.server != "proxy") && !actor.admin) return@submit rejected("admin-required", linked.uuid)
             if (command.server != "proxy" && command.server !in config.backends) return@submit rejected("invalid", linked.uuid)
             if (command.permission != null && !actor.permission(command.permission)) return@submit rejected("denied", linked.uuid)
             if (!ledger.claim(request.eventId, now)) return@submit rejected("duplicate", linked.uuid)
@@ -59,7 +60,7 @@ internal class StaffCommandService(
             // Once dispatch starts, failures/timeouts are ambiguous and the reserved event is never reissued.
             if (closed.get() || identity(request.provider, request.providerUserId) != linked) return@submit rejected("denied", linked.uuid)
             val currentActor = actor.current()?.takeIf { it.identity == linked } ?: return@submit rejected("denied", linked.uuid)
-            if (command.server != "proxy" && !currentActor.admin) return@submit rejected("admin-required", linked.uuid)
+            if ((command.adminOnly || command.server != "proxy") && !currentActor.admin) return@submit rejected("admin-required", linked.uuid)
             if (command.permission != null && !currentActor.permission(command.permission)) return@submit rejected("denied", linked.uuid)
             val id = UUID.nameUUIDFromBytes(request.eventId.toByteArray(Charsets.UTF_8))
             try {

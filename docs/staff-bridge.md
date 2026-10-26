@@ -5,11 +5,23 @@ Discord observations. `modules/staff-bridge.yml` is disabled in bundled defaults
 Runtime destinations and backend credentials belong in the operator configuration.
 
 Discord accepts standalone `/kick`, `/ban`, `/mute` and the existing native `/mc`
-subcommands in the dedicated command channel. The text aliases are `!kick`,
-`!ban`, `!mute` and `!mc`. Telegram accepts `/kick`, `/ban`, `/mute` and `/mc` only
-in a direct chat with the bot, including the `@bot_username` suffix. Edited,
-forwarded and anonymous Telegram commands do not execute. Staff commands are
-consumed before public chat relay even in the wrong channel or with the bridge disabled.
+subcommands in the configured guild. Administrators can use any channel or thread;
+moderators retain access in the exact dedicated command channel only while its
+confidential ACL passes validation. Slash replies remain ephemeral. The text aliases
+are `!kick`, `!ban`, `!mute` and `!mc`; administrators may also send them directly to
+the bot. Results from text commands outside the confidential command channel go
+only to the author's DM, with no public acknowledgement or fallback. Text commands
+from another guild do not execute. Slash commands remain guild-scoped.
+
+Telegram accepts `/kick`, `/ban`, `/mute` and `/mc` from administrators in private
+chats, groups, supergroups and their topics. Moderators retain private-chat access.
+All replies go to the author's private chat; group commands and results never enter
+the public relay. The original message typed in a group remains visible there.
+Open the bot's private chat and press Start before using group commands. With
+[Telegram privacy mode](https://core.telegram.org/bots/faq#what-messages-will-my-bot-get),
+address the bot explicitly, for example `/kick@ruscrafting_bot Player Причина`.
+Edited, forwarded, anonymous and bot-authored commands do not execute. Staff commands
+are consumed before public chat relay even in denied contexts or with the bridge disabled.
 Telegram group creation and group spy feeds are outside this feature.
 
 ```text
@@ -40,7 +52,10 @@ only Spawn and Survival while still observing Parkour.
 Every request resolves the provider's existing authenticated UUID link and freshly
 loads the linked user's LuckPerms groups. Group and permission checks use the user's
 current effective query options, or the proxy's static query options when offline;
-context restrictions are never ignored. Loaded state is checked again immediately
+context restrictions are never ignored. Public-channel/group requests and Discord
+DM requests carry an administrator-only requirement through the shared command
+service and dispatcher; a moderator cannot use these routes by supplying valid
+punishment arguments. Loaded state is checked again immediately
 before dispatch, and a final Velocity command-event guard rejects an administrator
 source after role revocation or module close. Only configured `admin` and `moderator` groups qualify; Discord
 role membership alone cannot execute a Minecraft command. Discord role sync uses
@@ -71,8 +86,8 @@ UUID, shared across both providers. An ambiguous timeout is reported as unknown
 and never retried automatically. Audit logs contain provider, actor UUID, event ID,
 operation, destination and outcome; they contain neither raw commands nor reasons.
 
-Discord staff channels must be disjoint from public bot channels and every generic
-channel-sync mapping. Before every queued send, the live JDA state must be connected,
+Dedicated Discord staff channels must be disjoint from public bot channels and every
+generic channel-sync mapping. Before every queued staff-channel send, the live JDA state must be connected,
 `@everyone` must explicitly deny View Channel, and no unapproved role/member may
 explicitly allow it. Global Discord administrators and the guild owner intrinsically
 bypass channel ACLs and are trusted as administrators. Admin log channels allow only

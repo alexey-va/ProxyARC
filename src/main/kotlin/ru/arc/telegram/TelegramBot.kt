@@ -233,18 +233,24 @@ open class TelegramBot(
         val runtime = StaffBridgeModule.runtime ?: return true
         if (!runtime.config.telegramCommandsEnabled || closed.get()) return true
         val author = incoming.from ?: return true
-        if (!incoming.isUserMessage || incoming.chatId != author.id || incoming.senderChat != null ||
+        val privateChat = incoming.chat.type == "private"
+        if (incoming.chat.type !in setOf("private", "group", "supergroup") ||
+            (privateChat && incoming.chatId != author.id) || incoming.senderChat != null ||
             incoming.forwardDate != null || incoming.forwardOrigin != null) return true
         if ('@' in verb && !verb.substringAfter('@').equals(botUsername, ignoreCase = true)) return true
         runtime.commands.execute(StaffRequest(
             "telegram:${incoming.chatId}:${incoming.messageId}", "telegram", author.id.toString(),
             incoming.date.toLong() * 1000,
             if (command == "mc") text.removePrefix(verb).trim() else command + text.removePrefix(verb),
+            adminOnly = !privateChat,
         )).thenAccept { result ->
-            if (!closed.get()) executeWhenOpen(SendMessage(incoming.chatId.toString(), result.take(3500)).apply {
+            if (!closed.get()) executeWhenOpen(SendMessage(author.id.toString(), result.take(3500)).apply {
                 protectContent = true
                 disableWebPagePreview = true
-            })
+            }).whenComplete { _, failure ->
+                if (failure != null) log.warn("Staff Telegram private reply failed user={} chat={} message={} cause={}",
+                    author.id, incoming.chatId, incoming.messageId, failure.javaClass.simpleName)
+            }
         }
         return true
     }
@@ -380,7 +386,7 @@ open class TelegramBot(
         val help = config.identityMessage("help")
         val runtime = StaffBridgeModule.runtime
         return if (message.isUserMessage && runtime?.config?.telegramCommandsEnabled == true) {
-            "$help\n\n${runtime.config.message("help")}"
+            "$help\n\n${runtime.config.message("help").replace("%bot_username%", botUsername)}"
         } else help
     }
 

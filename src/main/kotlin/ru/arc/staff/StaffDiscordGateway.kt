@@ -84,7 +84,7 @@ internal class StaffDiscordGateway(private val config: StaffBridgeConfig, privat
 
     companion object {
         private val log = LoggerFactory.getLogger(StaffDiscordGateway::class.java)
-        fun literal(text: String): String = "```\n${text.replace("```", "`\u200b``")}\n```"
+        fun literal(text: String): String = "```\n${text.replace("`", "`\u200b").take(1992)}\n```"
     }
 }
 

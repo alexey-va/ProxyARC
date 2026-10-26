@@ -1,6 +1,7 @@
 package ru.arc.staff
 
 import net.dv8tion.jda.api.JDA
+import net.dv8tion.jda.api.entities.channel.ChannelType
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent
 import net.dv8tion.jda.api.hooks.ListenerAdapter
@@ -8,18 +9,18 @@ import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions
 import net.dv8tion.jda.api.interactions.commands.OptionType
 import net.dv8tion.jda.api.interactions.commands.build.Commands
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData
+import org.slf4j.LoggerFactory
 
 /** Discord's role restriction improves discovery; linked Minecraft authorization remains the execution gate. */
 internal class StaffDiscordListener : ListenerAdapter() {
     override fun onSlashCommandInteraction(event: SlashCommandInteractionEvent) {
         if (event.name != "mc" && event.name !in StaffCommands.SHORTCUTS) return
         val runtime = StaffBridgeModule.runtime
-        if (runtime == null || event.guild?.id != runtime.config.guildId ||
-            event.channel.id != runtime.config.commandChannelId || runtime.discord.channel(event.channel.id, false) == null ||
-            event.user.isBot || event.member == null) {
+        if (runtime == null || event.guild?.id != runtime.config.guildId || event.user.isBot || event.member == null) {
             event.reply("Служебная команда недоступна в этом канале.").setEphemeral(true).queue()
             return
         }
+        val adminOnly = event.channel.id != runtime.config.commandChannelId || runtime.discord.channel(event.channel.id, false) == null
         val input = when (val action = if (event.name == "mc") event.subcommandName else event.name) {
             "kick" -> "$action ${event.getOption("player")?.asString.orEmpty()} ${event.getOption("reason")?.asString.orEmpty()}"
             "mute", "ban" -> "$action ${event.getOption("player")?.asString.orEmpty()} ${event.getOption("duration")?.asString.orEmpty()} ${event.getOption("reason")?.asString.orEmpty()}"
@@ -29,15 +30,17 @@ internal class StaffDiscordListener : ListenerAdapter() {
         }
         event.deferReply(true).queue { hook ->
             runtime.commands.execute(StaffRequest("discord:${event.id}", "discord", event.user.id,
-                event.timeCreated.toInstant().toEpochMilli(), input)).thenAccept { output ->
+                event.timeCreated.toInstant().toEpochMilli(), input, adminOnly = adminOnly)).thenAccept { output ->
                 hook.editOriginal(StaffDiscordGateway.literal(output)).setAllowedMentions(emptyList()).queue()
             }
         }
     }
 
     companion object {
+        private val log = LoggerFactory.getLogger(StaffDiscordListener::class.java)
+
         fun register(api: JDA, config: StaffBridgeConfig) {
-            if (config.guildId.isEmpty() || config.commandChannelId.isEmpty()) return
+            if (config.guildId.isEmpty()) return
             val command = Commands.slash("mc", "Модерация Minecraft и служебные команды")
                 .setDefaultPermissions(DefaultMemberPermissions.ENABLED)
             val shortcuts = StaffCommands.SHORTCUTS.map { name ->
@@ -76,13 +79,27 @@ internal class StaffDiscordListener : ListenerAdapter() {
             val text = event.message.contentRaw
             if (!isCommandMessage(text)) return StaffBridgeModule.protectedDiscordChannel(event.channel.id)
             val runtime = StaffBridgeModule.runtime ?: return true
-            if (!event.isFromGuild || event.author.isBot || event.message.isWebhookMessage || event.guild.id != runtime.config.guildId ||
-                event.channel.id != runtime.config.commandChannelId || runtime.discord.channel(event.channel.id, false) == null) return true
+            if (event.author.isBot || event.message.isWebhookMessage) return true
+            if (event.isFromGuild) {
+                if (event.guild.id != runtime.config.guildId || event.member == null) return true
+            } else if (event.channel.type != ChannelType.PRIVATE) return true
+            val privateCommandChannel = event.isFromGuild && event.channel.id == runtime.config.commandChannelId &&
+                runtime.discord.channel(event.channel.id, false) != null
             runtime.commands.execute(StaffRequest("discord:${event.messageId}", "discord", event.author.id,
                 event.message.timeCreated.toInstant().toEpochMilli(),
                 if (text.takeWhile { !it.isWhitespace() } == "!mc") text.removePrefix("!mc").trim() else text.drop(1),
+                adminOnly = !privateCommandChannel,
             )).thenAccept { result ->
-                runtime.discord.reply(event.channel.id, result)
+                if (privateCommandChannel) {
+                    runtime.discord.reply(event.channel.id, result)
+                } else {
+                    event.author.openPrivateChannel().submit().thenCompose { channel ->
+                        channel.sendMessage(StaffDiscordGateway.literal(result.take(1800))).setAllowedMentions(emptyList()).submit()
+                    }.whenComplete { _, failure ->
+                        if (failure != null) log.warn("Staff Discord private reply failed user={} event={} cause={}",
+                            event.author.id, event.messageId, failure.javaClass.simpleName)
+                    }
+                }
             }
             return true
         }

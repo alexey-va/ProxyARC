@@ -13,7 +13,13 @@ internal data class StaffActor(
     /** Re-evaluates loaded LP state without blocking or loading on the native command thread. */
     fun current(): StaffActor? = if (refresh == null) this else refresh.invoke()
 }
-internal data class StaffCommand(val server: String, val line: String, val permission: String?, val action: String)
+internal data class StaffCommand(
+    val server: String,
+    val line: String,
+    val permission: String?,
+    val action: String,
+    val adminOnly: Boolean = false,
+)
 
 /** Formal command grammar. User-controlled names/durations/reasons cannot become LiteBans switches. */
 internal object StaffCommands {

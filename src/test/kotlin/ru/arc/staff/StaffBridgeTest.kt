@@ -122,6 +122,51 @@ class StaffBridgeTest : FreeSpec({
         }
     }
 
+    "public routes require an administrator without consuming denied events and retain native permissions" {
+        val config = testConfig()
+        val identity = StaffIdentity(UUID.randomUUID(), "Staff")
+        var actor = StaffActor(identity, false) { true }
+        var now = 10_000L
+        val dispatched = ArrayList<StaffCommand>()
+        val request = StaffRequest("discord:100", "discord", "100", now, "kick Player reason", adminOnly = true)
+        StaffCommandService(config, Files.createTempDirectory("staff-public-access"), { _, _ -> identity }, {
+            CompletableFuture.completedFuture(actor)
+        }, { _, _, command ->
+            dispatched += command
+            CompletableFuture.completedFuture(StaffExecutionResult(true, emptyList()))
+        }, clock = { now }).use { service ->
+            fun execute(input: StaffRequest) = service.execute(input).get(5, TimeUnit.SECONDS)
+            execute(request) shouldBe config.message("admin-required")
+            actor = StaffActor(identity, true) { false }
+            execute(request) shouldBe config.message("denied")
+            dispatched shouldBe emptyList()
+            actor = StaffActor(identity, true) { it == "litebans.kick" }
+            execute(request) shouldBe config.message("no-output")
+            dispatched.single() shouldBe StaffCommands.parse(request.input)!!.copy(adminOnly = true)
+            actor = StaffActor(identity, false) { it == "litebans.kick" }
+            now += 3_000
+            execute(request.copy(eventId = "discord:101", createdAt = now, adminOnly = false)) shouldBe config.message("no-output")
+            dispatched.last() shouldBe StaffCommands.parse(request.input)
+            dispatched.size shouldBe 2
+        }
+    }
+
+    "public route loses administrator access before service dispatch after a role downgrade" {
+        val identity = StaffIdentity(UUID.randomUUID(), "Staff")
+        val config = testConfig()
+        val calls = AtomicInteger()
+        val moderator = StaffActor(identity, false) { true }
+        val actor = StaffActor(identity, true, refresh = { moderator }) { true }
+        StaffCommandService(config, Files.createTempDirectory("staff-public-downgrade"), { _, _ -> identity }, {
+            CompletableFuture.completedFuture(actor)
+        }, { _, _, _ -> calls.incrementAndGet(); CompletableFuture.completedFuture(StaffExecutionResult(true, emptyList())) },
+            clock = { 10_000 }).use { service ->
+            service.execute(StaffRequest("telegram:100:1", "telegram", "100", 10_000, "kick Player reason", adminOnly = true))
+                .get(5, TimeUnit.SECONDS) shouldBe config.message("admin-required")
+            calls.get() shouldBe 0
+        }
+    }
+
     "identity is rechecked after asynchronous authorization" {
         val identity = StaffIdentity(UUID.randomUUID(), "Admin")
         var linked: StaffIdentity? = identity
@@ -208,6 +253,10 @@ class StaffBridgeTest : FreeSpec({
         authorized = null
         StaffCommandSource.guard(revokedEvent)
         revokedEvent.result.isAllowed shouldBe false
+        authorized = StaffActor(identity, false) { true }
+        val downgradedEvent = CommandExecuteEvent(source, "list")
+        StaffCommandSource.guard(downgradedEvent)
+        downgradedEvent.result.isAllowed shouldBe false
         authorized = StaffActor(identity, true) { true }
         val closedEvent = CommandExecuteEvent(source, "list")
         active = false
@@ -255,6 +304,27 @@ class StaffBridgeTest : FreeSpec({
             moderation.forEach { cmd -> dispatcher.execute(UUID.randomUUID(), actor, cmd).join().dispatched shouldBe true }
             verify(exactly = 1) { commands.executeAsync(player, "tempmute Player 10m spam") }
             verify(exactly = 1) { commands.executeAsync(player, "kick Player spam") }
+        }
+    }
+
+    "public dispatcher refuses an administrator downgraded to an online moderator without Player fallback" {
+        val proxy = mockk<ProxyServer>()
+        val commands = mockk<CommandManager>()
+        val player = mockk<Player>()
+        val identity = StaffIdentity(UUID.randomUUID(), "Staff")
+        val moderator = StaffActor(identity, false) { true }
+        val actor = StaffActor(identity, true, refresh = { moderator }) { true }
+        val command = StaffCommands.parse("kick Player reason")!!.copy(adminOnly = true)
+        every { proxy.commandManager } returns commands
+        every { commands.hasCommand("kick") } returns true
+        every { proxy.getPlayer(identity.uuid) } returns Optional.of(player)
+        every { commands.executeAsync(any<CommandSource>(), any()) } returns CompletableFuture.completedFuture(true)
+        StaffCommandDispatcher(proxy, testConfig()).use { dispatcher ->
+            dispatcher.execute(UUID.randomUUID(), actor, command).join().dispatched shouldBe false
+            verify(exactly = 0) { proxy.getPlayer(identity.uuid) }
+            verify(exactly = 0) { commands.executeAsync(any<CommandSource>(), any()) }
+            dispatcher.execute(UUID.randomUUID(), actor, command.copy(adminOnly = false)).join().dispatched shouldBe true
+            verify(exactly = 1) { commands.executeAsync(player, "kick Player reason") }
         }
     }
 

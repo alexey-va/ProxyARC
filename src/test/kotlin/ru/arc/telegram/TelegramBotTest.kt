@@ -686,11 +686,54 @@ class TelegramBotTest : FreeSpec({
                 }
                 replies.size shouldBe commands.size
                 replies.all { it.protectContent == true && it.disableWebPagePreview == true } shouldBe true
+                replies.all { it.chatId == "777" } shouldBe true
             }
         }
     }
 
-    "moderation shortcuts never execute or enter public relay from groups forwarded edited anonymous or bot messages" {
+    "group and topic moderation commands require admin and send results only to the author's private chat" {
+        val commands = mutableListOf<StaffRequest>()
+        val replies = mutableListOf<SendMessage>()
+        val relay = RecordingTelegramRelay()
+        val sync = mockk<ChannelSyncService>(relaxed = true)
+        val previousSync = Velocity.channelSync
+        Velocity.channelSync = sync
+        try {
+            withTelegramStaffRuntime(commands) {
+                TelegramBot(
+                    config = TestTelegramConfig(chatDestination = TelegramDestination("-100100", 7)),
+                    scheduler = TestTaskScheduler(),
+                    inboundRelay = relay,
+                    apiExecutor = { method ->
+                        replies += method as SendMessage
+                        CompletableFuture.completedFuture<Any>(Message())
+                    },
+                ).use { bot ->
+                    listOf("group" to null, "supergroup" to null, "supergroup" to 7).forEach { (chatType, threadId) ->
+                        listOf("/kick Player Причина", "/ban Player 7d Причина", "/mute Player 10m Причина", "/mc command proxy list", "/kick@RusCraftingTest Player Причина").forEach { text ->
+                            bot.onUpdateReceived(telegramUpdate(-100100, threadId, "staff", text, userId = 777, chatType = chatType))
+                            commands.last().adminOnly shouldBe true
+                            commands.last().providerUserId shouldBe "777"
+                            commands.last().eventId shouldBe "telegram:-100100:42"
+                            StaffCommands.parse(commands.last().input)?.server shouldBe "proxy"
+                            replies.last().chatId shouldBe "777"
+                            replies.last().messageThreadId shouldBe null
+                            replies.last().replyToMessageId shouldBe null
+                        }
+                    }
+                    commands.size shouldBe 15
+                    replies.size shouldBe commands.size
+                    replies.all { it.protectContent == true && it.disableWebPagePreview == true } shouldBe true
+                }
+            }
+            relay.discordChat shouldBe null
+            verify(exactly = 0) { sync.relayTelegram(any()) }
+        } finally {
+            Velocity.channelSync = previousSync
+        }
+    }
+
+    "moderation shortcuts never execute or enter public relay from forwarded edited anonymous bot or channel messages" {
         val commands = mutableListOf<StaffRequest>()
         val relay = RecordingTelegramRelay()
         val sync = mockk<ChannelSyncService>(relaxed = true)
@@ -702,34 +745,39 @@ class TelegramBotTest : FreeSpec({
                     config = TestTelegramConfig(chatDestination = TelegramDestination("-100100", 7)),
                     scheduler = TestTaskScheduler(),
                     inboundRelay = relay,
+                    apiExecutor = { error("Denied input must not trigger Telegram API") },
                 ).use { bot ->
                     listOf("/kick Player Причина", "/ban Player 7d Причина", "/mute Player 10m Причина", "/mc kick Player Причина").forEach { text ->
-                        bot.onUpdateReceived(telegramUpdate(-100100, 7, "staff", text, userId = 777))
-                        bot.onUpdateReceived(telegramUpdate(-100100, 7, "staff", text.replaceFirst(' ', '\n'), userId = 777))
                         val edited = telegramUpdate(-100100, 7, "staff", text, userId = 777).message
                         bot.onUpdateReceived(Update().also { it.editedMessage = edited })
                         bot.onUpdateReceived(Update().also { it.editedChannelPost = edited })
                     }
-                    fun privateAttempt(change: (Message) -> Unit) {
-                        val update = telegramUpdate(777, null, "staff", "/kick Player Причина", userId = 777, chatType = "private")
+                    fun attempt(chatType: String = "private", change: (Message) -> Unit) {
+                        val chatId = if (chatType == "private") 777L else -100100L
+                        val update = telegramUpdate(chatId, null, "staff", "/kick Player Причина", userId = 777, chatType = chatType)
                         change(update.message)
                         bot.onUpdateReceived(update)
                     }
-                    privateAttempt { it.forwardDate = 1 }
-                    privateAttempt { it.forwardOrigin = mockk() }
-                    privateAttempt { it.senderChat = Chat(-100100, "channel") }
-                    privateAttempt { it.from.isBot = true }
-                    privateAttempt { it.from = null }
-                    privateAttempt { it.chat = Chat(778, "private") }
-                    privateAttempt { it.text = "/kick@AnotherBot Player Причина" }
+                    listOf("private", "group", "supergroup").forEach { chatType ->
+                        attempt(chatType) { it.forwardDate = 1 }
+                        attempt(chatType) { it.forwardOrigin = mockk() }
+                        attempt(chatType) { it.senderChat = Chat(-100100, "channel") }
+                        attempt(chatType) { it.from.isBot = true }
+                        attempt(chatType) { it.from = null }
+                        attempt(chatType) { it.text = "/kick@AnotherBot Player Причина" }
+                    }
+                    attempt { it.chat = Chat(778, "private") }
+                    attempt("channel") { }
                     every { runtime.config.telegramCommandsEnabled } returns false
-                    privateAttempt { }
+                    attempt { }
+                    attempt("supergroup") { }
                     every { runtime.config.telegramCommandsEnabled } returns true
                     every { StaffBridgeModule.runtime } returns null
                     bot.onUpdateReceived(telegramUpdate(-100100, 7, "staff", "/kick Player Причина", userId = 777))
                     every { StaffBridgeModule.runtime } returns runtime
                     bot.close()
-                    privateAttempt { }
+                    attempt { }
+                    attempt("supergroup") { }
                 }
             }
             commands shouldBe emptyList()
@@ -756,6 +804,7 @@ class TelegramBotTest : FreeSpec({
                 scheduler.executeImmediate()
                 replies.last().text shouldContain "Настроенная справка игрока"
                 listOf("/kick", "/ban", "/mute", "/mc command proxy").forEach { replies.last().text shouldContain it }
+                replies.last().text shouldContain "/kick@RusCraftingTest"
                 every { runtime.config.telegramCommandsEnabled } returns false
                 bot.onUpdateReceived(telegramUpdate(777, null, "staff", "/help", userId = 777, chatType = "private"))
                 scheduler.executeImmediate()

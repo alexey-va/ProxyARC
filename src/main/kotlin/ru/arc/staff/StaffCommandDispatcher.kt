@@ -27,6 +27,9 @@ internal class StaffCommandDispatcher(private val proxy: ProxyServer, private va
         if (!active.get()) return CompletableFuture.completedFuture(StaffExecutionResult(false, emptyList()))
         val currentActor = actor.current()?.takeIf { it.identity == actor.identity }
             ?: return CompletableFuture.completedFuture(StaffExecutionResult(false, emptyList()))
+        if ((command.adminOnly || command.server != "proxy") && !currentActor.admin) {
+            return CompletableFuture.completedFuture(StaffExecutionResult(false, emptyList()))
+        }
         if (command.permission != null && !currentActor.permission(command.permission)) {
             return CompletableFuture.completedFuture(StaffExecutionResult(false, emptyList()))
         }
@@ -42,7 +45,6 @@ internal class StaffCommandDispatcher(private val proxy: ProxyServer, private va
                 StaffExecutionResult(dispatched, capture?.output() ?: if (dispatched) listOf(config.message("minecraft-output")) else emptyList())
             }
         }
-        if (!currentActor.admin) return CompletableFuture.completedFuture(StaffExecutionResult(false, emptyList()))
         val backend = requireNotNull(config.backends[command.server])
         val body = gson.toJson(mapOf("requestId" to requestId.toString(), "actorUuid" to actor.identity.uuid.toString(), "command" to command.line))
         val request = HttpRequest.newBuilder(backend.baseUrl.resolve("/ops/staff-command"))
