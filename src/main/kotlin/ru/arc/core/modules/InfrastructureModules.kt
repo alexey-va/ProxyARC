@@ -92,8 +92,13 @@ object LoggingModule : PluginModule {
     }
 
     override fun shutdown() {
-        closeDiagnosticFileLogging()
-        removeTransportFailureFilter()
+        var failure: Throwable? = null
+        for (close in listOf<() -> Unit>({ closeDiagnosticFileLogging() }, { removeTransportFailureFilter() }, { ArcLogging.close() })) {
+            try { close() } catch (problem: Throwable) {
+                if (failure == null) failure = problem else if (failure !== problem) failure.addSuppressed(problem)
+            }
+        }
+        failure?.let { throw it }
     }
 
     override fun reload() {
@@ -150,6 +155,7 @@ object LoggingModule : PluginModule {
             installed?.close()
         } catch (e: Exception) {
             log.error("Error closing diagnostic file logging", e)
+            throw e
         }
     }
 

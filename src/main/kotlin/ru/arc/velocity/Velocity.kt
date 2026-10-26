@@ -10,6 +10,7 @@ import com.velocitypowered.api.event.proxy.ProxyInitializeEvent
 import com.velocitypowered.api.event.proxy.ProxyReloadEvent
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent
 import com.velocitypowered.api.command.CommandSource
+import com.velocitypowered.api.command.CommandMeta
 import com.velocitypowered.api.plugin.Plugin
 import com.velocitypowered.api.plugin.annotation.DataDirectory
 import com.velocitypowered.api.proxy.ProxyServer
@@ -71,40 +72,47 @@ import java.util.concurrent.atomic.AtomicBoolean
 @Plugin(
     id = "proxyarc",
     name = "ProxyARC",
-    version = "1.0.14",
+    version = "1.0.15",
 )
 class Velocity @Inject constructor(
     private val server: ProxyServer,
     private val pluginLogger: Logger,
     @param:DataDirectory private val pluginDataFolder: Path,
 ) : Arc {
-    init {
-        installRuntimeReferences()
-    }
+    private var runtimeStarted = false
+    private val registeredCommands = mutableListOf<CommandMeta>()
 
     @Subscribe
     fun onProxyInit(@Suppress("UNUSED_PARAMETER") event: ProxyInitializeEvent) {
+        check(!runtimeStarted) { "ProxyARC runtime is already started" }
+        runtimeStarted = true
         installRuntimeReferences()
         isShuttingDown.set(false)
         pluginLogger.info("Initializing ProxyARC")
-        VelocityArcRuntime.installScheduling(server, this)
-        proxyRestartService =
-            ProxyRestartService(
-                scheduler = Tasks.scheduler,
-                playerCount = { server.playerCount },
-                broadcast = { component -> sendMessageToAll(component) },
-                shutdown = { reason -> server.shutdown(reason) },
-                eventLog = { event -> pluginLogger.info("[ProxyRestart] {}", event) },
+        try {
+            VelocityArcRuntime.installScheduling(server, this)
+            proxyRestartService =
+                ProxyRestartService(
+                    scheduler = Tasks.scheduler,
+                    playerCount = { server.playerCount },
+                    broadcast = { component -> sendMessageToAll(component) },
+                    shutdown = { reason -> server.shutdown(reason) },
+                    eventLog = { event -> pluginLogger.info("[ProxyRestart] {}", event) },
+                )
+            VelocityArcRuntime.installModuleLifecycleReporting(
+                consoleLog = { line -> pluginLogger.info(stripMiniMessage(line)) },
+                logError = { msg, t -> pluginLogger.error(msg, t) },
             )
-        VelocityArcRuntime.installModuleLifecycleReporting(
-            consoleLog = { line -> pluginLogger.info(stripMiniMessage(line)) },
-            logError = { msg, t -> pluginLogger.error(msg, t) },
-        )
-        registerModules()
-        ModuleRegistry.initAll()
-        redisManager?.init()
-        registerCommands()
-        Tools.addTool(GetOnlinePlayers::class.java)
+            registerModules()
+            ModuleRegistry.initAll()
+            redisManager?.init()
+            registerCommands()
+            Tools.addTool(GetOnlinePlayers::class.java)
+        } catch (failure: Throwable) {
+            stopRuntime()?.let { if (it !== failure) failure.addSuppressed(it) }
+            pluginLogger.error("ProxyARC startup failed; owned resources were retired", failure)
+            throw failure
+        }
     }
 
     @JsonClassDescription("Get list of online players")
@@ -158,6 +166,7 @@ class Velocity @Inject constructor(
                 .metaBuilder("proxyarc")
                 .plugin(this)
                 .build()
+        registeredCommands += metadata
         commandManager.register(metadata, ProxyARCCommand())
 
         val verifyMetadata =
@@ -165,6 +174,7 @@ class Velocity @Inject constructor(
                 .metaBuilder("verify")
                 .plugin(this)
                 .build()
+        registeredCommands += verifyMetadata
         commandManager.register(verifyMetadata, VerifyCommand())
 
         val discordMetadata =
@@ -172,6 +182,7 @@ class Velocity @Inject constructor(
                 .metaBuilder("discord")
                 .plugin(this)
                 .build()
+        registeredCommands += discordMetadata
         commandManager.register(discordMetadata, VerifyCommand(VerificationPlatform.DISCORD))
 
         val telegramMetadata =
@@ -179,6 +190,7 @@ class Velocity @Inject constructor(
                 .metaBuilder("telegram")
                 .plugin(this)
                 .build()
+        registeredCommands += telegramMetadata
         commandManager.register(telegramMetadata, VerifyCommand(VerificationPlatform.TELEGRAM))
 
         rtpRequestManager?.let { manager ->
@@ -187,6 +199,7 @@ class Velocity @Inject constructor(
                     .metaBuilder("rtp")
                     .plugin(this)
                     .build()
+            registeredCommands += rtpMetadata
             commandManager.register(rtpMetadata, RtpCommand(manager, ProxyRtpConfig()))
         }
     }
@@ -204,16 +217,42 @@ class Velocity @Inject constructor(
 
     @Subscribe
     fun onProxyStop(@Suppress("UNUSED_PARAMETER") event: ProxyShutdownEvent) {
+        stopRuntime()?.let { pluginLogger.error("ProxyARC shutdown did not complete cleanly", it) }
+    }
+
+    /** Idempotent cleanup, including startup failure. Code replacement still requires proxy restart. */
+    private fun stopRuntime(): Throwable? {
+        if (!runtimeStarted) return null
+        runtimeStarted = false
         isShuttingDown.set(true)
-        proxyRestartService?.shutdownModule()
+        var failure: Throwable? = null
+        fun attempt(action: () -> Unit) {
+            try { action() } catch (problem: Throwable) {
+                if (failure == null) failure = problem else if (failure !== problem) failure!!.addSuppressed(problem)
+            }
+        }
+        attempt { server.eventManager.unregisterListeners(this) }
+        registeredCommands.forEach { metadata ->
+            metadata.aliases.forEach { alias ->
+                attempt {
+                    if (server.commandManager.getCommandMeta(alias) === metadata) {
+                        server.commandManager.unregister(alias)
+                    }
+                }
+            }
+        }
+        registeredCommands.clear()
+        attempt { proxyRestartService?.shutdownModule() }
         proxyRestartService = null
-        ModuleRegistry.shutdownAll()
-        Tasks.reset()
+        attempt { ModuleRegistry.shutdownAllChecked() }
+        attempt { Tasks.reset() }
+        attempt { ru.arc.logging.ArcLogging.close() }
         plugin = null
         proxyServer = null
         logger = null
         dataFolder = null
         config = null
+        return failure
     }
 
     override fun sendMessageToAll(component: Component) {

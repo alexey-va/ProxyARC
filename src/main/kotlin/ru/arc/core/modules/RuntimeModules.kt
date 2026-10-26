@@ -25,13 +25,18 @@ object ListenersModule : PluginModule {
     override val priority = 90
 
     private var eventsChatIsolation: ArcEventsChatIsolation? = null
+    private val registeredListeners = mutableListOf<Any>()
 
     override fun init() {
         val plugin = Velocity.requirePlugin()
         val server = Velocity.requireProxyServer()
         val chatIsolation = ArcEventsChatIsolation(settings = ArcEventsChatConfig::load)
         server.channelRegistrar.register(ArcEventsChatIsolation.CHANNEL)
-        server.eventManager.register(plugin, chatIsolation)
+        fun register(listener: Any) {
+            server.eventManager.register(plugin, listener)
+            registeredListeners += listener
+        }
+        register(chatIsolation)
         eventsChatIsolation = chatIsolation
         Velocity.eventsChatIsolation = chatIsolation
         val announcementService =
@@ -47,30 +52,17 @@ object ListenersModule : PluginModule {
                 scheduler = Tasks.scheduler,
                 lifecycle = VelocityProxyLifecycle,
             )
-        server.eventManager.register(
-            plugin,
-            JoinListener(announcementService),
-        )
-        server.eventManager.register(
-            plugin,
-            ChatListener(server),
-        )
-        server.eventManager.register(
-            plugin,
-            RestartKickListener(),
-        )
-        server.eventManager.register(
-            plugin,
-            CommandVisibilityListener(),
-        )
+        register(JoinListener(announcementService))
+        register(ChatListener(server))
+        register(RestartKickListener())
+        register(CommandVisibilityListener())
     }
 
     override fun shutdown() {
         val server = Velocity.proxyServer
-        eventsChatIsolation?.let { isolation ->
-            isolation.clear()
-            server?.eventManager?.unregisterListener(Velocity.plugin, isolation)
-        }
+        eventsChatIsolation?.clear()
+        registeredListeners.forEach { server?.eventManager?.unregisterListener(Velocity.plugin, it) }
+        registeredListeners.clear()
         server?.channelRegistrar?.unregister(ArcEventsChatIsolation.CHANNEL)
         eventsChatIsolation = null
         Velocity.eventsChatIsolation = null
