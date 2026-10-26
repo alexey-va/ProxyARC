@@ -71,7 +71,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 @Plugin(
     id = "proxyarc",
     name = "ProxyARC",
-    version = "1.0.13",
+    version = "1.0.14",
 )
 class Velocity @Inject constructor(
     private val server: ProxyServer,

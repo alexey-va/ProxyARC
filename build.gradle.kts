@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "ru.arc"
-version = "1.0.13"
+version = "1.0.14"
 description = "ProxyARC Velocity plugin"
 
 val integrationTestSourceSet = sourceSets.create("integrationTest") {
@@ -30,14 +30,14 @@ repositories {
 }
 
 dependencies {
-    implementation("ru.ruscrafting.arc:arc-core:2.7.35")
-    implementation("ru.ruscrafting.arc:arc-core-logging:2.7.35")
-    implementation("ru.ruscrafting.arc:arc-core-metrics:2.7.35")
-    implementation("ru.ruscrafting.arc:arc-core-redis:2.7.35")
-    implementation("ru.ruscrafting.arc:arc-core-velocity:2.7.35")
-    implementation("ru.ruscrafting.arc:arc-core-ai:2.7.35")
-    implementation("ru.ruscrafting.arc:arc-core-sql:2.7.35")
-    implementation("ru.ruscrafting.arc:arc-core-telemetry:2.7.35")
+    implementation("ru.ruscrafting.arc:arc-core:2.7.68")
+    implementation("ru.ruscrafting.arc:arc-core-logging:2.7.68")
+    implementation("ru.ruscrafting.arc:arc-core-metrics:2.7.68")
+    implementation("ru.ruscrafting.arc:arc-core-redis:2.7.68")
+    implementation("ru.ruscrafting.arc:arc-core-velocity:2.7.68")
+    implementation("ru.ruscrafting.arc:arc-core-ai:2.7.68")
+    implementation("ru.ruscrafting.arc:arc-core-sql:2.7.68")
+    implementation("ru.ruscrafting.arc:arc-core-telemetry:2.7.68")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.10.2")
 
@@ -68,10 +68,13 @@ dependencies {
     testImplementation("io.kotest:kotest-runner-junit5:6.0.7")
     testImplementation("io.kotest:kotest-assertions-core:6.0.7")
     testImplementation("io.mockk:mockk:1.14.7")
+    // MockK's transitive Byte Buddy 1.15 cannot instrument Java 25 class files.
+    testImplementation("net.bytebuddy:byte-buddy:1.18.8")
+    testImplementation("net.bytebuddy:byte-buddy-agent:1.18.8")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
     "integrationTestImplementation"(sourceSets.test.get().output)
-    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:2.7.35")
+    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:2.7.68")
     configurations["integrationTestImplementation"].extendsFrom(configurations["testImplementation"])
     configurations["integrationTestRuntimeOnly"].extendsFrom(configurations["testRuntimeOnly"])
 }

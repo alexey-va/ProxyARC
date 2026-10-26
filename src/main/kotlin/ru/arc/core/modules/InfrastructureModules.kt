@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory
 import ru.arc.config.ConfigManager
 import ru.arc.config.ProxyConfigs
 import ru.arc.core.PluginModule
+import ru.arc.logging.ArcDiagnosticLogging
 import ru.arc.logging.ArcLogging
 import ru.arc.logging.LoggingConfigSource
 import ru.arc.logging.LoggingModuleConfig
@@ -20,6 +21,7 @@ import ru.arc.redis.RedisConfigBootstrap
 import ru.arc.redis.RedisModuleConfig
 import ru.arc.redis.RedisManager
 import ru.arc.redis.ServerIdentity
+import java.nio.file.Paths
 
 private val log = LoggerFactory.getLogger("ru.arc.core.modules.Infrastructure")
 
@@ -60,9 +62,11 @@ object LoggingModule : PluginModule {
     private var transportFilterContext: LoggerContext? = null
     private var transportFilterConfiguration: Configuration? = null
     private var transportFilterLoggerConfigs: Set<LoggerConfig> = emptySet()
+    private var diagnosticFileLogging: AutoCloseable? = null
 
     override fun init() {
         val folder = Velocity.dataFolder ?: return
+        configureDiagnosticFileLogging()
         try {
             val configSource =
                 object : LoggingConfigSource {
@@ -88,12 +92,14 @@ object LoggingModule : PluginModule {
     }
 
     override fun shutdown() {
+        closeDiagnosticFileLogging()
         removeTransportFailureFilter()
     }
 
     override fun reload() {
         ConfigManager.reloadAll()
         val folder = Velocity.dataFolder ?: return
+        configureDiagnosticFileLogging()
         try {
             val configSource =
                 object : LoggingConfigSource {
@@ -123,6 +129,29 @@ object LoggingModule : PluginModule {
 
     internal fun transportRecovered(loggerName: String): Int =
         transportFailureFilter?.transportRecovered(loggerName) ?: 0
+
+    @Synchronized
+    private fun configureDiagnosticFileLogging() {
+        closeDiagnosticFileLogging()
+        try {
+            if (ProxyConfigs.module("logging.yml").bool("diagnostics-file.enabled", true)) {
+                diagnosticFileLogging = ArcDiagnosticLogging.install(Paths.get("logs"))
+            }
+        } catch (e: Exception) {
+            log.error("Error configuring diagnostic file logging", e)
+        }
+    }
+
+    @Synchronized
+    private fun closeDiagnosticFileLogging() {
+        val installed = diagnosticFileLogging
+        diagnosticFileLogging = null
+        try {
+            installed?.close()
+        } catch (e: Exception) {
+            log.error("Error closing diagnostic file logging", e)
+        }
+    }
 
     @Synchronized
     private fun installTransportFailureFilter() {
