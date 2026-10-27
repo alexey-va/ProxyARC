@@ -133,7 +133,7 @@ class DungeonPartyGatherManager(
             MinecraftChannelIdentifier.from(DungeonPartyGatherRequest.CHANNEL)
         val ARRIVAL_CHANNEL: MinecraftChannelIdentifier =
             MinecraftChannelIdentifier.from(DungeonPartyGatherArrival.CHANNEL)
-        private const val TARGET_SERVER = "classic"
+        private const val TARGET_SERVER = "spawn"
         private const val DELIVERY_DELAY_TICKS = 10L
         private const val RETRY_DELAY_TICKS = 10L
         private const val MAX_DELIVERY_ATTEMPTS = 3
