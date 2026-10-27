@@ -5,6 +5,8 @@ import org.slf4j.LoggerFactory
 import ru.arc.Utils
 import ru.arc.ai.llm.LogPreview
 import ru.arc.ai.routing.RoutingModule
+import ru.arc.chat.ProxyGlobalChat
+import ru.arc.chat.ProxyGlobalChatSource
 import ru.arc.config.ProxyConfigs
 import ru.arc.core.TickConstants
 import ru.arc.core.delayed
@@ -51,6 +53,7 @@ object AssistantChatBridge {
                 val inGameText = AssistantChatFormat.inGameMessage(assistantConfig, part)
                 val component = Utils.legacy(inGameText)
                 Velocity.sendMessageToPlayers(proxyServer.allPlayers, component)
+                ProxyGlobalChat.service.record(ProxyGlobalChatSource.ASSISTANT, botName, null, part)
 
                 assistant?.observeChat(
                     RoutingModule.formatBotObserveLine(part, botName),

@@ -6,6 +6,7 @@ import com.velocitypowered.api.event.Subscribe
 import com.velocitypowered.api.event.command.CommandExecuteEvent
 import org.slf4j.LoggerFactory
 import ru.arc.channelsync.ChannelSyncConfig
+import ru.arc.chat.ProxyGlobalChatRecord
 import ru.arc.config.ProxyConfigs
 import ru.arc.core.PluginModule
 import ru.arc.redis.network.RedisReplayPolicy
@@ -43,6 +44,7 @@ object StaffBridgeModule : PluginModule {
     }
 
     fun protectedDiscordChannel(id: String): Boolean = id in protectedChannels
+    internal fun recordGlobalChat(record: ProxyGlobalChatRecord) { runtime?.recordGlobalChat(record) }
     internal fun registerDiscordCommands(jda: net.dv8tion.jda.api.JDA) { runtime?.let { StaffDiscordListener.register(jda, it.config) } }
     override fun reload() = init()
     override fun shutdown() { runtime?.close(); runtime = null }
@@ -69,6 +71,12 @@ internal class StaffBridgeRuntime(val config: StaffBridgeConfig) : AutoCloseable
     )
     private val topics = mutableListOf<AutoCloseable>()
     @Volatile private var active = true
+
+    fun recordGlobalChat(record: ProxyGlobalChatRecord) {
+        if (active && config.spiesEnabled) {
+            discord.enqueue(config.chatSpyChannelId, "[global/${record.source}] ${record.author}: ${record.content}")
+        }
+    }
 
     fun start() {
         discord.start()

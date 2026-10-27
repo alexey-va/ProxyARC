@@ -5,6 +5,7 @@ import net.kyori.adventure.text.format.TextColor
 import org.slf4j.LoggerFactory
 import ru.arc.config.Config
 import ru.arc.config.ProxyConfigs
+import ru.arc.staff.StaffBridgeModule
 import ru.arc.telegram.TelegramCodexMessageReceipt
 import ru.arc.velocity.Velocity
 import java.nio.charset.StandardCharsets
@@ -18,6 +19,8 @@ enum class ProxyGlobalChatSource(val wireValue: String) {
     TELEGRAM("telegram"),
     DISCORD("discord"),
     CODEX("codex"),
+    ASSISTANT("assistant"),
+    PORTAL("portal"),
 }
 
 data class ProxyGlobalChatRecord(
@@ -105,6 +108,7 @@ class ProxyGlobalChatService(
     private val receiptCapacity: Int = DEFAULT_RECEIPT_CAPACITY,
     instanceId: String = UUID.randomUUID().toString(),
     private val clock: () -> Long = System::currentTimeMillis,
+    private val onRecord: (ProxyGlobalChatRecord) -> Unit = {},
 ) {
     private val lock = Any()
     private val records = ArrayDeque<StoredRecord>()
@@ -313,6 +317,11 @@ class ProxyGlobalChatService(
             records.removeFirst()
             droppedRecords++
         }
+        try {
+            onRecord(record)
+        } catch (failure: Exception) {
+            log.warn("Global chat observer failed source={} cursor={}", record.source, record.cursor, failure)
+        }
         return record
     }
 
@@ -373,6 +382,7 @@ class ProxyGlobalChatService(
     private data class ParsedCursor(val instanceId: String, val sequence: Long)
 
     companion object {
+        private val log = LoggerFactory.getLogger(ProxyGlobalChatService::class.java)
         const val DEFAULT_READ_LIMIT = 200
         const val MAX_READ_LIMIT = 1_000
         const val DEFAULT_HISTORY_CAPACITY = 5_000
@@ -495,6 +505,6 @@ class VelocityProxyGlobalChatDelivery(
 }
 
 object ProxyGlobalChat {
-    val service = ProxyGlobalChatService()
+    val service = ProxyGlobalChatService(onRecord = StaffBridgeModule::recordGlobalChat)
     val delivery: ProxyGlobalChatDelivery = VelocityProxyGlobalChatDelivery()
 }

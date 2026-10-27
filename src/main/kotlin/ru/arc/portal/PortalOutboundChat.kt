@@ -3,6 +3,9 @@ package ru.arc.portal
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
+import ru.arc.chat.ProxyGlobalChat
+import ru.arc.chat.ProxyGlobalChatService
+import ru.arc.chat.ProxyGlobalChatSource
 import ru.arc.ops.TelegramParseMode
 import ru.arc.velocity.Velocity
 
@@ -124,13 +127,29 @@ internal class PortalOutboundChatDelivery(
     private val minecraft: PortalMinecraftChatSink = VelocityPortalMinecraftChatSink,
     private val discord: PortalCommunityChatSink = VelocityPortalDiscordChatSink,
     private val telegram: PortalCommunityChatSink = VelocityPortalTelegramChatSink,
+    private val recordGame: (PortalOutboundChatMessage) -> Unit = { message ->
+        ProxyGlobalChat.service.record(
+            ProxyGlobalChatSource.PORTAL, message.authorName, message.authorUuid, message.content, message.createdAt,
+        )
+    },
 ) {
+    private val recordedGameIds = linkedSetOf<Long>()
+
     fun deliver(message: PortalOutboundChatMessage): Boolean {
         val external = formatter.external(message.authorName, message.content)
         return when (message.channel) {
             PortalChatChannel.GAME -> {
                 val minecraftAccepted = minecraft.send(formatter.minecraft(message.authorName, message.content))
                 if (!minecraftAccepted) return false
+                synchronized(recordedGameIds) {
+                    if (recordedGameIds.add(message.id)) {
+                        // ponytail: live history only; retries older than the history window may appear again.
+                        if (recordedGameIds.size > ProxyGlobalChatService.DEFAULT_HISTORY_CAPACITY) {
+                            recordedGameIds.remove(recordedGameIds.first())
+                        }
+                        recordGame(message)
+                    }
+                }
                 val discordAccepted = discord.sendGame(external)
                 val telegramAccepted = telegram.sendGame(external)
                 discordAccepted && telegramAccepted

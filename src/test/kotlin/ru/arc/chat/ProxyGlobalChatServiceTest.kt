@@ -7,6 +7,51 @@ import java.util.UUID
 import java.util.concurrent.CompletableFuture
 
 class ProxyGlobalChatServiceTest : FreeSpec({
+    "global observer receives every source once before external fanout and ignores replay or blank chat" {
+        val observed = mutableListOf<ProxyGlobalChatRecord>()
+        val service = ProxyGlobalChatService(instanceId = INSTANCE_A, onRecord = observed::add)
+        ProxyGlobalChatSource.entries.filter { it != ProxyGlobalChatSource.CODEX }.forEach { source ->
+            service.record(source, "Player", null, "${source.wireValue} message")
+        }
+        service.record(ProxyGlobalChatSource.MINECRAFT, "Player", null, " ") shouldBe null
+        val delivery = ProxyGlobalChatDelivery {
+            observed.last().source shouldBe "codex"
+            CompletableFuture.completedFuture(
+                ProxyGlobalChatDeliveryResult(
+                    ProxyGlobalChatSinkReceipt("accepted"),
+                    ProxyGlobalChatSinkReceipt("accepted"),
+                    ProxyGlobalChatSinkReceipt("accepted"),
+                ),
+            )
+        }
+        service.submit(REQUEST_A, INSTANCE_A, "Codex message", delivery)
+        service.submit(REQUEST_A, INSTANCE_A, "Codex message", delivery)
+        service.submit(REQUEST_A, INSTANCE_A, "different message", delivery)
+
+        observed.map { it.source }.shouldContainExactly("minecraft", "telegram", "discord", "assistant", "portal", "codex")
+        observed.shouldContainExactly(service.read().messages)
+    }
+
+    "observer failure preserves global history and outgoing delivery" {
+        val service = ProxyGlobalChatService(instanceId = INSTANCE_A, onRecord = { error("observer unavailable") })
+        service.record(ProxyGlobalChatSource.MINECRAFT, "Player", null, "game")!!.content shouldBe "game"
+        var deliveries = 0
+        val delivery = ProxyGlobalChatDelivery {
+            deliveries++
+            CompletableFuture.completedFuture(
+                ProxyGlobalChatDeliveryResult(
+                    ProxyGlobalChatSinkReceipt("accepted"),
+                    ProxyGlobalChatSinkReceipt("accepted"),
+                    ProxyGlobalChatSinkReceipt("accepted"),
+                ),
+            )
+        }
+        val result = service.submit(REQUEST_A, INSTANCE_A, "Codex message", delivery) as ProxyGlobalChatSubmission.Submitted
+        result.receipt.get().deliveries["discord"]?.status shouldBe "accepted"
+        deliveries shouldBe 1
+        service.read().messages.map { it.content }.shouldContainExactly("game", "Codex message")
+    }
+
     "read returns the newest slice in chronological order and cursor pages do not skip overflow" {
         val service = ProxyGlobalChatService(historyCapacity = 10, instanceId = INSTANCE_A)
         val one = service.record(ProxyGlobalChatSource.MINECRAFT, "Alex", UUID.randomUUID(), "one")!!

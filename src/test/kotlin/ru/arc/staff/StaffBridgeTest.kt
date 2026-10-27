@@ -462,6 +462,6 @@ class StaffBridgeTest : FreeSpec({
         shouldThrow<IllegalArgumentException> { StaffSpyCodecs.console.decode(console) }
         StaffSpyCodecs.current(1, 200_000) shouldBe false
         StaffSpyCodecs.current(200_000, 200_000) shouldBe true
-        StaffDiscordGateway.literal("hi``` @everyone") shouldContain "`\u200b``"
+        StaffDiscordGateway.literal("hi``` @everyone") shouldBe "```\nhi`\u200b`\u200b`\u200b @everyone\n```"
     }
 })

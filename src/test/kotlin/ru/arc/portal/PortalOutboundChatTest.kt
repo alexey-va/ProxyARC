@@ -7,6 +7,26 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import java.util.UUID
 
 class PortalOutboundChatTest : FreeSpec({
+    "global history records game delivery once across sink retries and skips undelivered or community messages" {
+        val recorded = mutableListOf<PortalOutboundChatMessage>()
+        var minecraftAvailable = false
+        val delivery = PortalOutboundChatDelivery(
+            formatter = PortalOutboundChatFormatter("%player_name% » %message%", "%player_name% » %message%"),
+            minecraft = PortalMinecraftChatSink { minecraftAvailable },
+            discord = RecordingCommunitySink(accept = false),
+            telegram = RecordingCommunitySink(),
+            recordGame = { recorded += it },
+        )
+        val game = message()
+        delivery.deliver(game) shouldBe false
+        recorded shouldBe emptyList()
+        minecraftAvailable = true
+        delivery.deliver(game) shouldBe false
+        delivery.deliver(game) shouldBe false
+        delivery.deliver(message(channel = PortalChatChannel.COMMUNITY)) shouldBe false
+        recorded shouldBe listOf(game)
+    }
+
     "game delivery treats portal content as literal text and fans out after Minecraft accepts it" {
         val minecraft = mutableListOf<Component>()
         val discord = RecordingCommunitySink()
