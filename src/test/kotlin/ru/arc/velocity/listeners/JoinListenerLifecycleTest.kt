@@ -51,7 +51,11 @@ class JoinListenerLifecycleTest : FreeSpec({
             player(
                 playerId,
                 "Alex",
-                permissions = setOf(JoinListener.EXTERNAL_JOIN_ANNOUNCEMENT_PERMISSION),
+                permissions =
+                    setOf(
+                        JoinListener.EXTERNAL_JOIN_ANNOUNCEMENT_PERMISSION,
+                        JoinListener.REPEAT_JOIN_ANNOUNCEMENT_PERMISSION,
+                    ),
             )
         val announcements = RecordingSessionAnnouncements()
         val announcer = PlayerListAnnouncer(emptyInterface(RedisOperations::class.java), "players")
@@ -61,7 +65,27 @@ class JoinListenerLifecycleTest : FreeSpec({
 
         announcer.serverForUsername("Alex") shouldBe ""
         announcements.connected.single().permissions shouldBe
-            AnnouncementPermissions(external = true)
+            AnnouncementPermissions(external = true, repeat = true)
+    }
+
+    "post-login captures repeat and external permissions independently" {
+        val cases =
+            listOf(
+                emptySet<String>() to AnnouncementPermissions(external = false, repeat = false),
+                setOf(JoinListener.EXTERNAL_JOIN_ANNOUNCEMENT_PERMISSION) to
+                    AnnouncementPermissions(external = true, repeat = false),
+                setOf(JoinListener.REPEAT_JOIN_ANNOUNCEMENT_PERMISSION) to
+                    AnnouncementPermissions(external = false, repeat = true),
+            )
+
+        for ((permissions, expected) in cases) {
+            val announcements = RecordingSessionAnnouncements()
+            val connection = player(UUID.randomUUID(), "Alex", permissions)
+
+            JoinListener(announcements).onPlayerAuthenticated(PostLoginEvent(connection))
+
+            announcements.connected.single().permissions shouldBe expected
+        }
     }
 })
 

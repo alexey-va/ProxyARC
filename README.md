@@ -51,7 +51,9 @@ announcements and the selectable phrase catalog. Each phrase owns its stable
 id, MiniMessage text, GUI material/custom model data, optional permission, and
 rank label. ProxyARC publishes the validated catalog to Redis; Paper ARC keeps
 only GUI chrome locally and fails closed when the catalog is unavailable.
-Every accepted join and leave is announced in Minecraft except on backends in
+The first accepted join is always announced. Repeated joins and leaves require
+`arc.join-message.repeat`, captured when the session starts for both events.
+Minecraft announcements exclude backends in
 `delivery.minecraft-excluded-servers`. Discord and Telegram
 receive the same announcement only when the player has
 `arc.join-message.external`; the permission is captured when the session starts

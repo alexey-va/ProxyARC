@@ -30,6 +30,7 @@ class JoinListener(
             VelocityAnnouncementPlayer(player),
             AnnouncementPermissions(
                 external = player.hasPermission(EXTERNAL_JOIN_ANNOUNCEMENT_PERMISSION),
+                repeat = player.hasPermission(REPEAT_JOIN_ANNOUNCEMENT_PERMISSION),
             ),
         )
     }
@@ -68,6 +69,7 @@ class JoinListener(
 
     companion object {
         internal const val EXTERNAL_JOIN_ANNOUNCEMENT_PERMISSION = "arc.join-message.external"
+        internal const val REPEAT_JOIN_ANNOUNCEMENT_PERMISSION = "arc.join-message.repeat"
         private val log = LoggerFactory.getLogger(JoinListener::class.java)
     }
 }

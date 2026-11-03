@@ -16,6 +16,7 @@ enum class JoinAnnouncementKind {
 
 data class AnnouncementPermissions(
     val external: Boolean,
+    val repeat: Boolean,
 )
 
 data class PublishedAnnouncement(
@@ -87,6 +88,7 @@ class JoinAnnouncementService(
             } else {
                 JoinAnnouncementKind.JOIN
             }
+        if (kind == JoinAnnouncementKind.JOIN && !permissions.repeat) return
         val effectivePermissions = snapshotPermissions(player, kind)
 
         scheduler.runLater(20) {
@@ -109,6 +111,10 @@ class JoinAnnouncementService(
         val current = sessions[player.playerId] ?: return
         if (current.player.connectionIdentity === player.connectionIdentity) {
             if (!sessions.remove(player.playerId, current)) return
+            if (!current.permissions.repeat) {
+                latestGeneration.remove(player.playerId, current.generation)
+                return
+            }
             val effectivePermissions = snapshotPermissions(player, JoinAnnouncementKind.LEAVE)
             scheduler.runLater(20) {
                 if (!isLatestDisconnected(current)) return@runLater

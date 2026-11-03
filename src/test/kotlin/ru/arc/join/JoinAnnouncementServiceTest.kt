@@ -14,7 +14,7 @@ class JoinAnnouncementServiceTest : FreeSpec({
         val fixture = fixture()
         val firstConnection = TestPlayer(UUID.randomUUID(), "Alex")
 
-        fixture.service.onPostLogin(firstConnection, AnnouncementPermissions(external = false))
+        fixture.service.onPostLogin(firstConnection, AnnouncementPermissions(external = false, repeat = true))
         fixture.scheduler.tick(20)
 
         fixture.sink.published shouldContainExactly
@@ -22,7 +22,7 @@ class JoinAnnouncementServiceTest : FreeSpec({
 
         fixture.service.onDisconnect(firstConnection)
         val secondConnection = firstConnection.reconnected()
-        fixture.service.onPostLogin(secondConnection, AnnouncementPermissions(external = false))
+        fixture.service.onPostLogin(secondConnection, AnnouncementPermissions(external = false, repeat = true))
         fixture.scheduler.tick(20)
 
         fixture.sink.published shouldContainExactly
@@ -32,13 +32,37 @@ class JoinAnnouncementServiceTest : FreeSpec({
             )
     }
 
+    "a player without repeat permission only emits the first-join announcement" {
+        val fixture = fixture()
+        val firstConnection = TestPlayer(UUID.randomUUID(), "Alex")
+        val permissions = AnnouncementPermissions(external = true, repeat = false)
+
+        fixture.service.onPostLogin(firstConnection, permissions)
+        fixture.scheduler.tick(20)
+        fixture.service.onDisconnect(firstConnection)
+        fixture.scheduler.tick(20)
+        val secondConnection = firstConnection.reconnected()
+        fixture.service.onPostLogin(secondConnection, permissions)
+        fixture.scheduler.tick(20)
+        fixture.service.onDisconnect(secondConnection)
+        fixture.scheduler.tick(20)
+
+        fixture.sink.published shouldContainExactly
+            listOf(PublishedAnnouncement("Alex", JoinAnnouncementKind.FIRST_TIME, null, publishExternally = true))
+        fixture.source.effectivePermissionsByKind shouldBe emptyMap()
+        for (fieldName in listOf("sessions", "latestGeneration")) {
+            val field = JoinAnnouncementService::class.java.getDeclaredField(fieldName).apply { isAccessible = true }
+            field.get(fixture.service) shouldBe emptyMap<Any, Any>()
+        }
+    }
+
     "a delayed join selection cannot publish after that connection disconnects" {
         val fixture = fixture(existingPlayer = "Alex")
         val connection = TestPlayer(UUID.randomUUID(), "Alex")
         val pending = CompletableFuture<String?>()
         fixture.source.responses[JoinAnnouncementKind.JOIN] = pending
 
-        fixture.service.onPostLogin(connection, AnnouncementPermissions(external = false))
+        fixture.service.onPostLogin(connection, AnnouncementPermissions(external = false, repeat = true))
         fixture.scheduler.tick(20)
         fixture.service.onDisconnect(connection)
         pending.complete("ушёл раньше объявления")
@@ -46,13 +70,13 @@ class JoinAnnouncementServiceTest : FreeSpec({
         fixture.sink.published shouldBe emptyList()
     }
 
-    "an accepted session with captured leave permission emits its selected leave phrase" {
+    "an accepted session with captured repeat permission emits its selected leave phrase" {
         val fixture = fixture(existingPlayer = "Alex")
         val connection = TestPlayer(UUID.randomUUID(), "Alex")
         fixture.source.responses[JoinAnnouncementKind.LEAVE] =
             CompletableFuture.completedFuture("Алексей закрыл калитку")
 
-        fixture.service.onPostLogin(connection, AnnouncementPermissions(external = true))
+        fixture.service.onPostLogin(connection, AnnouncementPermissions(external = true, repeat = true))
         fixture.service.onDisconnect(connection)
         fixture.scheduler.tick(20)
 
@@ -74,7 +98,7 @@ class JoinAnnouncementServiceTest : FreeSpec({
         val customPermission = ru.arc.xserver.JoinMessages.CUSTOM_MESSAGE_PERMISSION
         val loggedIn = TestPlayer(playerId, "Alex", connectionIdentity, setOf("test.join.allowed", customPermission))
 
-        fixture.service.onPostLogin(loggedIn, AnnouncementPermissions(external = false))
+        fixture.service.onPostLogin(loggedIn, AnnouncementPermissions(external = false, repeat = true))
         fixture.scheduler.tick(20)
         fixture.source.effectivePermissionsByKind[JoinAnnouncementKind.JOIN] shouldBe
             setOf("test.join.allowed", customPermission)
@@ -92,16 +116,36 @@ class JoinAnnouncementServiceTest : FreeSpec({
         val pending = CompletableFuture<String?>()
         fixture.source.responses[JoinAnnouncementKind.LEAVE] = pending
 
-        fixture.service.onPostLogin(firstConnection, AnnouncementPermissions(external = false))
+        fixture.service.onPostLogin(firstConnection, AnnouncementPermissions(external = false, repeat = true))
         fixture.service.onDisconnect(firstConnection)
         fixture.scheduler.tick(20)
         fixture.service.onPostLogin(
             firstConnection.reconnected(),
-            AnnouncementPermissions(external = true),
+            AnnouncementPermissions(external = true, repeat = false),
         )
         pending.complete("вернулся до объявления")
+        fixture.scheduler.tick(20)
 
         fixture.sink.published shouldBe emptyList()
+    }
+
+    "a stale suppressed session disconnect cannot remove the replacement session" {
+        val fixture = fixture(existingPlayer = "Alex")
+        val firstConnection = TestPlayer(UUID.randomUUID(), "Alex")
+        fixture.service.onPostLogin(firstConnection, AnnouncementPermissions(external = true, repeat = false))
+        val secondConnection = firstConnection.reconnected()
+        fixture.service.onPostLogin(secondConnection, AnnouncementPermissions(external = false, repeat = true))
+
+        fixture.service.onDisconnect(firstConnection)
+        fixture.scheduler.tick(20)
+        fixture.service.onDisconnect(secondConnection)
+        fixture.scheduler.tick(20)
+
+        fixture.sink.published shouldContainExactly
+            listOf(
+                PublishedAnnouncement("Alex", JoinAnnouncementKind.JOIN, null, publishExternally = false),
+                PublishedAnnouncement("Alex", JoinAnnouncementKind.LEAVE, null, publishExternally = false),
+            )
     }
 
     "a disconnect that never reached post-login does not emit a leave announcement" {
@@ -113,11 +157,11 @@ class JoinAnnouncementServiceTest : FreeSpec({
         fixture.sink.published shouldBe emptyList()
     }
 
-    "a regular player without external permission still emits join and leave announcements" {
+    "repeat permission enables join and leave announcements without external permission" {
         val fixture = fixture(existingPlayer = "Alex")
         val connection = TestPlayer(UUID.randomUUID(), "Alex")
 
-        fixture.service.onPostLogin(connection, AnnouncementPermissions(external = false))
+        fixture.service.onPostLogin(connection, AnnouncementPermissions(external = false, repeat = true))
         fixture.scheduler.tick(20)
         fixture.service.onDisconnect(connection)
         fixture.scheduler.tick(20)
