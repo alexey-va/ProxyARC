@@ -14,6 +14,7 @@ import ru.arc.join.VelocityProxyLifecycle
 import ru.arc.velocity.Velocity
 import ru.arc.velocity.listeners.ChatListener
 import ru.arc.velocity.listeners.CommandVisibilityListener
+import ru.arc.velocity.listeners.ConnectionDiagnosticsListener
 import ru.arc.velocity.listeners.JoinListener
 import ru.arc.velocity.listeners.RestartKickListener
 import java.util.concurrent.atomic.AtomicInteger
@@ -55,6 +56,7 @@ object ListenersModule : PluginModule {
         register(JoinListener(announcementService))
         register(ChatListener(server))
         register(RestartKickListener())
+        register(ConnectionDiagnosticsListener(Velocity.requireLogger(), Velocity.isShuttingDown::get))
         register(CommandVisibilityListener())
     }
 
