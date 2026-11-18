@@ -5,8 +5,10 @@ plugins {
 }
 
 group = "ru.arc"
-version = "1.0.22"
+version = "1.0.23"
 description = "ProxyARC Velocity plugin"
+
+val arcCoreVersion = "2.7.84"
 
 val integrationTestSourceSet = sourceSets.create("integrationTest") {
     kotlin.srcDir("src/integrationTest/kotlin")
@@ -30,14 +32,14 @@ repositories {
 }
 
 dependencies {
-    implementation("ru.ruscrafting.arc:arc-core:2.7.69")
-    implementation("ru.ruscrafting.arc:arc-core-logging:2.7.69")
-    implementation("ru.ruscrafting.arc:arc-core-metrics:2.7.69")
-    implementation("ru.ruscrafting.arc:arc-core-redis:2.7.69")
-    implementation("ru.ruscrafting.arc:arc-core-velocity:2.7.69")
-    implementation("ru.ruscrafting.arc:arc-core-ai:2.7.69")
-    implementation("ru.ruscrafting.arc:arc-core-sql:2.7.69")
-    implementation("ru.ruscrafting.arc:arc-core-telemetry:2.7.69")
+    implementation("ru.ruscrafting.arc:arc-core:$arcCoreVersion")
+    implementation("ru.ruscrafting.arc:arc-core-logging:$arcCoreVersion")
+    implementation("ru.ruscrafting.arc:arc-core-metrics:$arcCoreVersion")
+    implementation("ru.ruscrafting.arc:arc-core-redis:$arcCoreVersion")
+    implementation("ru.ruscrafting.arc:arc-core-velocity:$arcCoreVersion")
+    implementation("ru.ruscrafting.arc:arc-core-ai:$arcCoreVersion")
+    implementation("ru.ruscrafting.arc:arc-core-sql:$arcCoreVersion")
+    implementation("ru.ruscrafting.arc:arc-core-telemetry:$arcCoreVersion")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.10.2")
 
@@ -74,7 +76,7 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
     "integrationTestImplementation"(sourceSets.test.get().output)
-    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:2.7.69")
+    "integrationTestImplementation"("ru.ruscrafting.arc:arc-core-integration-testing:$arcCoreVersion")
     configurations["integrationTestImplementation"].extendsFrom(configurations["testImplementation"])
     configurations["integrationTestRuntimeOnly"].extendsFrom(configurations["testRuntimeOnly"])
 }
